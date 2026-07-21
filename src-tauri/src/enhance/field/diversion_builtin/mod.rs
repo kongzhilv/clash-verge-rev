@@ -30,12 +30,13 @@ pub(super) fn prepare(config: &mut Mapping) {
         Some(Value::Sequence(groups)) => groups,
         _ => Sequence::new(),
     };
+    let has_active_builtin = builtin_groups.iter().any(is_active_group);
 
     let key = if config.contains_key(CONFIG_KEY) {
         CONFIG_KEY
     } else if config.contains_key(CONFIG_KEY_ALT) {
         CONFIG_KEY_ALT
-    } else if builtin_groups.is_empty() {
+    } else if !has_active_builtin {
         return;
     } else {
         let mut diversion = Mapping::new();
@@ -48,6 +49,12 @@ pub(super) fn prepare(config: &mut Mapping) {
     let Some(Value::Mapping(diversion)) = config.get_mut(key) else {
         return;
     };
+
+    // Enabling an independent built-in group should make it effective even if
+    // the general diversion editor was previously disabled.
+    if has_active_builtin {
+        diversion.insert(Value::from("enabled"), Value::from(true));
+    }
 
     country::inject(diversion);
 
@@ -71,4 +78,25 @@ pub(super) fn prepare(config: &mut Mapping) {
             matcher::normalize(value, &provider_names);
         }
     }
+}
+
+fn is_active_group(value: &Value) -> bool {
+    let Some(group) = value.as_mapping() else {
+        return false;
+    };
+    if group.get("enabled").and_then(Value::as_bool) == Some(false) {
+        return false;
+    }
+    if group
+        .get("action")
+        .and_then(Value::as_str)
+        .is_some_and(|action| action.eq_ignore_ascii_case("none"))
+    {
+        return false;
+    }
+
+    group
+        .get("matchers")
+        .and_then(Value::as_sequence)
+        .is_some_and(|matchers| !matchers.is_empty())
 }
