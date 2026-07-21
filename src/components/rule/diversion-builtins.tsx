@@ -39,6 +39,7 @@ type Action = 'current' | 'auto-select' | 'direct' | 'reject' | 'none'
 type UnknownRecord = Record<string, unknown>
 
 interface BuiltinGroup {
+  id: string
   name: string
   enabled: boolean
   action: Action
@@ -50,24 +51,28 @@ const isRecord = (value: unknown): value is UnknownRecord =>
 
 const PRESETS: BuiltinGroup[] = [
   {
+    id: 'builtin-cn-direct',
     name: '中国大陆直连',
     enabled: false,
     action: 'direct',
     rules: ['geosite:cn', 'geoip:cn'],
   },
   {
+    id: 'builtin-ir-direct',
     name: '伊朗直连',
     enabled: false,
     action: 'direct',
     rules: ['geosite:ir', 'geoip:ir'],
   },
   {
+    id: 'builtin-ads-reject',
     name: '广告拦截',
     enabled: false,
     action: 'reject',
     rules: ['geosite:category-ads-all'],
   },
   {
+    id: 'builtin-non-cn-proxy',
     name: '非中国站点代理',
     enabled: false,
     action: 'current',
@@ -92,6 +97,10 @@ const normalizeGroups = (value: unknown): BuiltinGroup[] => {
     return PRESETS.map((item) => ({ ...item, rules: [...item.rules] }))
 
   return value.filter(isRecord).map((group, index) => ({
+    id:
+      typeof group.id === 'string' && group.id
+        ? group.id
+        : crypto.randomUUID(),
     name:
       typeof group.name === 'string' && group.name.trim()
         ? group.name
@@ -162,6 +171,7 @@ export const DiversionBuiltins = () => {
     setGroups((previous) => [
       ...previous,
       {
+        id: crypto.randomUUID(),
         name: `内置规则组 ${previous.length + 1}`,
         enabled: true,
         action: 'current',
@@ -271,10 +281,7 @@ export const DiversionBuiltins = () => {
               </Typography>
             ) : (
               groups.map((group, index) => (
-                <Accordion
-                  key={`${group.name}-${index}`}
-                  defaultExpanded={index === 0}
-                >
+                <Accordion key={group.id} defaultExpanded={index === 0}>
                   <AccordionSummary>
                     <Stack
                       direction="row"
