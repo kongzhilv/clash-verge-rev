@@ -38,7 +38,9 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
           control={
             <Switch
               checked={config['private-network-direct']}
-              onChange={(_, checked) => onChange({ 'private-network-direct': checked })}
+              onChange={(_, checked) =>
+                onChange({ 'private-network-direct': checked })
+              }
             />
           }
           label="私有网络直连"
@@ -47,7 +49,9 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
           control={
             <Switch
               checked={config['disable-isp-rules']}
-              onChange={(_, checked) => onChange({ 'disable-isp-rules': checked })}
+              onChange={(_, checked) =>
+                onChange({ 'disable-isp-rules': checked })
+              }
             />
           }
           label="禁用机场/订阅提供的分流规则"
@@ -83,13 +87,17 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
           size="small"
           label="当前选择策略组名称"
           value={config['current-group-name']}
-          onChange={(event) => onChange({ 'current-group-name': event.target.value })}
+          onChange={(event) =>
+            onChange({ 'current-group-name': event.target.value })
+          }
         />
         <TextField
           size="small"
           label="自动选择策略组名称"
           value={config['auto-group-name']}
-          onChange={(event) => onChange({ 'auto-group-name': event.target.value })}
+          onChange={(event) =>
+            onChange({ 'auto-group-name': event.target.value })
+          }
         />
         <TextField
           size="small"
@@ -105,7 +113,9 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
             label="测试间隔（秒）"
             value={config['auto-interval']}
             onChange={(event) =>
-              onChange({ 'auto-interval': Math.max(1, Number(event.target.value) || 1) })
+              onChange({
+                'auto-interval': Math.max(1, Number(event.target.value) || 1),
+              })
             }
           />
           <TextField
@@ -115,7 +125,9 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
             label="容差（毫秒）"
             value={config['auto-tolerance']}
             onChange={(event) =>
-              onChange({ 'auto-tolerance': Math.max(0, Number(event.target.value) || 0) })
+              onChange({
+                'auto-tolerance': Math.max(0, Number(event.target.value) || 0),
+              })
             }
           />
         </Stack>
@@ -124,13 +136,17 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
           <Select
             label="最终兜底动作"
             value={config.fallback}
-            onChange={(event) => onChange({ fallback: event.target.value as Action })}
+            onChange={(event) =>
+              onChange({ fallback: event.target.value as Action })
+            }
           >
-            {ACTIONS.filter(([action]) => action !== 'none').map(([action, label]) => (
-              <MenuItem key={action} value={action}>
-                {label}
-              </MenuItem>
-            ))}
+            {ACTIONS.filter(([action]) => action !== 'none').map(
+              ([action, label]) => (
+                <MenuItem key={action} value={action}>
+                  {label}
+                </MenuItem>
+              ),
+            )}
           </Select>
         </FormControl>
         {config.fallback === 'policy' && (
@@ -138,7 +154,9 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
             size="small"
             label="兜底策略组名称"
             value={config['fallback-policy'] ?? ''}
-            onChange={(event) => onChange({ 'fallback-policy': event.target.value })}
+            onChange={(event) =>
+              onChange({ 'fallback-policy': event.target.value })
+            }
           />
         )}
       </Stack>
