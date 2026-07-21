@@ -77,7 +77,8 @@ const actionLabel = (value: unknown) => {
 const matchDomain = (host: string, matcher: UnknownRecord): boolean | null => {
   if (matcher.enabled === false) return false
 
-  const type = typeof matcher.type === 'string' ? matcher.type.toUpperCase() : ''
+  const type =
+    typeof matcher.type === 'string' ? matcher.type.toUpperCase() : ''
   const rawValue = typeof matcher.value === 'string' ? matcher.value.trim() : ''
   if (!rawValue) return false
 
@@ -100,7 +101,10 @@ const matchDomain = (host: string, matcher: UnknownRecord): boolean | null => {
   }
 }
 
-const matcherSummary = (group: UnknownRecord, matcher: UnknownRecord): DetectionHit => ({
+const matcherSummary = (
+  group: UnknownRecord,
+  matcher: UnknownRecord,
+): DetectionHit => ({
   group:
     typeof group.name === 'string' && group.name.trim()
       ? group.name
@@ -119,7 +123,12 @@ const detect = (config: UnknownRecord, host: string): DetectionResult => {
   const deferred: DetectionHit[] = []
 
   for (const rawGroup of config.groups) {
-    if (!isRecord(rawGroup) || rawGroup.enabled === false || rawGroup.action === 'none') continue
+    if (
+      !isRecord(rawGroup) ||
+      rawGroup.enabled === false ||
+      rawGroup.action === 'none'
+    )
+      continue
     if (!Array.isArray(rawGroup.matchers)) continue
 
     const evaluations = rawGroup.matchers
@@ -155,7 +164,9 @@ const detect = (config: UnknownRecord, host: string): DetectionResult => {
 const mergeDetectorConfig = (merge: UnknownRecord): UnknownRecord => {
   const primary = isRecord(merge[CONFIG_KEY]) ? merge[CONFIG_KEY] : {}
   const primaryGroups = Array.isArray(primary.groups) ? primary.groups : []
-  const builtinGroups = Array.isArray(merge[BUILTIN_KEY]) ? merge[BUILTIN_KEY] : []
+  const builtinGroups = Array.isArray(merge[BUILTIN_KEY])
+    ? merge[BUILTIN_KEY]
+    : []
   const hasActiveBuiltins = builtinGroups.some(
     (group) =>
       isRecord(group) &&
@@ -229,7 +240,8 @@ export const DiversionDetector = () => {
         <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto', p: 2 }}>
           <Stack spacing={2}>
             <Alert severity="info">
-              与 Karing 一样，这里是域名规则预览；真实连接还会受 IP、端口、进程、规则集下载状态和运行时规则影响。
+              与 Karing 一样，这里是域名规则预览；真实连接还会受
+              IP、端口、进程、规则集下载状态和运行时规则影响。
             </Alert>
             <TextField
               autoFocus
@@ -242,9 +254,13 @@ export const DiversionDetector = () => {
             />
 
             {loading ? (
-              <Typography color="text.secondary">正在读取全局 Merge 配置…</Typography>
+              <Typography color="text.secondary">
+                正在读取全局 Merge 配置…
+              </Typography>
             ) : !host ? (
-              <Typography color="text.secondary">输入域名后开始检测。</Typography>
+              <Typography color="text.secondary">
+                输入域名后开始检测。
+              </Typography>
             ) : config.enabled !== true ? (
               <Alert severity="warning">Karing 风格分流当前未启用。</Alert>
             ) : (
@@ -252,12 +268,23 @@ export const DiversionDetector = () => {
                 {result.hits.length ? (
                   <Stack spacing={1.5}>
                     {result.hits.map((hit, index) => (
-                      <Paper key={`${hit.group}-${hit.matcherType}-${index}`} variant="outlined" sx={{ p: 2 }}>
-                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <Paper
+                        key={`${hit.group}-${hit.matcherType}-${index}`}
+                        variant="outlined"
+                        sx={{ p: 2 }}
+                      >
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          flexWrap="wrap"
+                        >
                           <Chip
                             size="small"
                             color={index === 0 ? 'primary' : 'default'}
-                            label={index === 0 ? '首个命中' : `后续命中 ${index + 1}`}
+                            label={
+                              index === 0 ? '首个命中' : `后续命中 ${index + 1}`
+                            }
                           />
                           <Typography fontWeight={600}>{hit.group}</Typography>
                         </Stack>
@@ -271,14 +298,21 @@ export const DiversionDetector = () => {
                     ))}
                   </Stack>
                 ) : (
-                  <Alert severity="warning">没有命中可在本地判断的域名规则。</Alert>
+                  <Alert severity="warning">
+                    没有命中可在本地判断的域名规则。
+                  </Alert>
                 )}
 
                 {result.deferred.length ? (
                   <Paper variant="outlined" sx={{ p: 2 }}>
                     <Typography fontWeight={600}>需 Mihomo 核心判定</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      以下 GeoSite、GeoIP、Rule Set、进程或端口规则已启用，但本地域名预览不会把它们伪报为命中。
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      以下 GeoSite、GeoIP、Rule
+                      Set、进程或端口规则已启用，但本地域名预览不会把它们伪报为命中。
                     </Typography>
                     <Stack spacing={0.75}>
                       {result.deferred.map((item, index) => (
@@ -286,7 +320,8 @@ export const DiversionDetector = () => {
                           key={`${item.group}-${item.matcherType}-${item.matcherValue}-${index}`}
                           variant="body2"
                         >
-                          {item.group}：{item.matcherType},{item.matcherValue}（{item.action}）
+                          {item.group}：{item.matcherType},{item.matcherValue}（
+                          {item.action}）
                         </Typography>
                       ))}
                     </Stack>
