@@ -12,7 +12,7 @@ import {
 import { ScrollTopButton } from '@/components/layout/scroll-top-button'
 import DiversionBuiltins from '@/components/rule/diversion-builtins'
 import DiversionDetector from '@/components/rule/diversion-detector'
-import DiversionManager from '@/components/rule/diversion-manager'
+import DiversionManager from '@/components/rule/diversion-manager/index'
 import { ProviderButton } from '@/components/rule/provider-button'
 import RuleItem from '@/components/rule/rule-item'
 import { useVisibility } from '@/hooks/use-visibility'
