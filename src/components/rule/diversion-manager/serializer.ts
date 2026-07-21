@@ -20,7 +20,9 @@ export interface SerializedDiversionProfile {
   content: string
 }
 
-export const parseDiversionProfile = (content: string): ParsedDiversionProfile => {
+export const parseDiversionProfile = (
+  content: string,
+): ParsedDiversionProfile => {
   const parsed = content.trim() ? load(content) : {}
   const mergeConfig = isRecord(parsed) ? parsed : {}
 
