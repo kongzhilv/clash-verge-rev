@@ -26,6 +26,7 @@ const BUILTIN_KEY = 'x-karing-diversion-builtins'
 type UnknownRecord = Record<string, unknown>
 
 interface DetectionHit {
+  id: string
   group: string
   action: string
   matcherType: string
@@ -104,15 +105,25 @@ const matchDomain = (host: string, matcher: UnknownRecord): boolean | null => {
 const matcherSummary = (
   group: UnknownRecord,
   matcher: UnknownRecord,
-): DetectionHit => ({
-  group:
-    typeof group.name === 'string' && group.name.trim()
-      ? group.name
-      : '未命名分流组',
-  action: actionLabel(group.action),
-  matcherType: typeof matcher.type === 'string' ? matcher.type : 'UNKNOWN',
-  matcherValue: typeof matcher.value === 'string' ? matcher.value : '',
-})
+  groupIndex: number,
+  matcherIndex: number,
+): DetectionHit => {
+  const matcherType =
+    typeof matcher.type === 'string' ? matcher.type : 'UNKNOWN'
+  const matcherValue =
+    typeof matcher.value === 'string' ? matcher.value : ''
+
+  return {
+    id: `${groupIndex}:${matcherIndex}:${matcherType}:${matcherValue}`,
+    group:
+      typeof group.name === 'string' && group.name.trim()
+        ? group.name
+        : '未命名分流组',
+    action: actionLabel(group.action),
+    matcherType,
+    matcherValue,
+  }
+}
 
 const detect = (config: UnknownRecord, host: string): DetectionResult => {
   if (config.enabled !== true || !Array.isArray(config.groups)) {
@@ -122,7 +133,7 @@ const detect = (config: UnknownRecord, host: string): DetectionResult => {
   const hits: DetectionHit[] = []
   const deferred: DetectionHit[] = []
 
-  for (const rawGroup of config.groups) {
+  for (const [groupIndex, rawGroup] of config.groups.entries()) {
     if (
       !isRecord(rawGroup) ||
       rawGroup.enabled === false ||
@@ -134,7 +145,11 @@ const detect = (config: UnknownRecord, host: string): DetectionResult => {
     const evaluations = rawGroup.matchers
       .filter(isRecord)
       .filter((matcher) => matcher.enabled !== false)
-      .map((matcher) => ({ matcher, matched: matchDomain(host, matcher) }))
+      .map((matcher, matcherIndex) => ({
+        matcher,
+        matcherIndex,
+        matched: matchDomain(host, matcher),
+      }))
     const supported = evaluations.filter((item) => item.matched !== null)
     const unresolved = evaluations.filter((item) => item.matched === null)
 
@@ -147,14 +162,30 @@ const detect = (config: UnknownRecord, host: string): DetectionResult => {
 
     if (groupMatched) {
       const matched = supported.find((item) => item.matched) ?? supported[0]
-      if (matched) hits.push(matcherSummary(rawGroup, matched.matcher))
+      if (matched)
+        hits.push(
+          matcherSummary(
+            rawGroup,
+            matched.matcher,
+            groupIndex,
+            matched.matcherIndex,
+          ),
+        )
       continue
     }
 
     for (const item of unresolved) {
       const value =
         typeof item.matcher.value === 'string' ? item.matcher.value.trim() : ''
-      if (value) deferred.push(matcherSummary(rawGroup, item.matcher))
+      if (value)
+        deferred.push(
+          matcherSummary(
+            rawGroup,
+            item.matcher,
+            groupIndex,
+            item.matcherIndex,
+          ),
+        )
     }
   }
 
@@ -268,11 +299,7 @@ export const DiversionDetector = () => {
                 {result.hits.length ? (
                   <Stack spacing={1.5}>
                     {result.hits.map((hit, index) => (
-                      <Paper
-                        key={`${hit.group}-${hit.matcherType}-${index}`}
-                        variant="outlined"
-                        sx={{ p: 2 }}
-                      >
+                      <Paper key={hit.id} variant="outlined" sx={{ p: 2 }}>
                         <Stack
                           direction="row"
                           spacing={1}
@@ -315,11 +342,8 @@ export const DiversionDetector = () => {
                       Set、进程或端口规则已启用，但本地域名预览不会把它们伪报为命中。
                     </Typography>
                     <Stack spacing={0.75}>
-                      {result.deferred.map((item, index) => (
-                        <Typography
-                          key={`${item.group}-${item.matcherType}-${item.matcherValue}-${index}`}
-                          variant="body2"
-                        >
+                      {result.deferred.map((item) => (
+                        <Typography key={item.id} variant="body2">
                           {item.group}：{item.matcherType},{item.matcherValue}（
                           {item.action}）
                         </Typography>
