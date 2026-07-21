@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  diagnose-and-format:
+  rustfmt:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -18,59 +18,21 @@ jobs:
           ref: feature/karing-style-diversion
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.0'
-          cache: pnpm
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
-      - name: Run formatters and capture results
-        shell: bash
+      - name: Format Rust changes
+        run: cargo fmt --all --manifest-path src-tauri/Cargo.toml
+
+      - name: Commit Rust formatting
         run: |
-          set +e
-          mkdir -p .ci
-          : > .ci/karing-autofix.log
-
-          pnpm install --frozen-lockfile >> .ci/karing-autofix.log 2>&1
-          install_code=$?
-          echo "pnpm_install_exit=$install_code" >> .ci/karing-autofix.log
-
-          pnpm exec biome format --write \
-            src/components/rule/diversion-builtins.tsx \
-            src/components/rule/diversion-detector.tsx \
-            src/components/rule/diversion-manager/group-editor.tsx \
-            src/components/rule/diversion-manager/index.tsx \
-            src/components/rule/diversion-manager/manager.tsx \
-            src/components/rule/diversion-manager/matcher-editor.tsx \
-            src/components/rule/diversion-manager/model.ts \
-            src/components/rule/diversion-manager/serializer.ts \
-            src/components/rule/diversion-manager/settings-panel.tsx \
-            src/pages/rules.tsx >> .ci/karing-autofix.log 2>&1
-          biome_code=$?
-          echo "biome_exit=$biome_code" >> .ci/karing-autofix.log
-
-          cargo fmt --all --manifest-path src-tauri/Cargo.toml >> .ci/karing-autofix.log 2>&1
-          rustfmt_code=$?
-          echo "rustfmt_exit=$rustfmt_code" >> .ci/karing-autofix.log
-
-          git status --short >> .ci/karing-autofix.log
-          exit 0
-
-      - name: Commit formatting and diagnostics
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src src-tauri .ci/karing-autofix.log
-          if git diff --cached --quiet; then
-            echo 'No changes or diagnostics to commit'
+          if git diff --quiet -- src-tauri; then
+            echo 'No Rust formatting changes needed'
             exit 0
           fi
-          git commit -m 'style: format diversion implementation and capture CI diagnostics'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri
+          git commit -m 'style: format Karing diversion Rust code'
           git push origin HEAD:feature/karing-style-diversion
