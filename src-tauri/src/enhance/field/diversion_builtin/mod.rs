@@ -122,8 +122,7 @@ fn is_active_matcher(value: &Value) -> bool {
         .map(str::trim)
         .and_then(|raw| raw.split_once(':'))
         .is_some_and(|(kind, name)| {
-            matches!(kind.trim().to_ascii_lowercase().as_str(), "geosite" | "geoip" | "acl")
-                && !name.trim().is_empty()
+            matches!(kind.trim().to_ascii_lowercase().as_str(), "geosite" | "geoip" | "acl") && !name.trim().is_empty()
         })
 }
 

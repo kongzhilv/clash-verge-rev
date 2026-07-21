@@ -18,7 +18,9 @@ const PRIVATE_RULES: &[&str] = &[
 ];
 
 pub(super) fn apply(config: &mut Mapping) {
-    let raw = config.remove(CONFIG_KEY).or_else(|| config.remove("x_karing_diversion"));
+    let raw = config
+        .remove(CONFIG_KEY)
+        .or_else(|| config.remove("x_karing_diversion"));
     let Some(Value::Mapping(diversion)) = raw else {
         return;
     };
@@ -64,19 +66,12 @@ pub(super) fn apply(config: &mut Mapping) {
     )
     .unwrap_or_else(|| current_group.clone());
 
-    let uses_current = custom_rules.iter().any(|rule| rule_uses_policy(rule, &current_group))
-        || fallback_policy == current_group;
-    let uses_auto = custom_rules.iter().any(|rule| rule_uses_policy(rule, &auto_group))
-        || fallback_policy == auto_group;
+    let uses_current =
+        custom_rules.iter().any(|rule| rule_uses_policy(rule, &current_group)) || fallback_policy == current_group;
+    let uses_auto =
+        custom_rules.iter().any(|rule| rule_uses_policy(rule, &auto_group)) || fallback_policy == auto_group;
 
-    ensure_managed_proxy_groups(
-        config,
-        &diversion,
-        &current_group,
-        &auto_group,
-        uses_current,
-        uses_auto,
-    );
+    ensure_managed_proxy_groups(config, &diversion, &current_group, &auto_group, uses_current, uses_auto);
 
     let original_rules = take_sequence(config, "rules");
     let original_non_terminal = original_rules
@@ -102,7 +97,11 @@ pub(super) fn apply(config: &mut Mapping) {
         config.insert(Value::from("rule-providers"), Value::Mapping(rule_providers));
     }
 
-    logging!(info, Type::Config, "Karing-style diversion groups compiled into Mihomo rules");
+    logging!(
+        info,
+        Type::Config,
+        "Karing-style diversion groups compiled into Mihomo rules"
+    );
 }
 
 fn compile_group(
@@ -134,13 +133,9 @@ fn compile_group(
     let mut payloads = Vec::new();
 
     for (matcher_index, matcher) in matchers.iter().enumerate() {
-        if let Some((payload, no_resolve)) = compile_matcher(
-            matcher,
-            group_name,
-            group_index,
-            matcher_index,
-            rule_providers,
-        ) {
+        if let Some((payload, no_resolve)) =
+            compile_matcher(matcher, group_name, group_index, matcher_index, rule_providers)
+        {
             payloads.push((payload, no_resolve));
         }
     }
@@ -192,13 +187,13 @@ fn compile_matcher(
             .map(str::to_owned)
             .unwrap_or_else(|| provider_name(group_name, group_index, matcher_index));
 
-        if let Some(url) = string_value(matcher, "url").map(str::trim).filter(|url| !url.is_empty()) {
+        if let Some(url) = string_value(matcher, "url")
+            .map(str::trim)
+            .filter(|url| !url.is_empty())
+        {
             let behavior = string_value(matcher, "behavior").unwrap_or("classical");
             let format = string_value(matcher, "format").unwrap_or("yaml");
-            let interval = matcher
-                .get("interval")
-                .and_then(Value::as_u64)
-                .unwrap_or(86_400);
+            let interval = matcher.get("interval").and_then(Value::as_u64).unwrap_or(86_400);
             let extension = match format.to_ascii_lowercase().as_str() {
                 "mrs" => "mrs",
                 "text" => "txt",
@@ -286,21 +281,11 @@ fn ensure_managed_proxy_groups(
         );
         auto.insert(
             Value::from("interval"),
-            Value::from(
-                diversion
-                    .get("auto-interval")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(300),
-            ),
+            Value::from(diversion.get("auto-interval").and_then(Value::as_u64).unwrap_or(300)),
         );
         auto.insert(
             Value::from("tolerance"),
-            Value::from(
-                diversion
-                    .get("auto-tolerance")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(50),
-            ),
+            Value::from(diversion.get("auto-tolerance").and_then(Value::as_u64).unwrap_or(50)),
         );
         groups.insert(0, Value::Mapping(auto));
     }
@@ -334,16 +319,19 @@ fn normalize_rule_type(value: &str) -> std::string::String {
 }
 
 fn default_no_resolve(rule_type: &str) -> bool {
-    matches!(
-        rule_type,
-        "GEOIP" | "IP-CIDR" | "IP-CIDR6" | "IP-SUFFIX" | "IP-ASN"
-    )
+    matches!(rule_type, "GEOIP" | "IP-CIDR" | "IP-CIDR6" | "IP-SUFFIX" | "IP-ASN")
 }
 
 fn provider_name(group_name: &str, group_index: usize, matcher_index: usize) -> std::string::String {
     let slug = group_name
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch.to_ascii_lowercase() } else { '-' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<std::string::String>();
     let slug = slug.trim_matches('-');
     if slug.is_empty() {
@@ -354,10 +342,8 @@ fn provider_name(group_name: &str, group_index: usize, matcher_index: usize) -> 
 }
 
 fn rule_uses_policy(rule: &Value, policy: &str) -> bool {
-    rule.as_str().is_some_and(|raw| {
-        raw.split(',')
-            .any(|part| part.trim().eq_ignore_ascii_case(policy))
-    })
+    rule.as_str()
+        .is_some_and(|raw| raw.split(',').any(|part| part.trim().eq_ignore_ascii_case(policy)))
 }
 
 fn is_terminal_rule(rule: &Value) -> bool {

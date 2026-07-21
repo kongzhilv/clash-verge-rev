@@ -17,11 +17,7 @@ pub(super) fn capture(config: &Mapping) -> Option<ManagedGroupNames> {
         .or_else(|| config.get(CONFIG_KEY_ALT))?
         .as_mapping()?;
 
-    if !diversion
-        .get("enabled")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
+    if !diversion.get("enabled").and_then(Value::as_bool).unwrap_or(false) {
         return None;
     }
 
@@ -42,24 +38,17 @@ pub(super) fn cleanup(config: &mut Mapping, names: Option<&ManagedGroupNames>) {
         return;
     };
 
-    let auto_is_used = config
-        .get("rules")
-        .and_then(Value::as_sequence)
-        .is_some_and(|rules| {
-            rules.iter().any(|rule| {
-                rule.as_str()
-                    .is_some_and(|raw| rule_targets_policy(raw, &names.auto))
-            })
-        });
+    let auto_is_used = config.get("rules").and_then(Value::as_sequence).is_some_and(|rules| {
+        rules
+            .iter()
+            .any(|rule| rule.as_str().is_some_and(|raw| rule_targets_policy(raw, &names.auto)))
+    });
 
     if auto_is_used {
         return;
     }
 
-    let Some(groups) = config
-        .get_mut("proxy-groups")
-        .and_then(Value::as_sequence_mut)
-    else {
+    let Some(groups) = config.get_mut("proxy-groups").and_then(Value::as_sequence_mut) else {
         return;
     };
 
@@ -91,10 +80,7 @@ fn rule_targets_policy(raw: &str, policy: &str) -> bool {
         return false;
     }
 
-    let policy_index = if parts
-        .last()
-        .is_some_and(|part| part.eq_ignore_ascii_case("no-resolve"))
-    {
+    let policy_index = if parts.last().is_some_and(|part| part.eq_ignore_ascii_case("no-resolve")) {
         parts.len() - 2
     } else {
         parts.len() - 1

@@ -212,8 +212,10 @@ x-karing-diversion:
             .get("rules")
             .and_then(Value::as_sequence)
             .expect("compiled rules should exist");
-        assert!(rules
-            .iter()
-            .any(|rule| rule.as_str() == Some("RULE-SET,remote-rules,DIRECT")));
+        assert!(
+            rules
+                .iter()
+                .any(|rule| rule.as_str() == Some("RULE-SET,remote-rules,DIRECT"))
+        );
     }
 }

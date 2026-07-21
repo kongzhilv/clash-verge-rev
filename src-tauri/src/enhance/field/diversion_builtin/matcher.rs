@@ -102,11 +102,20 @@ fn repair_provider_format(matcher: &mut Mapping) {
 
     if format.eq_ignore_ascii_case("mrs") && behavior.eq_ignore_ascii_case("classical") {
         matcher.insert(Value::from("format"), Value::from("yaml"));
-        logging!(warn, Type::Config, "Changed classical MRS diversion provider format to yaml");
+        logging!(
+            warn,
+            Type::Config,
+            "Changed classical MRS diversion provider format to yaml"
+        );
     }
 }
 
 fn disable(matcher: &mut Mapping, reason: &str) {
     matcher.insert(Value::from("enabled"), Value::from(false));
-    logging!(warn, Type::Config, "Disabled invalid Karing-style built-in rule: {}", reason);
+    logging!(
+        warn,
+        Type::Config,
+        "Disabled invalid Karing-style built-in rule: {}",
+        reason
+    );
 }
