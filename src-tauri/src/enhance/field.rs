@@ -104,6 +104,18 @@ mod tests {
         serde_yaml_ng::from_str(yaml).expect("test yaml should be valid")
     }
 
+    fn group_names(config: &Mapping) -> Vec<&str> {
+        config
+            .get("proxy-groups")
+            .and_then(Value::as_sequence)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_mapping)
+            .filter_map(|group| group.get("name"))
+            .filter_map(Value::as_str)
+            .collect()
+    }
+
     #[test]
     fn builtin_only_config_compiles_and_removes_unused_auto_group() {
         let config = mapping(
@@ -125,17 +137,83 @@ x-karing-diversion-builtins:
             .and_then(Value::as_sequence)
             .expect("compiled rules should exist");
         assert!(rules.iter().any(|rule| rule.as_str() == Some("GEOSITE,cn,DIRECT")));
+        assert!(!group_names(&sorted).contains(&"CVR-自动选择"));
+    }
 
-        let groups = sorted
-            .get("proxy-groups")
+    #[test]
+    fn current_only_config_does_not_leave_auto_group() {
+        let config = mapping(
+            r#"
+x-karing-diversion:
+  enabled: true
+  private-network-direct: false
+  fallback: current
+  groups:
+    - name: AI
+      enabled: true
+      action: current
+      matchers:
+        - enabled: true
+          type: DOMAIN-SUFFIX
+          value: openai.com
+"#,
+        );
+
+        let sorted = use_sort(config);
+        let names = group_names(&sorted);
+        assert!(names.contains(&"CVR-当前选择"));
+        assert!(!names.contains(&"CVR-自动选择"));
+    }
+
+    #[test]
+    fn auto_action_keeps_url_test_group() {
+        let config = mapping(
+            r#"
+x-karing-diversion:
+  enabled: true
+  private-network-direct: false
+  fallback: direct
+  groups:
+    - name: AI
+      enabled: true
+      action: auto-select
+      matchers:
+        - enabled: true
+          type: DOMAIN-SUFFIX
+          value: openai.com
+"#,
+        );
+
+        let sorted = use_sort(config);
+        assert!(group_names(&sorted).contains(&"CVR-自动选择"));
+    }
+
+    #[test]
+    fn ordinary_rule_set_does_not_append_no_resolve() {
+        let config = mapping(
+            r#"
+x-karing-diversion:
+  enabled: true
+  private-network-direct: false
+  fallback: direct
+  groups:
+    - name: Remote
+      enabled: true
+      action: direct
+      matchers:
+        - enabled: true
+          type: RULE-SET
+          value: remote-rules
+"#,
+        );
+
+        let sorted = use_sort(config);
+        let rules = sorted
+            .get("rules")
             .and_then(Value::as_sequence)
-            .expect("current selection group should exist");
-        assert!(groups.iter().all(|group| {
-            group
-                .as_mapping()
-                .and_then(|mapping| mapping.get("name"))
-                .and_then(Value::as_str)
-                != Some("CVR-自动选择")
-        }));
+            .expect("compiled rules should exist");
+        assert!(rules
+            .iter()
+            .any(|rule| rule.as_str() == Some("RULE-SET,remote-rules,DIRECT")));
     }
 }
