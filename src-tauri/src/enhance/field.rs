@@ -95,3 +95,47 @@ pub fn use_keys<'a>(config: &'a Mapping) -> impl Iterator<Item = String> + 'a {
         s
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mapping(yaml: &str) -> Mapping {
+        serde_yaml_ng::from_str(yaml).expect("test yaml should be valid")
+    }
+
+    #[test]
+    fn builtin_only_config_compiles_and_removes_unused_auto_group() {
+        let config = mapping(
+            r#"
+x-karing-diversion-builtins:
+  - name: 中国大陆直连
+    enabled: true
+    action: direct
+    matchers:
+      - enabled: true
+        type: RULE-SET-BUILDIN
+        value: geosite:cn
+"#,
+        );
+
+        let sorted = use_sort(config);
+        let rules = sorted
+            .get("rules")
+            .and_then(Value::as_sequence)
+            .expect("compiled rules should exist");
+        assert!(rules.iter().any(|rule| rule.as_str() == Some("GEOSITE,cn,DIRECT")));
+
+        let groups = sorted
+            .get("proxy-groups")
+            .and_then(Value::as_sequence)
+            .expect("current selection group should exist");
+        assert!(groups.iter().all(|group| {
+            group
+                .as_mapping()
+                .and_then(|mapping| mapping.get("name"))
+                .and_then(Value::as_str)
+                != Some("CVR-自动选择")
+        }));
+    }
+}
