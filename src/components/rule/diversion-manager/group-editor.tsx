@@ -148,7 +148,7 @@ export const GroupEditor = ({
           <Stack spacing={1}>
             {group.matchers.map((matcher, matcherIndex) => (
               <MatcherEditor
-                key={`${matcher.type}-${matcherIndex}`}
+                key={matcher.id}
                 matcher={matcher}
                 onChange={(patch) => updateMatcher(matcherIndex, patch)}
                 onDelete={() => deleteMatcher(matcherIndex)}
