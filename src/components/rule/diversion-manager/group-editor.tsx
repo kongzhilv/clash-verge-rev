@@ -48,7 +48,10 @@ export const GroupEditor = ({
   onMove,
   onDelete,
 }: GroupEditorProps) => {
-  const updateMatcher = (matcherIndex: number, patch: Partial<DiversionMatcher>) => {
+  const updateMatcher = (
+    matcherIndex: number,
+    patch: Partial<DiversionMatcher>,
+  ) => {
     onChange({
       matchers: group.matchers.map((matcher, currentIndex) =>
         currentIndex === matcherIndex ? { ...matcher, ...patch } : matcher,
@@ -58,14 +61,21 @@ export const GroupEditor = ({
 
   const deleteMatcher = (matcherIndex: number) => {
     onChange({
-      matchers: group.matchers.filter((_, currentIndex) => currentIndex !== matcherIndex),
+      matchers: group.matchers.filter(
+        (_, currentIndex) => currentIndex !== matcherIndex,
+      ),
     })
   }
 
   return (
     <Accordion defaultExpanded={index === 0}>
       <AccordionSummary expandIcon={<ExpandMoreRounded />}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ width: '100%', pr: 1 }}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ width: '100%', pr: 1 }}
+        >
           <Switch
             size="small"
             checked={group.enabled}
@@ -111,7 +121,9 @@ export const GroupEditor = ({
               <Select
                 label="匹配动作"
                 value={group.action}
-                onChange={(event) => onChange({ action: event.target.value as Action })}
+                onChange={(event) =>
+                  onChange({ action: event.target.value as Action })
+                }
               >
                 {ACTIONS.map(([action, label]) => (
                   <MenuItem key={action} value={action}>
@@ -147,14 +159,20 @@ export const GroupEditor = ({
           <Button
             variant="text"
             startIcon={<AddRounded />}
-            onClick={() => onChange({ matchers: [...group.matchers, makeMatcher()] })}
+            onClick={() =>
+              onChange({ matchers: [...group.matchers, makeMatcher()] })
+            }
           >
             添加匹配项
           </Button>
 
           <Divider />
 
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+          >
             <Stack direction="row">
               <IconButton
                 disabled={index === 0}
@@ -172,7 +190,11 @@ export const GroupEditor = ({
               </IconButton>
             </Stack>
 
-            <Button color="error" startIcon={<DeleteOutlineRounded />} onClick={onDelete}>
+            <Button
+              color="error"
+              startIcon={<DeleteOutlineRounded />}
+              onClick={onDelete}
+            >
               删除分流组
             </Button>
           </Stack>
