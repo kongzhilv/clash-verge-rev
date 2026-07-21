@@ -1,4 +1,9 @@
-import { AddRounded, CloseRounded, SaveRounded, TuneRounded } from '@mui/icons-material'
+import {
+  AddRounded,
+  CloseRounded,
+  SaveRounded,
+  TuneRounded,
+} from '@mui/icons-material'
 import {
   AppBar,
   Box,
@@ -23,10 +28,7 @@ import {
   type DiversionGroup,
   type UnknownRecord,
 } from './model'
-import {
-  parseDiversionProfile,
-  serializeDiversionProfile,
-} from './serializer'
+import { parseDiversionProfile, serializeDiversionProfile } from './serializer'
 import SettingsPanel from './settings-panel'
 
 export const DiversionManager = () => {
@@ -37,7 +39,9 @@ export const DiversionManager = () => {
   const [config, setConfig] = useState<DiversionConfig>(defaultConfig)
 
   const enabledGroupCount = useMemo(
-    () => config.groups.filter((group) => group.enabled && group.action !== 'none').length,
+    () =>
+      config.groups.filter((group) => group.enabled && group.action !== 'none')
+        .length,
     [config.groups],
   )
 
@@ -79,7 +83,9 @@ export const DiversionManager = () => {
   const deleteGroup = (index: number) => {
     setConfig((previous) => ({
       ...previous,
-      groups: previous.groups.filter((_, currentIndex) => currentIndex !== index),
+      groups: previous.groups.filter(
+        (_, currentIndex) => currentIndex !== index,
+      ),
     }))
   }
 
@@ -116,7 +122,11 @@ export const DiversionManager = () => {
       <Dialog fullScreen open={open} onClose={() => !saving && setOpen(false)}>
         <AppBar position="sticky" color="default" elevation={1}>
           <Toolbar sx={{ gap: 1 }}>
-            <IconButton edge="start" onClick={() => setOpen(false)} disabled={saving}>
+            <IconButton
+              edge="start"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+            >
               <CloseRounded />
             </IconButton>
             <Box sx={{ flex: 1 }}>
@@ -138,7 +148,9 @@ export const DiversionManager = () => {
 
         <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', p: 2 }}>
           {loading ? (
-            <Typography color="text.secondary">正在读取全局 Merge 配置…</Typography>
+            <Typography color="text.secondary">
+              正在读取全局 Merge 配置…
+            </Typography>
           ) : (
             <Stack spacing={2}>
               <SettingsPanel
@@ -168,7 +180,10 @@ export const DiversionManager = () => {
                     onClick={() =>
                       setConfig((previous) => ({
                         ...previous,
-                        groups: [...previous.groups, makeGroup(previous.groups.length)],
+                        groups: [
+                          ...previous.groups,
+                          makeGroup(previous.groups.length),
+                        ],
                       }))
                     }
                   >
@@ -187,7 +202,9 @@ export const DiversionManager = () => {
                       borderRadius: 2,
                     }}
                   >
-                    <Typography color="text.secondary">还没有自定义分流组</Typography>
+                    <Typography color="text.secondary">
+                      还没有自定义分流组
+                    </Typography>
                   </Box>
                 ) : (
                   <Stack spacing={1}>
