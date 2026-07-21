@@ -210,7 +210,7 @@ export const DiversionManager = () => {
                   <Stack spacing={1}>
                     {config.groups.map((group, index) => (
                       <GroupEditor
-                        key={`${group.name}-${index}`}
+                        key={group.id}
                         group={group}
                         index={index}
                         total={config.groups.length}
