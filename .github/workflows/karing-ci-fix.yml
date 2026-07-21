@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  rustfmt:
+  biome:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -18,21 +18,39 @@ jobs:
           ref: feature/karing-style-diversion
           fetch-depth: 0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v6
         with:
-          components: rustfmt
+          run_install: false
 
-      - name: Format Rust changes
-        run: cargo fmt --all --manifest-path src-tauri/Cargo.toml
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
 
-      - name: Commit Rust formatting
+      - run: pnpm install --frozen-lockfile
+
+      - name: Format frontend changes
+        run: >-
+          pnpm exec biome format --write
+          src/components/rule/diversion-builtins.tsx
+          src/components/rule/diversion-detector.tsx
+          src/components/rule/diversion-manager/group-editor.tsx
+          src/components/rule/diversion-manager/index.tsx
+          src/components/rule/diversion-manager/manager.tsx
+          src/components/rule/diversion-manager/matcher-editor.tsx
+          src/components/rule/diversion-manager/model.ts
+          src/components/rule/diversion-manager/serializer.ts
+          src/components/rule/diversion-manager/settings-panel.tsx
+          src/pages/rules.tsx
+
+      - name: Commit frontend formatting
         run: |
-          if git diff --quiet -- src-tauri; then
-            echo 'No Rust formatting changes needed'
+          if git diff --quiet -- src; then
+            echo 'No frontend formatting changes needed'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src-tauri
-          git commit -m 'style: format Karing diversion Rust code'
+          git add src
+          git commit -m 'style: format Karing diversion frontend'
           git push origin HEAD:feature/karing-style-diversion
