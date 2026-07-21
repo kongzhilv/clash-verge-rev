@@ -110,8 +110,7 @@ const matcherSummary = (
 ): DetectionHit => {
   const matcherType =
     typeof matcher.type === 'string' ? matcher.type : 'UNKNOWN'
-  const matcherValue =
-    typeof matcher.value === 'string' ? matcher.value : ''
+  const matcherValue = typeof matcher.value === 'string' ? matcher.value : ''
 
   return {
     id: `${groupIndex}:${matcherIndex}:${matcherType}:${matcherValue}`,
@@ -179,12 +178,7 @@ const detect = (config: UnknownRecord, host: string): DetectionResult => {
         typeof item.matcher.value === 'string' ? item.matcher.value.trim() : ''
       if (value)
         deferred.push(
-          matcherSummary(
-            rawGroup,
-            item.matcher,
-            groupIndex,
-            item.matcherIndex,
-          ),
+          matcherSummary(rawGroup, item.matcher, groupIndex, item.matcherIndex),
         )
     }
   }

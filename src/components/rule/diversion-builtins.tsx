@@ -98,9 +98,7 @@ const normalizeGroups = (value: unknown): BuiltinGroup[] => {
 
   return value.filter(isRecord).map((group, index) => ({
     id:
-      typeof group.id === 'string' && group.id
-        ? group.id
-        : crypto.randomUUID(),
+      typeof group.id === 'string' && group.id ? group.id : crypto.randomUUID(),
     name:
       typeof group.name === 'string' && group.name.trim()
         ? group.name
