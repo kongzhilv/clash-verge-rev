@@ -21,8 +21,8 @@ pub(super) fn prepare(config: &mut Mapping) {
         })
         .unwrap_or_default();
 
-    // Keep built-in selections outside the main manager-owned object so older
-    // frontends preserve them. They are merged into groups only for compilation.
+    // Keep built-in selections outside the manager-owned object so an older
+    // manager UI preserves them. Merge them only while producing Mihomo config.
     let builtin_groups = match config
         .remove(BUILTIN_GROUPS_KEY)
         .or_else(|| config.remove(BUILTIN_GROUPS_KEY_ALT))
@@ -35,8 +35,14 @@ pub(super) fn prepare(config: &mut Mapping) {
         CONFIG_KEY
     } else if config.contains_key(CONFIG_KEY_ALT) {
         CONFIG_KEY_ALT
-    } else {
+    } else if builtin_groups.is_empty() {
         return;
+    } else {
+        let mut diversion = Mapping::new();
+        diversion.insert(Value::from("enabled"), Value::from(true));
+        diversion.insert(Value::from("groups"), Value::Sequence(Sequence::new()));
+        config.insert(Value::from(CONFIG_KEY), Value::Mapping(diversion));
+        CONFIG_KEY
     };
 
     let Some(Value::Mapping(diversion)) = config.get_mut(key) else {
