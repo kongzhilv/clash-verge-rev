@@ -32,11 +32,9 @@ interface DetectionHit {
   matcherValue: string
 }
 
-interface DeferredRule extends DetectionHit {}
-
 interface DetectionResult {
   hits: DetectionHit[]
-  deferred: DeferredRule[]
+  deferred: DetectionHit[]
 }
 
 const isRecord = (value: unknown): value is UnknownRecord =>
@@ -118,7 +116,7 @@ const detect = (config: UnknownRecord, host: string): DetectionResult => {
   }
 
   const hits: DetectionHit[] = []
-  const deferred: DeferredRule[] = []
+  const deferred: DetectionHit[] = []
 
   for (const rawGroup of config.groups) {
     if (!isRecord(rawGroup) || rawGroup.enabled === false || rawGroup.action === 'none') continue
