@@ -100,3 +100,80 @@ fn is_active_group(value: &Value) -> bool {
         .and_then(Value::as_sequence)
         .is_some_and(|matchers| !matchers.is_empty())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mapping(yaml: &str) -> Mapping {
+        serde_yaml_ng::from_str(yaml).expect("test yaml should be valid")
+    }
+
+    #[test]
+    fn disabled_builtins_do_not_activate_diversion() {
+        let mut config = mapping(
+            r#"
+x-karing-diversion-builtins:
+  - name: 中国大陆直连
+    enabled: false
+    action: direct
+    matchers:
+      - enabled: true
+        type: RULE-SET-BUILDIN
+        value: geosite:cn
+"#,
+        );
+
+        prepare(&mut config);
+
+        assert!(!config.contains_key(CONFIG_KEY));
+        assert!(!config.contains_key(BUILTIN_GROUPS_KEY));
+    }
+
+    #[test]
+    fn active_builtin_creates_and_normalizes_diversion() {
+        let mut config = mapping(
+            r#"
+x-karing-diversion-builtins:
+  - name: 中国大陆直连
+    enabled: true
+    action: direct
+    matchers:
+      - enabled: true
+        type: RULE-SET-BUILDIN
+        value: geosite:cn
+      - enabled: true
+        type: RULE-SET-BUILDIN
+        value: geoip:cn
+"#,
+        );
+
+        prepare(&mut config);
+
+        let diversion = config
+            .get(CONFIG_KEY)
+            .and_then(Value::as_mapping)
+            .expect("diversion config should be created");
+        assert_eq!(diversion.get("enabled").and_then(Value::as_bool), Some(true));
+
+        let groups = diversion
+            .get("groups")
+            .and_then(Value::as_sequence)
+            .expect("groups should exist");
+        let matchers = groups[0]
+            .as_mapping()
+            .and_then(|group| group.get("matchers"))
+            .and_then(Value::as_sequence)
+            .expect("matchers should exist");
+
+        let geosite = matchers[0].as_mapping().expect("geosite matcher");
+        assert_eq!(geosite.get("type").and_then(Value::as_str), Some("GEOSITE"));
+        assert_eq!(geosite.get("value").and_then(Value::as_str), Some("cn"));
+        assert_eq!(geosite.get("no-resolve").and_then(Value::as_bool), Some(false));
+
+        let geoip = matchers[1].as_mapping().expect("geoip matcher");
+        assert_eq!(geoip.get("type").and_then(Value::as_str), Some("GEOIP"));
+        assert_eq!(geoip.get("value").and_then(Value::as_str), Some("CN"));
+        assert_eq!(geoip.get("no-resolve").and_then(Value::as_bool), Some(true));
+    }
+}
