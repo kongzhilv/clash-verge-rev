@@ -10,6 +10,7 @@ import {
   type VirtualListHandle,
 } from '@/components/base'
 import { ScrollTopButton } from '@/components/layout/scroll-top-button'
+import DiversionBuiltins from '@/components/rule/diversion-builtins'
 import DiversionDetector from '@/components/rule/diversion-detector'
 import DiversionManager from '@/components/rule/diversion-manager'
 import { ProviderButton } from '@/components/rule/provider-button'
@@ -66,8 +67,9 @@ const RulesPage = () => {
         overflow: 'auto',
       }}
       header={
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <DiversionManager />
+          <DiversionBuiltins />
           <DiversionDetector />
           <ProviderButton />
         </Box>
