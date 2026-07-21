@@ -88,7 +88,8 @@ const normalizeAction = (value: unknown): Action => {
 }
 
 const normalizeGroups = (value: unknown): BuiltinGroup[] => {
-  if (!Array.isArray(value)) return PRESETS.map((item) => ({ ...item, rules: [...item.rules] }))
+  if (!Array.isArray(value))
+    return PRESETS.map((item) => ({ ...item, rules: [...item.rules] }))
 
   return value.filter(isRecord).map((group, index) => ({
     name:
@@ -100,7 +101,9 @@ const normalizeGroups = (value: unknown): BuiltinGroup[] => {
     rules: Array.isArray(group.matchers)
       ? group.matchers
           .filter(isRecord)
-          .map((matcher) => (typeof matcher.value === 'string' ? matcher.value.trim() : ''))
+          .map((matcher) =>
+            typeof matcher.value === 'string' ? matcher.value.trim() : '',
+          )
           .filter(Boolean)
       : [],
   }))
@@ -126,7 +129,8 @@ export const DiversionBuiltins = () => {
   const [groups, setGroups] = useState<BuiltinGroup[]>([])
 
   const enabledCount = useMemo(
-    () => groups.filter((group) => group.enabled && group.action !== 'none').length,
+    () =>
+      groups.filter((group) => group.enabled && group.action !== 'none').length,
     [groups],
   )
 
@@ -171,16 +175,24 @@ export const DiversionBuiltins = () => {
       (group) =>
         group.enabled &&
         group.action !== 'none' &&
-        (!group.name.trim() || !group.rules.some((rule) => /^(geosite|geoip|acl):.+/i.test(rule.trim()))),
+        (!group.name.trim() ||
+          !group.rules.some((rule) =>
+            /^(geosite|geoip|acl):.+/i.test(rule.trim()),
+          )),
     )
     if (invalid) {
-      showNotice.error(`规则组“${invalid.name || '未命名'}”缺少有效的 geosite/geoip/acl 规则`)
+      showNotice.error(
+        `规则组“${invalid.name || '未命名'}”缺少有效的 geosite/geoip/acl 规则`,
+      )
       return
     }
 
     setSaving(true)
     try {
-      const nextMerge = { ...mergeConfig, [BUILTIN_KEY]: serializeGroups(groups) }
+      const nextMerge = {
+        ...mergeConfig,
+        [BUILTIN_KEY]: serializeGroups(groups),
+      }
       const content = dump(nextMerge, {
         noRefs: true,
         lineWidth: 120,
@@ -214,7 +226,11 @@ export const DiversionBuiltins = () => {
       <Dialog fullScreen open={open} onClose={() => !saving && setOpen(false)}>
         <AppBar position="sticky" color="default" elevation={1}>
           <Toolbar sx={{ gap: 1 }}>
-            <IconButton edge="start" onClick={() => setOpen(false)} disabled={saving}>
+            <IconButton
+              edge="start"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+            >
               <CloseRounded />
             </IconButton>
             <Box sx={{ flex: 1 }}>
@@ -223,7 +239,11 @@ export const DiversionBuiltins = () => {
                 已启用 {enabledCount} 个规则组
               </Typography>
             </Box>
-            <Button startIcon={<AddRounded />} onClick={addGroup} disabled={loading || saving}>
+            <Button
+              startIcon={<AddRounded />}
+              onClick={addGroup}
+              disabled={loading || saving}
+            >
               新增
             </Button>
             <Button
@@ -240,20 +260,34 @@ export const DiversionBuiltins = () => {
         <Box sx={{ width: '100%', maxWidth: 960, mx: 'auto', p: 2 }}>
           <Stack spacing={2}>
             <Alert severity="info">
-              每行填写一个 geosite:name、geoip:name 或 acl:name。ACL 需要现有同名 rule-provider；所有预设默认关闭，避免首次保存改变现有路由。
+              每行填写一个 geosite:name、geoip:name 或 acl:name。ACL
+              需要现有同名
+              rule-provider；所有预设默认关闭，避免首次保存改变现有路由。
             </Alert>
 
             {loading ? (
-              <Typography color="text.secondary">正在读取全局 Merge 配置…</Typography>
+              <Typography color="text.secondary">
+                正在读取全局 Merge 配置…
+              </Typography>
             ) : (
               groups.map((group, index) => (
-                <Accordion key={`${group.name}-${index}`} defaultExpanded={index === 0}>
+                <Accordion
+                  key={`${group.name}-${index}`}
+                  defaultExpanded={index === 0}
+                >
                   <AccordionSummary>
-                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ width: '100%' }}>
+                    <Stack
+                      direction="row"
+                      spacing={1.5}
+                      alignItems="center"
+                      sx={{ width: '100%' }}
+                    >
                       <Switch
                         checked={group.enabled}
                         onClick={(event) => event.stopPropagation()}
-                        onChange={(_, checked) => updateGroup(index, { enabled: checked })}
+                        onChange={(_, checked) =>
+                          updateGroup(index, { enabled: checked })
+                        }
                       />
                       <Typography sx={{ flex: 1 }}>{group.name}</Typography>
                       <Typography variant="caption" color="text.secondary">
@@ -266,14 +300,20 @@ export const DiversionBuiltins = () => {
                       <TextField
                         label="规则组名称"
                         value={group.name}
-                        onChange={(event) => updateGroup(index, { name: event.target.value })}
+                        onChange={(event) =>
+                          updateGroup(index, { name: event.target.value })
+                        }
                       />
                       <FormControl fullWidth>
                         <InputLabel>动作</InputLabel>
                         <Select
                           label="动作"
                           value={group.action}
-                          onChange={(event) => updateGroup(index, { action: event.target.value as Action })}
+                          onChange={(event) =>
+                            updateGroup(index, {
+                              action: event.target.value as Action,
+                            })
+                          }
                         >
                           <MenuItem value="current">当前选择</MenuItem>
                           <MenuItem value="auto-select">自动选择</MenuItem>
@@ -288,7 +328,9 @@ export const DiversionBuiltins = () => {
                         label="内置规则（每行一项）"
                         value={group.rules.join('\n')}
                         onChange={(event) =>
-                          updateGroup(index, { rules: event.target.value.split(/\r?\n/) })
+                          updateGroup(index, {
+                            rules: event.target.value.split(/\r?\n/),
+                          })
                         }
                         placeholder={'geosite:cn\ngeoip:cn\nacl:BanAD'}
                       />
@@ -296,7 +338,9 @@ export const DiversionBuiltins = () => {
                         control={
                           <Switch
                             checked={group.enabled}
-                            onChange={(_, checked) => updateGroup(index, { enabled: checked })}
+                            onChange={(_, checked) =>
+                              updateGroup(index, { enabled: checked })
+                            }
                           />
                         }
                         label="启用此规则组"
@@ -305,7 +349,11 @@ export const DiversionBuiltins = () => {
                         color="error"
                         startIcon={<DeleteOutlineRounded />}
                         onClick={() =>
-                          setGroups((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
+                          setGroups((previous) =>
+                            previous.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          )
                         }
                       >
                         删除规则组
