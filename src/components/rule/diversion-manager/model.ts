@@ -111,12 +111,16 @@ const normalizeMatcher = (value: unknown): DiversionMatcher => {
     provider: typeof raw.provider === 'string' ? raw.provider : undefined,
     url: typeof raw.url === 'string' ? raw.url : undefined,
     behavior:
-      raw.behavior === 'domain' || raw.behavior === 'ipcidr' || raw.behavior === 'classical'
+      raw.behavior === 'domain' ||
+      raw.behavior === 'ipcidr' ||
+      raw.behavior === 'classical'
         ? raw.behavior
         : 'classical',
     format: raw.format === 'text' || raw.format === 'mrs' ? raw.format : 'yaml',
     interval:
-      typeof raw.interval === 'number' && raw.interval > 0 ? raw.interval : 86400,
+      typeof raw.interval === 'number' && raw.interval > 0
+        ? raw.interval
+        : 86400,
   }
 }
 
@@ -153,7 +157,9 @@ export const normalizeConfig = (value: unknown): DiversionConfig => {
     'private-network-direct': raw['private-network-direct'] !== false,
     'disable-isp-rules': raw['disable-isp-rules'] === true,
     'isp-rules-position':
-      raw['isp-rules-position'] === 'before-custom' ? 'before-custom' : 'after-custom',
+      raw['isp-rules-position'] === 'before-custom'
+        ? 'before-custom'
+        : 'after-custom',
     'current-group-name':
       typeof raw['current-group-name'] === 'string'
         ? raw['current-group-name']
@@ -163,7 +169,9 @@ export const normalizeConfig = (value: unknown): DiversionConfig => {
         ? raw['auto-group-name']
         : defaults['auto-group-name'],
     'auto-url':
-      typeof raw['auto-url'] === 'string' ? raw['auto-url'] : defaults['auto-url'],
+      typeof raw['auto-url'] === 'string'
+        ? raw['auto-url']
+        : defaults['auto-url'],
     'auto-interval':
       typeof raw['auto-interval'] === 'number'
         ? raw['auto-interval']
@@ -174,8 +182,12 @@ export const normalizeConfig = (value: unknown): DiversionConfig => {
         : defaults['auto-tolerance'],
     fallback,
     'fallback-policy':
-      typeof raw['fallback-policy'] === 'string' ? raw['fallback-policy'] : undefined,
-    groups: Array.isArray(raw.groups) ? raw.groups.map(normalizeGroup) : defaults.groups,
+      typeof raw['fallback-policy'] === 'string'
+        ? raw['fallback-policy']
+        : undefined,
+    groups: Array.isArray(raw.groups)
+      ? raw.groups.map(normalizeGroup)
+      : defaults.groups,
   }
 }
 
@@ -191,8 +203,14 @@ export const cleanMatcher = (matcher: DiversionMatcher): UnknownRecord => {
     if (matcher.url?.trim()) result.url = matcher.url.trim()
     result.behavior = matcher.behavior ?? 'classical'
     const requestedFormat = matcher.format ?? 'yaml'
-    result.format = requestedFormat === 'mrs' && result.behavior === 'classical' ? 'yaml' : requestedFormat
+    result.format =
+      requestedFormat === 'mrs' && result.behavior === 'classical'
+        ? 'yaml'
+        : requestedFormat
     result.interval = matcher.interval ?? 86400
+    if (result.behavior === 'ipcidr' && matcher['no-resolve']) {
+      result['no-resolve'] = true
+    }
   } else if (matcher.type !== 'RULE-SET-BUILDIN' && matcher['no-resolve']) {
     result['no-resolve'] = true
   }
