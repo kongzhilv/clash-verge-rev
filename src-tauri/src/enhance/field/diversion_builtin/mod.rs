@@ -98,7 +98,33 @@ fn is_active_group(value: &Value) -> bool {
     group
         .get("matchers")
         .and_then(Value::as_sequence)
-        .is_some_and(|matchers| !matchers.is_empty())
+        .is_some_and(|matchers| matchers.iter().any(is_active_matcher))
+}
+
+fn is_active_matcher(value: &Value) -> bool {
+    let Some(matcher) = value.as_mapping() else {
+        return false;
+    };
+    if matcher.get("enabled").and_then(Value::as_bool) == Some(false) {
+        return false;
+    }
+    if matcher
+        .get("type")
+        .and_then(Value::as_str)
+        .is_none_or(|rule_type| !rule_type.eq_ignore_ascii_case("RULE-SET-BUILDIN"))
+    {
+        return false;
+    }
+
+    matcher
+        .get("value")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .and_then(|raw| raw.split_once(':'))
+        .is_some_and(|(kind, name)| {
+            matches!(kind.trim().to_ascii_lowercase().as_str(), "geosite" | "geoip" | "acl")
+                && !name.trim().is_empty()
+        })
 }
 
 #[cfg(test)]
@@ -121,6 +147,30 @@ x-karing-diversion-builtins:
       - enabled: true
         type: RULE-SET-BUILDIN
         value: geosite:cn
+"#,
+        );
+
+        prepare(&mut config);
+
+        assert!(!config.contains_key(CONFIG_KEY));
+        assert!(!config.contains_key(BUILTIN_GROUPS_KEY));
+    }
+
+    #[test]
+    fn invalid_or_disabled_matchers_do_not_activate_diversion() {
+        let mut config = mapping(
+            r#"
+x-karing-diversion-builtins:
+  - name: 无效规则
+    enabled: true
+    action: direct
+    matchers:
+      - enabled: true
+        type: RULE-SET-BUILDIN
+        value: geosite:
+      - enabled: false
+        type: RULE-SET-BUILDIN
+        value: geoip:cn
 "#,
         );
 
