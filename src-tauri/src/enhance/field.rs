@@ -16,3 +16,10 @@ pub const HANDLE_FIELDS: [&str; 12] = [
     "log-level",
     "ipv6",
     "external-controller",
+    "secret",
+    "unified-delay",
+];
+
+pub const DEFAULT_FIELDS: [&str; 5] = ["proxies", "proxy-providers", "proxy-groups", "rule-providers", "rules"];
+
+fn lowercase
