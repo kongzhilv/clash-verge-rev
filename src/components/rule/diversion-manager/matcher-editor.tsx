@@ -13,11 +13,7 @@ import {
   TextField,
 } from '@mui/material'
 
-import {
-  MATCHER_TYPES,
-  type DiversionMatcher,
-  type MatcherType,
-} from './model'
+import { MATCHER_TYPES, type DiversionMatcher, type MatcherType } from './model'
 
 interface MatcherEditorProps {
   matcher: DiversionMatcher
@@ -30,7 +26,8 @@ const valueField = (type: MatcherType) => {
     return {
       label: '规则集名称/已有 provider 名称',
       placeholder: '例如 openai-rules',
-      helperText: '填写已有 rule-provider 名称；也可以在下方提供远程 URL 自动创建 provider。',
+      helperText:
+        '填写已有 rule-provider 名称；也可以在下方提供远程 URL 自动创建 provider。',
     }
   }
   if (type === 'RULE-SET-BUILDIN') {
@@ -47,12 +44,16 @@ const valueField = (type: MatcherType) => {
   }
 }
 
-export const MatcherEditor = ({ matcher, onChange, onDelete }: MatcherEditorProps) => {
+export const MatcherEditor = ({
+  matcher,
+  onChange,
+  onDelete,
+}: MatcherEditorProps) => {
   const field = valueField(matcher.type)
   const showNoResolve =
     matcher.type === 'IP-CIDR' ||
     matcher.type === 'GEOIP' ||
-    matcher.type === 'RULE-SET'
+    (matcher.type === 'RULE-SET' && matcher.behavior === 'ipcidr')
 
   return (
     <Box sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5 }}>
@@ -119,7 +120,8 @@ export const MatcherEditor = ({ matcher, onChange, onDelete }: MatcherEditorProp
 
         {matcher.type === 'RULE-SET-BUILDIN' && (
           <Alert severity="info">
-            内置规则集由 Karing 风格预处理器转换为 Mihomo 的 GEOSITE、GEOIP 或已有 ACL rule-provider。
+            内置规则集由 Karing 风格预处理器转换为 Mihomo 的 GEOSITE、GEOIP
+            或已有 ACL rule-provider。
           </Alert>
         )}
 
@@ -139,9 +141,16 @@ export const MatcherEditor = ({ matcher, onChange, onDelete }: MatcherEditorProp
                   value={matcher.behavior ?? 'classical'}
                   onChange={(event) =>
                     onChange({
-                      behavior: event.target.value as 'domain' | 'ipcidr' | 'classical',
-                      ...(event.target.value === 'classical' && matcher.format === 'mrs'
+                      behavior: event.target.value as
+                        | 'domain'
+                        | 'ipcidr'
+                        | 'classical',
+                      ...(event.target.value === 'classical' &&
+                      matcher.format === 'mrs'
                         ? { format: 'yaml' }
+                        : {}),
+                      ...(event.target.value !== 'ipcidr'
+                        ? { 'no-resolve': false }
                         : {}),
                     })
                   }
@@ -181,7 +190,9 @@ export const MatcherEditor = ({ matcher, onChange, onDelete }: MatcherEditorProp
                 label="更新间隔（秒）"
                 value={matcher.interval ?? 86400}
                 onChange={(event) =>
-                  onChange({ interval: Math.max(1, Number(event.target.value) || 86400) })
+                  onChange({
+                    interval: Math.max(1, Number(event.target.value) || 86400),
+                  })
                 }
               />
             </Stack>
