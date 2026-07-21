@@ -67,8 +67,7 @@ pub(super) fn apply(config: &mut Mapping) {
     let uses_current = custom_rules.iter().any(|rule| rule_uses_policy(rule, &current_group))
         || fallback_policy == current_group;
     let uses_auto = custom_rules.iter().any(|rule| rule_uses_policy(rule, &auto_group))
-        || fallback_policy == auto_group
-        || uses_current;
+        || fallback_policy == auto_group;
 
     ensure_managed_proxy_groups(
         config,
@@ -337,7 +336,7 @@ fn normalize_rule_type(value: &str) -> std::string::String {
 fn default_no_resolve(rule_type: &str) -> bool {
     matches!(
         rule_type,
-        "GEOIP" | "IP-CIDR" | "IP-CIDR6" | "IP-SUFFIX" | "IP-ASN" | "RULE-SET"
+        "GEOIP" | "IP-CIDR" | "IP-CIDR6" | "IP-SUFFIX" | "IP-ASN"
     )
 }
 
