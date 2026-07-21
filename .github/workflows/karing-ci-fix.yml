@@ -76,9 +76,6 @@ jobs:
       - name: Format Rust changes
         run: cargo fmt --all --manifest-path src-tauri/Cargo.toml
 
-      - name: Remove one-time workflow
-        run: rm .github/workflows/karing-ci-fix.yml
-
       - name: Commit fixes
         run: |
           if git diff --quiet; then
@@ -87,6 +84,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add src src-tauri
           git commit -m 'fix: format diversion implementation and tighten managed groups'
           git push origin HEAD:feature/karing-style-diversion
