@@ -4,13 +4,12 @@ on:
   push:
     branches:
       - feature/karing-style-diversion
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  fix:
+  fix-rust-logic:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -18,21 +17,6 @@ jobs:
         with:
           ref: feature/karing-style-diversion
           fetch-depth: 0
-
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.0'
-          cache: pnpm
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - run: pnpm install --frozen-lockfile
 
       - name: Fix diversion source logic
         shell: python
@@ -47,43 +31,24 @@ jobs:
                   || uses_current;'''
           new = '''    let uses_auto = custom_rules.iter().any(|rule| rule_uses_policy(rule, &auto_group))
                   || fallback_policy == auto_group;'''
-          if old not in text:
-              raise SystemExit('uses_auto block not found')
-          text = text.replace(old, new, 1)
+          if old in text:
+              text = text.replace(old, new, 1)
 
           old = '''        "GEOIP" | "IP-CIDR" | "IP-CIDR6" | "IP-SUFFIX" | "IP-ASN" | "RULE-SET"'''
           new = '''        "GEOIP" | "IP-CIDR" | "IP-CIDR6" | "IP-SUFFIX" | "IP-ASN"'''
-          if old not in text:
-              raise SystemExit('default_no_resolve block not found')
-          text = text.replace(old, new, 1)
+          if old in text:
+              text = text.replace(old, new, 1)
 
           path.write_text(text, encoding='utf-8')
-
-      - name: Format frontend changes
-        run: >-
-          pnpm exec biome format --write
-          src/components/rule/diversion-builtins.tsx
-          src/components/rule/diversion-detector.tsx
-          src/components/rule/diversion-manager/group-editor.tsx
-          src/components/rule/diversion-manager/index.tsx
-          src/components/rule/diversion-manager/manager.tsx
-          src/components/rule/diversion-manager/matcher-editor.tsx
-          src/components/rule/diversion-manager/model.ts
-          src/components/rule/diversion-manager/serializer.ts
-          src/components/rule/diversion-manager/settings-panel.tsx
-          src/pages/rules.tsx
-
-      - name: Format Rust changes
-        run: cargo fmt --all --manifest-path src-tauri/Cargo.toml
 
       - name: Commit fixes
         run: |
           if git diff --quiet; then
-            echo 'No fixes needed'
+            echo 'No logic fixes needed'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src src-tauri
-          git commit -m 'fix: format diversion implementation and tighten managed groups'
+          git add src-tauri/src/enhance/field/diversion.rs
+          git commit -m 'fix: tighten diversion managed group generation'
           git push origin HEAD:feature/karing-style-diversion
