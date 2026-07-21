@@ -51,11 +51,10 @@ pub fn use_lowercase_owned(config: Mapping) -> Mapping {
 }
 
 pub fn use_sort(mut config: Mapping) -> Mapping {
-    let managed_groups = diversion_managed::capture(&config);
-
-    // Normalize app-only Karing matcher types before the diversion compiler
-    // removes the private field and emits the final Mihomo configuration.
+    // Normalize app-only Karing matcher types and merge built-in groups first,
+    // so managed group names can also be captured for built-in-only configs.
     diversion_builtin::prepare(&mut config);
+    let managed_groups = diversion_managed::capture(&config);
     diversion::apply(&mut config);
     diversion_managed::cleanup(&mut config, managed_groups.as_ref());
 
