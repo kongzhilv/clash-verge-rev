@@ -30,7 +30,10 @@ export type Action = (typeof ACTIONS)[number][0]
 export type MatcherType = (typeof MATCHER_TYPES)[number][0]
 export type UnknownRecord = Record<string, unknown>
 
+const createUiId = () => crypto.randomUUID()
+
 export interface DiversionMatcher {
+  id: string
   enabled: boolean
   type: MatcherType
   value: string
@@ -43,6 +46,7 @@ export interface DiversionMatcher {
 }
 
 export interface DiversionGroup {
+  id: string
   name: string
   enabled: boolean
   logic: 'or' | 'and'
@@ -70,12 +74,14 @@ export const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 export const makeMatcher = (): DiversionMatcher => ({
+  id: createUiId(),
   enabled: true,
   type: 'DOMAIN-SUFFIX',
   value: '',
 })
 
 export const makeGroup = (index: number): DiversionGroup => ({
+  id: createUiId(),
   name: `自定义分流组 ${index + 1}`,
   enabled: true,
   logic: 'or',
@@ -104,6 +110,7 @@ const normalizeMatcher = (value: unknown): DiversionMatcher => {
     : 'DOMAIN-SUFFIX'
 
   return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : createUiId(),
     enabled: raw.enabled !== false,
     type,
     value: typeof raw.value === 'string' ? raw.value : '',
@@ -131,6 +138,7 @@ const normalizeGroup = (value: unknown, index: number): DiversionGroup => {
     : 'current'
 
   return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : createUiId(),
     name:
       typeof raw.name === 'string' && raw.name.trim()
         ? raw.name
