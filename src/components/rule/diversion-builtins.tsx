@@ -230,7 +230,6 @@ export const DiversionBuiltins = () => {
           内置规则
         </Button>
       </Tooltip>
-
       <Dialog fullScreen open={open} onClose={() => !saving && setOpen(false)}>
         <AppBar position="sticky" color="default" elevation={1}>
           <Toolbar sx={{ gap: 1 }}>
@@ -243,7 +242,12 @@ export const DiversionBuiltins = () => {
             </IconButton>
             <Box sx={{ flex: 1 }}>
               <Typography variant="h6">内置规则集</Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                }}
+              >
                 已启用 {enabledCount} 个规则组
               </Typography>
             </Box>
@@ -274,7 +278,11 @@ export const DiversionBuiltins = () => {
             </Alert>
 
             {loading ? (
-              <Typography color="text.secondary">
+              <Typography
+                sx={{
+                  color: 'text.secondary',
+                }}
+              >
                 正在读取全局 Merge 配置…
               </Typography>
             ) : (
@@ -284,8 +292,10 @@ export const DiversionBuiltins = () => {
                     <Stack
                       direction="row"
                       spacing={1.5}
-                      alignItems="center"
-                      sx={{ width: '100%' }}
+                      sx={{
+                        alignItems: 'center',
+                        width: '100%',
+                      }}
                     >
                       <Switch
                         checked={group.enabled}
@@ -295,7 +305,12 @@ export const DiversionBuiltins = () => {
                         }
                       />
                       <Typography sx={{ flex: 1 }}>{group.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: 'text.secondary',
+                        }}
+                      >
                         {group.rules.length} 项
                       </Typography>
                     </Stack>

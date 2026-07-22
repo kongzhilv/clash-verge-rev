@@ -98,6 +98,7 @@ pub fn use_keys<'a>(config: &'a Mapping) -> impl Iterator<Item = String> + 'a {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
 
     fn mapping(yaml: &str) -> Mapping {
@@ -119,7 +120,7 @@ mod tests {
     #[test]
     fn builtin_only_config_compiles_and_removes_unused_auto_group() {
         let config = mapping(
-            r#"
+            r"
 x-karing-diversion-builtins:
   - name: 中国大陆直连
     enabled: true
@@ -128,7 +129,7 @@ x-karing-diversion-builtins:
       - enabled: true
         type: RULE-SET-BUILDIN
         value: geosite:cn
-"#,
+",
         );
 
         let sorted = use_sort(config);
@@ -143,7 +144,7 @@ x-karing-diversion-builtins:
     #[test]
     fn current_only_config_does_not_leave_auto_group() {
         let config = mapping(
-            r#"
+            r"
 x-karing-diversion:
   enabled: true
   private-network-direct: false
@@ -156,7 +157,7 @@ x-karing-diversion:
         - enabled: true
           type: DOMAIN-SUFFIX
           value: openai.com
-"#,
+",
         );
 
         let sorted = use_sort(config);
@@ -168,7 +169,7 @@ x-karing-diversion:
     #[test]
     fn auto_action_keeps_url_test_group() {
         let config = mapping(
-            r#"
+            r"
 x-karing-diversion:
   enabled: true
   private-network-direct: false
@@ -181,7 +182,7 @@ x-karing-diversion:
         - enabled: true
           type: DOMAIN-SUFFIX
           value: openai.com
-"#,
+",
         );
 
         let sorted = use_sort(config);
@@ -191,7 +192,7 @@ x-karing-diversion:
     #[test]
     fn ordinary_rule_set_does_not_append_no_resolve() {
         let config = mapping(
-            r#"
+            r"
 x-karing-diversion:
   enabled: true
   private-network-direct: false
@@ -204,7 +205,7 @@ x-karing-diversion:
         - enabled: true
           type: RULE-SET
           value: remote-rules
-"#,
+",
         );
 
         let sorted = use_sort(config);

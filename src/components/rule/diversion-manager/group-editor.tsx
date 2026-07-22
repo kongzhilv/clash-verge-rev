@@ -72,9 +72,12 @@ export const GroupEditor = ({
       <AccordionSummary expandIcon={<ExpandMoreRounded />}>
         <Stack
           direction="row"
-          alignItems="center"
           spacing={1}
-          sx={{ width: '100%', pr: 1 }}
+          sx={{
+            alignItems: 'center',
+            width: '100%',
+            pr: 1,
+          }}
         >
           <Switch
             size="small"
@@ -85,12 +88,16 @@ export const GroupEditor = ({
           <Typography sx={{ flex: 1, fontWeight: 600 }}>
             {group.name || '未命名分流组'}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography
+            variant="caption"
+            sx={{
+              color: 'text.secondary',
+            }}
+          >
             {group.logic.toUpperCase()} · {group.matchers.length} 项
           </Typography>
         </Stack>
       </AccordionSummary>
-
       <AccordionDetails>
         <Stack spacing={1.5}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
@@ -170,8 +177,10 @@ export const GroupEditor = ({
 
           <Stack
             direction="row"
-            justifyContent="space-between"
-            alignItems="center"
+            sx={{
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
           >
             <Stack direction="row">
               <IconButton

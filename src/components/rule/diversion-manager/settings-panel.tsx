@@ -22,7 +22,12 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
   <Stack spacing={2}>
     <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
       <Stack spacing={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           基础设置
         </Typography>
         <FormControlLabel
@@ -80,7 +85,12 @@ export const SettingsPanel = ({ config, onChange }: SettingsPanelProps) => (
 
     <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
       <Stack spacing={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 700,
+          }}
+        >
           托管策略组
         </Typography>
         <TextField

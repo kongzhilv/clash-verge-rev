@@ -61,7 +61,9 @@ export const MatcherEditor = ({
         <Stack
           direction={{ xs: 'column', md: 'row' }}
           spacing={1}
-          alignItems={{ md: 'center' }}
+          sx={{
+            alignItems: { md: 'center' },
+          }}
         >
           <FormControl size="small" sx={{ minWidth: 180 }}>
             <InputLabel>规则类型</InputLabel>

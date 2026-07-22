@@ -128,6 +128,7 @@ fn is_active_matcher(value: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
 
     fn mapping(yaml: &str) -> Mapping {
@@ -137,7 +138,7 @@ mod tests {
     #[test]
     fn disabled_builtins_do_not_activate_diversion() {
         let mut config = mapping(
-            r#"
+            r"
 x-karing-diversion-builtins:
   - name: 中国大陆直连
     enabled: false
@@ -146,7 +147,7 @@ x-karing-diversion-builtins:
       - enabled: true
         type: RULE-SET-BUILDIN
         value: geosite:cn
-"#,
+",
         );
 
         prepare(&mut config);
@@ -158,7 +159,7 @@ x-karing-diversion-builtins:
     #[test]
     fn invalid_or_disabled_matchers_do_not_activate_diversion() {
         let mut config = mapping(
-            r#"
+            r"
 x-karing-diversion-builtins:
   - name: 无效规则
     enabled: true
@@ -170,7 +171,7 @@ x-karing-diversion-builtins:
       - enabled: false
         type: RULE-SET-BUILDIN
         value: geoip:cn
-"#,
+",
         );
 
         prepare(&mut config);
@@ -182,7 +183,7 @@ x-karing-diversion-builtins:
     #[test]
     fn active_builtin_creates_and_normalizes_diversion() {
         let mut config = mapping(
-            r#"
+            r"
 x-karing-diversion-builtins:
   - name: 中国大陆直连
     enabled: true
@@ -194,7 +195,7 @@ x-karing-diversion-builtins:
       - enabled: true
         type: RULE-SET-BUILDIN
         value: geoip:cn
-"#,
+",
         );
 
         prepare(&mut config);

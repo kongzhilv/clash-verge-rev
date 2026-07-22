@@ -95,6 +95,7 @@ fn string_value<'a>(mapping: &'a Mapping, key: &str) -> Option<&'a str> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
 
     fn mapping(yaml: &str) -> Mapping {
@@ -104,7 +105,7 @@ mod tests {
     #[test]
     fn removes_unreferenced_auto_group() {
         let mut config = mapping(
-            r#"
+            r"
 rules:
   - DOMAIN-SUFFIX,openai.com,CVR-当前选择
   - MATCH,CVR-当前选择
@@ -115,7 +116,7 @@ proxy-groups:
   - name: CVR-自动选择
     type: url-test
     include-all: true
-"#,
+",
         );
         let names = ManagedGroupNames {
             current: CURRENT_GROUP_DEFAULT.to_owned(),
@@ -140,7 +141,7 @@ proxy-groups:
     #[test]
     fn keeps_referenced_auto_group() {
         let mut config = mapping(
-            r#"
+            r"
 rules:
   - DOMAIN-SUFFIX,openai.com,CVR-自动选择
   - MATCH,CVR-当前选择
@@ -151,7 +152,7 @@ proxy-groups:
   - name: CVR-自动选择
     type: url-test
     include-all: true
-"#,
+",
         );
         let names = ManagedGroupNames {
             current: CURRENT_GROUP_DEFAULT.to_owned(),

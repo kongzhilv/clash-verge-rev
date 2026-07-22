@@ -139,7 +139,6 @@ export const ProviderButton = () => {
       >
         {t('rules.page.provider.trigger')}
       </Button>
-
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>
           <Box
@@ -224,8 +223,10 @@ export const ProviderButton = () => {
 
                           <Typography
                             variant="body2"
-                            color="text.secondary"
                             noWrap
+                            sx={{
+                              color: 'text.secondary',
+                            }}
                           >
                             <small>{t('shared.labels.updateAt')}: </small>
                             {time.fromNow()}

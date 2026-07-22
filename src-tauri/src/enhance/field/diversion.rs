@@ -377,6 +377,7 @@ fn take_mapping(config: &mut Mapping, key: &str) -> Mapping {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
 
     fn mapping(yaml: &str) -> Mapping {
@@ -386,7 +387,7 @@ mod tests {
     #[test]
     fn compiles_custom_rules_and_strips_private_config() {
         let mut config = mapping(
-            r#"
+            r"
 proxies:
   - name: node-a
     type: ss
@@ -409,7 +410,7 @@ x-karing-diversion:
       matchers:
         - type: DOMAIN-SUFFIX
           value: openai.com
-"#,
+",
         );
 
         apply(&mut config);
@@ -424,7 +425,7 @@ x-karing-diversion:
     #[test]
     fn disables_subscription_rules() {
         let mut config = mapping(
-            r#"
+            r"
 rules:
   - DOMAIN-SUFFIX,airport.example,DIRECT
   - MATCH,DIRECT
@@ -434,7 +435,7 @@ x-karing-diversion:
   disable-isp-rules: true
   fallback: direct
   groups: []
-"#,
+",
         );
 
         apply(&mut config);

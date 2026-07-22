@@ -246,7 +246,6 @@ export const DiversionDetector = () => {
           分流检测
         </Button>
       </Tooltip>
-
       <Dialog fullScreen open={open} onClose={() => setOpen(false)}>
         <AppBar position="sticky" color="default" elevation={1}>
           <Toolbar sx={{ gap: 1 }}>
@@ -255,7 +254,12 @@ export const DiversionDetector = () => {
             </IconButton>
             <Box sx={{ flex: 1 }}>
               <Typography variant="h6">分流规则检测</Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                }}
+              >
                 仅按域名检测；IP、端口、进程和规则集内容需要 Mihomo 核心判定
               </Typography>
             </Box>
@@ -279,11 +283,19 @@ export const DiversionDetector = () => {
             />
 
             {loading ? (
-              <Typography color="text.secondary">
+              <Typography
+                sx={{
+                  color: 'text.secondary',
+                }}
+              >
                 正在读取全局 Merge 配置…
               </Typography>
             ) : !host ? (
-              <Typography color="text.secondary">
+              <Typography
+                sx={{
+                  color: 'text.secondary',
+                }}
+              >
                 输入域名后开始检测。
               </Typography>
             ) : config.enabled !== true ? (
@@ -297,8 +309,10 @@ export const DiversionDetector = () => {
                         <Stack
                           direction="row"
                           spacing={1}
-                          alignItems="center"
-                          flexWrap="wrap"
+                          sx={{
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                          }}
                         >
                           <Chip
                             size="small"
@@ -307,12 +321,23 @@ export const DiversionDetector = () => {
                               index === 0 ? '首个命中' : `后续命中 ${index + 1}`
                             }
                           />
-                          <Typography fontWeight={600}>{hit.group}</Typography>
+                          <Typography
+                            sx={{
+                              fontWeight: 600,
+                            }}
+                          >
+                            {hit.group}
+                          </Typography>
                         </Stack>
                         <Typography sx={{ mt: 1 }}>
                           {hit.matcherType},{hit.matcherValue}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: 'text.secondary',
+                          }}
+                        >
                           动作：{hit.action}
                         </Typography>
                       </Paper>
@@ -326,11 +351,19 @@ export const DiversionDetector = () => {
 
                 {result.deferred.length ? (
                   <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography fontWeight={600}>需 Mihomo 核心判定</Typography>
+                    <Typography
+                      sx={{
+                        fontWeight: 600,
+                      }}
+                    >
+                      需 Mihomo 核心判定
+                    </Typography>
                     <Typography
                       variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
+                      sx={{
+                        color: 'text.secondary',
+                        mb: 1,
+                      }}
                     >
                       以下 GeoSite、GeoIP、Rule
                       Set、进程或端口规则已启用，但本地域名预览不会把它们伪报为命中。

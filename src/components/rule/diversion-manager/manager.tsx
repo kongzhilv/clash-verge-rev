@@ -118,7 +118,6 @@ export const DiversionManager = () => {
           分流管理
         </Button>
       </Tooltip>
-
       <Dialog fullScreen open={open} onClose={() => !saving && setOpen(false)}>
         <AppBar position="sticky" color="default" elevation={1}>
           <Toolbar sx={{ gap: 1 }}>
@@ -131,7 +130,12 @@ export const DiversionManager = () => {
             </IconButton>
             <Box sx={{ flex: 1 }}>
               <Typography variant="h6">分流管理</Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="caption"
+                sx={{
+                  color: 'text.secondary',
+                }}
+              >
                 已启用 {enabledGroupCount} 个自定义分流组
               </Typography>
             </Box>
@@ -148,7 +152,11 @@ export const DiversionManager = () => {
 
         <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', p: 2 }}>
           {loading ? (
-            <Typography color="text.secondary">
+            <Typography
+              sx={{
+                color: 'text.secondary',
+              }}
+            >
               正在读取全局 Merge 配置…
             </Typography>
           ) : (
@@ -163,15 +171,27 @@ export const DiversionManager = () => {
               <Box>
                 <Stack
                   direction="row"
-                  alignItems="center"
-                  justifyContent="space-between"
-                  sx={{ mb: 1 }}
+                  sx={{
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    mb: 1,
+                  }}
                 >
                   <Box>
-                    <Typography variant="subtitle1" fontWeight={700}>
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        fontWeight: 700,
+                      }}
+                    >
                       自定义分流组
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                      }}
+                    >
                       列表顺序就是最终 Mihomo 规则顺序，越靠上优先级越高。
                     </Typography>
                   </Box>
@@ -202,7 +222,11 @@ export const DiversionManager = () => {
                       borderRadius: 2,
                     }}
                   >
-                    <Typography color="text.secondary">
+                    <Typography
+                      sx={{
+                        color: 'text.secondary',
+                      }}
+                    >
                       还没有自定义分流组
                     </Typography>
                   </Box>
