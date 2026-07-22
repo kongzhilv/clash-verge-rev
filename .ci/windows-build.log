@@ -1,0 +1,5 @@
+$ tauri "build" "--target" "x86_64-pc-windows-msvc" "--config" "{bundle:{createUpdaterArtifacts:false}}"
+error: invalid value '{bundle:{createUpdaterArtifacts:false}}' for '--config <CONFIG>': failed to parse config `{bundle:{createUpdaterArtifacts:false}}` as JSON: key must be a string at line 1 column 2
+
+For more information, try '--help'.
+[ELIFECYCLE] Command failed with exit code 2.
