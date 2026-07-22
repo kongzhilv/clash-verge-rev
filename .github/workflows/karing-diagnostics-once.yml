@@ -63,7 +63,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force .ci | Out-Null
-          pnpm tauri build --target x86_64-pc-windows-msvc --config '{"bundle":{"createUpdaterArtifacts":false}}' *>&1 | Tee-Object -FilePath .ci/windows-build.log
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding utf8 .ci/tauri-test.conf.json
+          pnpm tauri build --target x86_64-pc-windows-msvc --config .ci/tauri-test.conf.json *>&1 | Tee-Object -FilePath .ci/windows-build.log
           $status = $LASTEXITCODE
           "build_status=$status" | Set-Content -Encoding utf8 .ci/windows-build-summary.txt
           if ($status -eq 0) {
