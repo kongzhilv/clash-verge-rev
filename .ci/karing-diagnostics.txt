@@ -1,0 +1,1910 @@
+===== TYPESCRIPT =====
+$ tsc --noEmit
+src/components/rule/diversion-builtins.tsx(284,22): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & StackOwnProps & CommonProps & Omit<any, keyof CommonProps | keyof StackOwnProps>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; direction: "row"; spacing: number; alignItems: string; sx: { width: string; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<StackTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; direction: "row"; spacing: number; alignItems: string; sx: { width: string; }; }' is not assignable to type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+      Property 'alignItems' does not exist on type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+src/components/rule/diversion-detector.tsx(297,26): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & StackOwnProps & CommonProps & Omit<any, keyof CommonProps | keyof StackOwnProps>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; direction: "row"; spacing: number; alignItems: string; flexWrap: string; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<StackTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; direction: "row"; spacing: number; alignItems: string; flexWrap: string; }' is not assignable to type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+      Property 'alignItems' does not exist on type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+src/components/rule/diversion-detector.tsx(310,28): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "color" | ... 9 more ... | "variantMapping">): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; fontWeight: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+    Type '{ children: string; fontWeight: number; }' is not assignable to type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+      Property 'fontWeight' does not exist on type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+src/components/rule/diversion-detector.tsx(329,22): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "color" | ... 9 more ... | "variantMapping">): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; fontWeight: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+    Type '{ children: string; fontWeight: number; }' is not assignable to type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+      Property 'fontWeight' does not exist on type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+src/components/rule/diversion-manager/group-editor.tsx(73,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & StackOwnProps & CommonProps & Omit<any, keyof CommonProps | keyof StackOwnProps>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; direction: "row"; alignItems: string; spacing: number; sx: { width: string; pr: number; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<StackTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; direction: "row"; alignItems: string; spacing: number; sx: { width: string; pr: number; }; }' is not assignable to type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+      Property 'alignItems' does not exist on type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+src/components/rule/diversion-manager/group-editor.tsx(171,12): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & StackOwnProps & CommonProps & Omit<any, keyof CommonProps | keyof StackOwnProps>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; direction: "row"; justifyContent: string; alignItems: string; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<StackTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; direction: "row"; justifyContent: string; alignItems: string; }' is not assignable to type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+      Property 'justifyContent' does not exist on type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+src/components/rule/diversion-manager/manager.tsx(164,18): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & StackOwnProps & CommonProps & Omit<any, keyof CommonProps | keyof StackOwnProps>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; direction: "row"; alignItems: string; justifyContent: string; sx: { mb: number; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<StackTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; direction: "row"; alignItems: string; justifyContent: string; sx: { mb: number; }; }' is not assignable to type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+      Property 'alignItems' does not exist on type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+src/components/rule/diversion-manager/manager.tsx(171,22): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "color" | ... 9 more ... | "variantMapping">): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; variant: "subtitle1"; fontWeight: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+    Type '{ children: string; variant: "subtitle1"; fontWeight: number; }' is not assignable to type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+      Property 'fontWeight' does not exist on type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+src/components/rule/diversion-manager/matcher-editor.tsx(61,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & StackOwnProps & CommonProps & Omit<any, keyof CommonProps | keyof StackOwnProps>): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: Element[]; direction: { xs: "column"; md: "row"; }; spacing: number; alignItems: { md: string; }; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<StackTypeMap<{}, "div">>): Element | null', gave the following error.
+    Type '{ children: Element[]; direction: { xs: "column"; md: "row"; }; spacing: number; alignItems: { md: string; }; }' is not assignable to type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+      Property 'alignItems' does not exist on type 'IntrinsicAttributes & StackOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, keyof CommonProps | keyof StackOwnProps>'.
+src/components/rule/diversion-manager/settings-panel.tsx(25,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "color" | ... 9 more ... | "variantMapping">): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; variant: "subtitle1"; fontWeight: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+    Type '{ children: string; variant: "subtitle1"; fontWeight: number; }' is not assignable to type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+      Property 'fontWeight' does not exist on type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+src/components/rule/diversion-manager/settings-panel.tsx(83,10): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "color" | ... 9 more ... | "variantMapping">): Element | null', gave the following error.
+    Property 'component' is missing in type '{ children: string; variant: "subtitle1"; fontWeight: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+    Type '{ children: string; variant: "subtitle1"; fontWeight: number; }' is not assignable to type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+      Property 'fontWeight' does not exist on type 'IntrinsicAttributes & TypographyOwnProps & CommonProps & Omit<DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>, "color" | ... 9 more ... | "variantMapping">'.
+[ELIFECYCLE] Command failed with exit code 2.
+
+===== CLIPPY =====
+info: syncing channel updates for 1.95.0-x86_64-unknown-linux-gnu
+info: latest update on 2026-04-16 for version 1.95.0 (59807616e 2026-04-14)
+info: downloading 5 components
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Updating[0m git repository `https://github.com/clash-verge-rev/clash-verge-logger`
+[1m[92m    Updating[0m git repository `https://github.com/clash-verge-rev/clash-verge-service-ipc`
+[1m[92m    Updating[0m git repository `https://github.com/rust-dark-light/dark-light`
+[1m[92m    Updating[0m git repository `https://github.com/clash-verge-rev/sysproxy-rs`
+[1m[92m    Updating[0m git repository `https://github.com/clash-verge-rev/tauri-plugin-mihomo`
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m alloca v0.4.0
+[1m[92m  Downloaded[0m alloc-no-stdlib v2.0.4
+[1m[92m  Downloaded[0m byteorder v1.5.0
+[1m[92m  Downloaded[0m camino v1.2.4
+[1m[92m  Downloaded[0m doctest-file v1.1.1
+[1m[92m  Downloaded[0m darling v0.23.0
+[1m[92m  Downloaded[0m crunchy v0.2.4
+[1m[92m  Downloaded[0m ghash v0.6.0
+[1m[92m  Downloaded[0m glib-macros v0.18.5
+[1m[92m  Downloaded[0m http-range-header v0.3.1
+[1m[92m  Downloaded[0m nu-ansi-term v0.50.3
+[1m[92m  Downloaded[0m pkg-config v0.3.33
+[1m[92m  Downloaded[0m option-ext v0.2.0
+[1m[92m  Downloaded[0m proc-macro-crate v3.5.0
+[1m[92m  Downloaded[0m rand_core v0.9.5
+[1m[92m  Downloaded[0m serde_derive_internals v0.29.1
+[1m[92m  Downloaded[0m target-lexicon v0.12.16
+[1m[92m  Downloaded[0m thiserror-impl v2.0.18
+[1m[92m  Downloaded[0m unic-ucd-ident v0.9.0
+[1m[92m  Downloaded[0m zerofrom v0.1.8
+[1m[92m  Downloaded[0m zerofrom-derive v0.1.7
+[1m[92m  Downloaded[0m zvariant_derive v5.12.0
+[1m[92m  Downloaded[0m zstd v0.13.3
+[1m[92m  Downloaded[0m x11-dl v2.21.0
+[1m[92m  Downloaded[0m zvariant v5.12.0
+[1m[92m  Downloaded[0m yoke-derive v0.8.2
+[1m[92m  Downloaded[0m zbus_names v4.3.2
+[1m[92m  Downloaded[0m zip v8.6.0
+[1m[92m  Downloaded[0m zvariant_utils v3.4.0
+[1m[92m  Downloaded[0m winnow v0.7.15
+[1m[92m  Downloaded[0m winnow v1.0.3
+[1m[92m  Downloaded[0m zlib-rs v0.6.5
+[1m[92m  Downloaded[0m tower v0.4.13
+[1m[92m  Downloaded[0m x11rb v0.13.2
+[1m[92m  Downloaded[0m tonic v0.14.6
+[1m[92m  Downloaded[0m tonic v0.10.2
+[1m[92m  Downloaded[0m toml_edit v0.20.7
+[1m[92m  Downloaded[0m tokio-util v0.7.18
+[1m[92m  Downloaded[0m toml_edit v0.25.12+spec-1.1.0
+[1m[92m  Downloaded[0m tracing v0.1.44
+[1m[92m  Downloaded[0m toml_edit v0.22.27
+[1m[92m  Downloaded[0m url v2.5.8
+[1m[92m  Downloaded[0m wry v0.55.1
+[1m[92m  Downloaded[0m unicode-segmentation v1.13.3
+[1m[92m  Downloaded[0m webpki-roots v1.0.8
+[1m[92m  Downloaded[0m toml_edit v0.19.15
+[1m[92m  Downloaded[0m tonic-web v0.10.2
+[1m[92m  Downloaded[0m x11rb-protocol v0.13.2
+[1m[92m  Downloaded[0m ring v0.17.14
+[1m[92m  Downloaded[0m tauri-utils v2.9.3
+[1m[92m  Downloaded[0m tauri-plugin-shell v2.3.5
+[1m[92m  Downloaded[0m tauri-plugin-process v2.3.1
+[1m[92m  Downloaded[0m tauri-plugin-global-shortcut v2.3.2
+[1m[92m  Downloaded[0m zerovec v0.11.6
+[1m[92m  Downloaded[0m winnow v0.5.40
+[1m[92m  Downloaded[0m wayland-protocols v0.32.13
+[1m[92m  Downloaded[0m tauri-runtime-wry v2.11.4
+[1m[92m  Downloaded[0m aws-lc-sys v0.42.0
+[1m[92m  Downloaded[0m tauri-plugin-window-state v2.4.1
+[1m[92m  Downloaded[0m syn v2.0.118
+[1m[92m  Downloaded[0m zerocopy v0.8.52
+[1m[92m  Downloaded[0m zbus_macros v5.16.0
+[1m[92m  Downloaded[0m zstd-sys v2.0.16+zstd.1.5.7
+[1m[92m  Downloaded[0m zerocopy-derive v0.8.52
+[1m[92m  Downloaded[0m yoke v0.8.3
+[1m[92m  Downloaded[0m tracing-subscriber v0.3.23
+[1m[92m  Downloaded[0m tokio v1.52.3
+[1m[92m  Downloaded[0m zbus v5.16.0
+[1m[92m  Downloaded[0m sysinfo v0.39.5
+[1m[92m  Downloaded[0m syn v1.0.109
+[1m[92m  Downloaded[0m tower v0.5.3
+[1m[92m  Downloaded[0m tauri-plugin-updater v2.10.1
+[1m[92m  Downloaded[0m tauri-plugin-notification v2.3.3
+[1m[92m  Downloaded[0m tauri-plugin-http v2.5.9
+[1m[92m  Downloaded[0m tauri-plugin-fs v2.5.1
+[1m[92m  Downloaded[0m tauri-plugin-dialog v2.7.1
+[1m[92m  Downloaded[0m tauri-plugin-deep-link v2.4.9
+[1m[92m  Downloaded[0m tauri-plugin-clipboard-manager v2.3.2
+[1m[92m  Downloaded[0m zune-jpeg v0.5.15
+[1m[92m  Downloaded[0m zerotrie v0.2.4
+[1m[92m  Downloaded[0m xkeysym v0.2.1
+[1m[92m  Downloaded[0m wayland-backend v0.3.15
+[1m[92m  Downloaded[0m warp v0.4.3
+[1m[92m  Downloaded[0m tauri-plugin-autostart v2.5.1
+[1m[92m  Downloaded[0m pxfm v0.1.29
+[1m[92m  Downloaded[0m webkit2gtk v2.0.2
+[1m[92m  Downloaded[0m typenum v1.20.1
+[1m[92m  Downloaded[0m tower-http v0.6.11
+[1m[92m  Downloaded[0m serde_with v3.21.0
+[1m[92m  Downloaded[0m zopfli v0.8.3
+[1m[92m  Downloaded[0m x11 v2.21.0
+[1m[92m  Downloaded[0m wayland-client v0.31.14
+[1m[92m  Downloaded[0m utf-8 v0.7.6
+[1m[92m  Downloaded[0m urlpattern v0.3.0
+[1m[92m  Downloaded[0m urlencoding v2.1.3
+[1m[92m  Downloaded[0m untrusted v0.9.0
+[1m[92m  Downloaded[0m unsafe-libyaml v0.2.11
+[1m[92m  Downloaded[0m universal-hash v0.6.1
+[1m[92m  Downloaded[0m unicode-ident v1.0.24
+[1m[92m  Downloaded[0m unicase v2.9.0
+[1m[92m  Downloaded[0m typed-path v0.12.3
+[1m[92m  Downloaded[0m toml v1.1.2+spec-1.1.0
+[1m[92m  Downloaded[0m toml v0.9.12+spec-1.1.0
+[1m[92m  Downloaded[0m zune-core v0.5.1
+[1m[92m  Downloaded[0m zstd-safe v7.2.4
+[1m[92m  Downloaded[0m zmij v1.0.21
+[1m[92m  Downloaded[0m zerovec-derive v0.11.3
+[1m[92m  Downloaded[0m zeroize v1.9.0
+[1m[92m  Downloaded[0m xml-rs v0.8.28
+[1m[92m  Downloaded[0m xdg v3.0.0
+[1m[92m  Downloaded[0m wl-clipboard-rs v0.9.3
+[1m[92m  Downloaded[0m weezl v0.1.12
+[1m[92m  Downloaded[0m webkit2gtk-sys v2.0.2
+[1m[92m  Downloaded[0m web_atoms v0.2.5
+[1m[92m  Downloaded[0m wayland-scanner v0.31.10
+[1m[92m  Downloaded[0m uuid v1.23.4
+[1m[92m  Downloaded[0m utf16_iter v1.0.5
+[1m[92m  Downloaded[0m tungstenite v0.28.0
+[1m[92m  Downloaded[0m tower-http v0.4.4
+[1m[92m  Downloaded[0m toml_writer v1.1.1+spec-1.1.0
+[1m[92m  Downloaded[0m toml_parser v1.1.2+spec-1.1.0
+[1m[92m  Downloaded[0m toml_datetime v1.1.1+spec-1.1.0
+[1m[92m  Downloaded[0m toml_datetime v0.6.11
+[1m[92m  Downloaded[0m toml v0.8.23
+[1m[92m  Downloaded[0m tokio-rustls v0.26.4
+[1m[92m  Downloaded[0m petgraph v0.8.3
+[1m[92m  Downloaded[0m xsum v0.1.6
+[1m[92m  Downloaded[0m xattr v1.6.1
+[1m[92m  Downloaded[0m writeable v0.6.3
+[1m[92m  Downloaded[0m write16 v1.0.0
+[1m[92m  Downloaded[0m windows-link v0.2.1
+[1m[92m  Downloaded[0m wayland-sys v0.31.11
+[1m[92m  Downloaded[0m wayland-protocols-wlr v0.3.12
+[1m[92m  Downloaded[0m want v0.3.1
+[1m[92m  Downloaded[0m walkdir v2.5.0
+[1m[92m  Downloaded[0m version_check v0.9.5
+[1m[92m  Downloaded[0m version-compare v0.2.1
+[1m[92m  Downloaded[0m utf8_iter v1.0.4
+[1m[92m  Downloaded[0m tonic-prost v0.14.6
+[1m[92m  Downloaded[0m tonic-health v0.10.2
+[1m[92m  Downloaded[0m toml_write v0.1.2
+[1m[92m  Downloaded[0m toml_datetime v0.7.5+spec-1.1.0
+[1m[92m  Downloaded[0m tokio-tungstenite v0.28.0
+[1m[92m  Downloaded[0m tokio-stream v0.1.18
+[1m[92m  Downloaded[0m thiserror v2.0.18
+[1m[92m  Downloaded[0m thiserror v1.0.69
+[1m[92m  Downloaded[0m thin-vec v0.2.18
+[1m[92m  Downloaded[0m termcolor v1.4.1
+[1m[92m  Downloaded[0m tendril v0.5.0
+[1m[92m  Downloaded[0m tempfile v3.27.0
+[1m[92m  Downloaded[0m tauri-winres v0.3.6
+[1m[92m  Downloaded[0m tauri-runtime v2.11.3
+[1m[92m  Downloaded[0m tauri-plugin-devtools v2.1.0
+[1m[92m  Downloaded[0m rkyv v0.8.17
+[1m[92m  Downloaded[0m quick-xml v0.41.0
+[1m[92m  Downloaded[0m unic-ucd-version v0.9.0
+[1m[92m  Downloaded[0m unic-char-property v0.9.0
+[1m[92m  Downloaded[0m typeid v1.0.3
+[1m[92m  Downloaded[0m ts-rs-macros v11.1.0
+[1m[92m  Downloaded[0m ts-rs v11.1.0
+[1m[92m  Downloaded[0m triomphe v0.1.16
+[1m[92m  Downloaded[0m windows-sys v0.61.2
+[1m[92m  Downloaded[0m tray-icon v0.24.1
+[1m[92m  Downloaded[0m tracing-log v0.2.0
+[1m[92m  Downloaded[0m tracing-core v0.1.36
+[1m[92m  Downloaded[0m tracing-attributes v0.1.31
+[1m[92m  Downloaded[0m tower-layer v0.3.3
+[1m[92m  Downloaded[0m tokio-macros v2.7.0
+[1m[92m  Downloaded[0m time v0.3.53
+[1m[92m  Downloaded[0m tiff v0.11.3
+[1m[92m  Downloaded[0m strum_macros v0.28.0
+[1m[92m  Downloaded[0m string_cache v0.9.0
+[1m[92m  Downloaded[0m quick-xml v0.39.4
+[1m[92m  Downloaded[0m publicsuffix v2.3.0
+[1m[92m  Downloaded[0m unic-common v0.9.0
+[1m[92m  Downloaded[0m unic-char-range v0.9.0
+[1m[92m  Downloaded[0m try-lock v0.2.5
+[1m[92m  Downloaded[0m tree_magic_mini v3.2.2
+[1m[92m  Downloaded[0m tower-service v0.3.3
+[1m[92m  Downloaded[0m tokio-io-timeout v1.2.1
+[1m[92m  Downloaded[0m tinyvec_macros v0.1.1
+[1m[92m  Downloaded[0m tinyvec v1.11.0
+[1m[92m  Downloaded[0m tinytemplate v1.2.1
+[1m[92m  Downloaded[0m tinystr v0.8.3
+[1m[92m  Downloaded[0m tiny-keccak v2.0.2
+[1m[92m  Downloaded[0m time-macros v0.2.31
+[1m[92m  Downloaded[0m time-core v0.1.9
+[1m[92m  Downloaded[0m thread_local v1.1.9
+[1m[92m  Downloaded[0m thiserror-impl v1.0.69
+[1m[92m  Downloaded[0m tauri v2.11.5
+[1m[92m  Downloaded[0m tar v0.4.46
+[1m[92m  Downloaded[0m tao v0.35.3
+[1m[92m  Downloaded[0m sys-locale v0.3.2
+[1m[92m  Downloaded[0m synstructure v0.13.2
+[1m[92m  Downloaded[0m sync_wrapper v1.0.2
+[1m[92m  Downloaded[0m sync_wrapper v0.1.2
+[1m[92m  Downloaded[0m subtle v2.6.1
+[1m[92m  Downloaded[0m strum v0.28.0
+[1m[92m  Downloaded[0m strsim v0.11.1
+[1m[92m  Downloaded[0m string_cache_codegen v0.6.1
+[1m[92m  Downloaded[0m static_assertions v1.1.0
+[1m[92m  Downloaded[0m stable_deref_trait v1.2.1
+[1m[92m  Downloaded[0m shlex v2.0.1
+[1m[92m  Downloaded[0m sharded-slab v0.1.7
+[1m[92m  Downloaded[0m sha2 v0.11.0
+[1m[92m  Downloaded[0m sha2 v0.10.9
+[1m[92m  Downloaded[0m sha1 v0.11.0
+[1m[92m  Downloaded[0m sha1 v0.10.6
+[1m[92m  Downloaded[0m servo_arc v0.4.3
+[1m[92m  Downloaded[0m serialize-to-javascript v0.1.2
+[1m[92m  Downloaded[0m serde_yaml_ng v0.10.0
+[1m[92m  Downloaded[0m serde_yaml v0.9.34+deprecated
+[1m[92m  Downloaded[0m serde_with_macros v3.21.0
+[1m[92m  Downloaded[0m serde_json v1.0.150
+[1m[92m  Downloaded[0m rustls v0.23.41
+[1m[92m  Downloaded[0m rustix v1.1.4
+[1m[92m  Downloaded[0m regress v0.10.5
+[1m[92m  Downloaded[0m regex-syntax v0.8.11
+[1m[92m  Downloaded[0m regex-automata v0.4.14
+[1m[92m  Downloaded[0m tauri-plugin v2.6.3
+[1m[92m  Downloaded[0m tauri-macros v2.6.3
+[1m[92m  Downloaded[0m tauri-codegen v2.6.3
+[1m[92m  Downloaded[0m tauri-build v2.6.3
+[1m[92m  Downloaded[0m socket2 v0.6.4
+[1m[92m  Downloaded[0m signal-hook-registry v1.4.8
+[1m[92m  Downloaded[0m shared_child v1.1.1
+[1m[92m  Downloaded[0m serialize-to-javascript-impl v0.1.2
+[1m[92m  Downloaded[0m serde_urlencoded v0.7.1
+[1m[92m  Downloaded[0m serde_spanned v1.1.1
+[1m[92m  Downloaded[0m serde_spanned v0.6.9
+[1m[92m  Downloaded[0m serde v1.0.228
+[1m[92m  Downloaded[0m selectors v0.36.1
+[1m[92m  Downloaded[0m schemars v1.2.1
+[1m[92m  Downloaded[0m schemars v0.9.0
+[1m[92m  Downloaded[0m rustls-webpki v0.103.13
+[1m[92m  Downloaded[0m rust_iso3166 v0.2.0
+[1m[92m  Downloaded[0m reqwest v0.13.4
+[1m[92m  Downloaded[0m rand v0.10.2
+[1m[92m  Downloaded[0m rand v0.9.4
+[1m[92m  Downloaded[0m quinn-proto v0.11.15
+[1m[92m  Downloaded[0m libc v0.2.186
+[1m[92m  Downloaded[0m image v0.25.10
+[1m[92m  Downloaded[0m tap v1.0.1
+[1m[92m  Downloaded[0m tag_ptr v0.1.0
+[1m[92m  Downloaded[0m system-deps v6.2.2
+[1m[92m  Downloaded[0m soup3-sys v0.5.0
+[1m[92m  Downloaded[0m soup3 v0.5.0
+[1m[92m  Downloaded[0m socket2 v0.5.10
+[1m[92m  Downloaded[0m smartstring v1.0.1
+[1m[92m  Downloaded[0m smallvec v1.15.2
+[1m[92m  Downloaded[0m small_btree v0.1.0
+[1m[92m  Downloaded[0m slab v0.4.12
+[1m[92m  Downloaded[0m siphasher v1.0.3
+[1m[92m  Downloaded[0m simd-adler32 v0.3.9
+[1m[92m  Downloaded[0m signal-hook v0.3.18
+[1m[92m  Downloaded[0m sigchld v0.2.4
+[1m[92m  Downloaded[0m serde_repr v0.1.20
+[1m[92m  Downloaded[0m serde_derive v1.0.228
+[1m[92m  Downloaded[0m serde-xml-rs v0.6.0
+[1m[92m  Downloaded[0m serde-untagged v0.1.9
+[1m[92m  Downloaded[0m semver v1.0.28
+[1m[92m  Downloaded[0m semver v0.9.0
+[1m[92m  Downloaded[0m scopeguard v1.2.0
+[1m[92m  Downloaded[0m same-file v1.0.6
+[1m[92m  Downloaded[0m ryu v1.0.23
+[1m[92m  Downloaded[0m rustversion v1.0.22
+[1m[92m  Downloaded[0m rustls-platform-verifier v0.7.0
+[1m[92m  Downloaded[0m rustls-pki-types v1.15.0
+[1m[92m  Downloaded[0m rustls-native-certs v0.8.4
+[1m[92m  Downloaded[0m rustc-hash v2.1.3
+[1m[92m  Downloaded[0m rust-i18n-support v4.1.0
+[1m[92m  Downloaded[0m rust-i18n v4.1.0
+[1m[92m  Downloaded[0m rkyv_derive v0.8.17
+[1m[92m  Downloaded[0m ringbuf v0.4.8
+[1m[92m  Downloaded[0m rfd v0.16.0
+[1m[92m  Downloaded[0m reqwest v0.12.28
+[1m[92m  Downloaded[0m regex v1.12.4
+[1m[92m  Downloaded[0m rayon-core v1.13.0
+[1m[92m  Downloaded[0m rayon v1.12.0
+[1m[92m  Downloaded[0m rand v0.8.6
+[1m[92m  Downloaded[0m quinn v0.11.11
+[1m[92m  Downloaded[0m kode-bridge v0.4.0
+[1m[92m  Downloaded[0m itertools v0.14.0
+[1m[92m  Downloaded[0m itertools v0.13.0
+[1m[92m  Downloaded[0m itertools v0.12.1
+[1m[92m  Downloaded[0m itertools v0.11.0
+[1m[92m  Downloaded[0m interprocess v2.4.2
+[1m[92m  Downloaded[0m indexmap v2.14.0
+[1m[92m  Downloaded[0m serde_core v1.0.228
+[1m[92m  Downloaded[0m semver-parser v0.7.0
+[1m[92m  Downloaded[0m scoped-tls v1.0.1
+[1m[92m  Downloaded[0m schemars_derive v0.8.22
+[1m[92m  Downloaded[0m schemars v0.8.22
+[1m[92m  Downloaded[0m ryu-js v1.0.2
+[1m[92m  Downloaded[0m rustc_version v0.4.1
+[1m[92m  Downloaded[0m rustc_version v0.2.3
+[1m[92m  Downloaded[0m rust-ini v0.21.3
+[1m[92m  Downloaded[0m rust-i18n-macro v4.1.0
+[1m[92m  Downloaded[0m reqwest_dav v0.3.3
+[1m[92m  Downloaded[0m rend v0.5.4
+[1m[92m  Downloaded[0m ref-cast-impl v1.0.25
+[1m[92m  Downloaded[0m ref-cast v1.0.25
+[1m[92m  Downloaded[0m raw-window-handle v0.6.2
+[1m[92m  Downloaded[0m rand_core v0.10.1
+[1m[92m  Downloaded[0m rand_core v0.6.4
+[1m[92m  Downloaded[0m rancor v0.1.2
+[1m[92m  Downloaded[0m quote v1.0.46
+[1m[92m  Downloaded[0m quick-error v2.0.1
+[1m[92m  Downloaded[0m ptr_meta_derive v0.3.1
+[1m[92m  Downloaded[0m ptr_meta v0.3.1
+[1m[92m  Downloaded[0m psl-types v2.0.11
+[1m[92m  Downloaded[0m prost-types v0.14.4
+[1m[92m  Downloaded[0m prost-types v0.12.6
+[1m[92m  Downloaded[0m prost-derive v0.14.4
+[1m[92m  Downloaded[0m prost-derive v0.12.6
+[1m[92m  Downloaded[0m prost v0.14.4
+[1m[92m  Downloaded[0m prost v0.12.6
+[1m[92m  Downloaded[0m proc-macro2 v1.0.106
+[1m[92m  Downloaded[0m proc-macro-error-attr v1.0.4
+[1m[92m  Downloaded[0m proc-macro-error v1.0.4
+[1m[92m  Downloaded[0m portable-atomic v1.13.1
+[1m[92m  Downloaded[0m png v0.18.1
+[1m[92m  Downloaded[0m png v0.17.16
+[1m[92m  Downloaded[0m plotters v0.3.7
+[1m[92m  Downloaded[0m pin-project v1.1.13
+[1m[92m  Downloaded[0m phf_shared v0.14.0
+[1m[92m  Downloaded[0m phf_generator v0.14.0
+[1m[92m  Downloaded[0m pbkdf2 v0.13.0
+[1m[92m  Downloaded[0m path-tree v0.8.3
+[1m[92m  Downloaded[0m parking_lot_core v0.9.12
+[1m[92m  Downloaded[0m pango v0.18.3
+[1m[92m  Downloaded[0m page_size v0.6.0
+[1m[92m  Downloaded[0m linux-raw-sys v0.12.1
+[1m[92m  Downloaded[0m idna v1.1.0
+[1m[92m  Downloaded[0m icu_properties_data v2.0.1
+[1m[92m  Downloaded[0m icu_normalizer_data v2.0.0
+[1m[92m  Downloaded[0m rand_chacha v0.9.0
+[1m[92m  Downloaded[0m rand_chacha v0.3.1
+[1m[92m  Downloaded[0m quinn-udp v0.5.14
+[1m[92m  Downloaded[0m proc-macro-crate v2.0.0
+[1m[92m  Downloaded[0m proc-macro-crate v1.3.1
+[1m[92m  Downloaded[0m powerfmt v0.2.0
+[1m[92m  Downloaded[0m polyval v0.7.1
+[1m[92m  Downloaded[0m plotters-backend v0.3.7
+[1m[92m  Downloaded[0m plist v1.10.0
+[1m[92m  Downloaded[0m piper v0.2.5
+[1m[92m  Downloaded[0m pin-project-internal v1.1.13
+[1m[92m  Downloaded[0m phf_shared v0.13.1
+[1m[92m  Downloaded[0m phf_macros v0.14.0
+[1m[92m  Downloaded[0m phf_macros v0.13.1
+[1m[92m  Downloaded[0m phf_generator v0.13.1
+[1m[92m  Downloaded[0m phf_codegen v0.13.1
+[1m[92m  Downloaded[0m phf v0.14.0
+[1m[92m  Downloaded[0m phf v0.13.1
+[1m[92m  Downloaded[0m percent-encoding v2.3.2
+[1m[92m  Downloaded[0m paste v1.0.15
+[1m[92m  Downloaded[0m parking_lot v0.12.5
+[1m[92m  Downloaded[0m parking v2.2.1
+[1m[92m  Downloaded[0m pango-sys v0.18.0
+[1m[92m  Downloaded[0m os_pipe v1.2.3
+[1m[92m  Downloaded[0m ordered-stream v0.2.0
+[1m[92m  Downloaded[0m muda v0.19.3
+[1m[92m  Downloaded[0m moxcms v0.8.1
+[1m[92m  Downloaded[0m mio v1.2.1
+[1m[92m  Downloaded[0m hdrhistogram v7.5.4
+[1m[92m  Downloaded[0m hashbrown v0.17.1
+[1m[92m  Downloaded[0m hashbrown v0.16.1
+[1m[92m  Downloaded[0m hashbrown v0.14.5
+[1m[92m  Downloaded[0m h2 v0.4.15
+[1m[92m  Downloaded[0m h2 v0.3.27
+[1m[92m  Downloaded[0m gtk-sys v0.18.2
+[1m[92m  Downloaded[0m gtk v0.18.2
+[1m[92m  Downloaded[0m precomputed-hash v0.1.1
+[1m[92m  Downloaded[0m ppv-lite86 v0.2.21
+[1m[92m  Downloaded[0m ppmd-rust v1.4.0
+[1m[92m  Downloaded[0m potential_utf v0.1.5
+[1m[92m  Downloaded[0m portable-atomic-util v0.2.7
+[1m[92m  Downloaded[0m polling v3.11.0
+[1m[92m  Downloaded[0m plotters-svg v0.3.7
+[1m[92m  Downloaded[0m pin-project-lite v0.2.17
+[1m[92m  Downloaded[0m nom v7.1.3
+[1m[92m  Downloaded[0m libdbus-sys v0.2.7
+[1m[92m  Downloaded[0m libbz2-rs-sys v0.2.5
+[1m[92m  Downloaded[0m libappindicator-sys v0.9.0
+[1m[92m  Downloaded[0m lazy-regex v3.6.0
+[1m[92m  Downloaded[0m keyboard-types v0.7.0
+[1m[92m  Downloaded[0m jsonptr v0.6.3
+[1m[92m  Downloaded[0m json-patch v3.0.1
+[1m[92m  Downloaded[0m jobserver v0.1.34
+[1m[92m  Downloaded[0m javascriptcore-rs v1.1.2
+[1m[92m  Downloaded[0m is-docker v0.2.0
+[1m[92m  Downloaded[0m indexmap v1.9.3
+[1m[92m  Downloaded[0m ignore v0.4.27
+[1m[92m  Downloaded[0m headers v0.4.1
+[1m[92m  Downloaded[0m hashbrown v0.15.5
+[1m[92m  Downloaded[0m hashbrown v0.12.3
+[1m[92m  Downloaded[0m global-hotkey v0.8.0
+[1m[92m  Downloaded[0m openssl-probe v0.2.1
+[1m[92m  Downloaded[0m oorandom v11.1.5
+[1m[92m  Downloaded[0m once_cell v1.21.4
+[1m[92m  Downloaded[0m num-traits v0.2.19
+[1m[92m  Downloaded[0m num-integer v0.1.46
+[1m[92m  Downloaded[0m num-bigint v0.4.7
+[1m[92m  Downloaded[0m notify-rust v4.18.0
+[1m[92m  Downloaded[0m nom v8.0.0
+[1m[92m  Downloaded[0m munge v0.4.7
+[1m[92m  Downloaded[0m miniz_oxide v0.8.9
+[1m[92m  Downloaded[0m memchr v2.8.2
+[1m[92m  Downloaded[0m lzma-rust2 v0.16.4
+[1m[92m  Downloaded[0m libappindicator v0.9.0
+[1m[92m  Downloaded[0m lazy_static v1.5.0
+[1m[92m  Downloaded[0m lazy-regex-proc_macros v3.6.0
+[1m[92m  Downloaded[0m javascriptcore-rs-sys v1.1.1
+[1m[92m  Downloaded[0m itoa v1.0.18
+[1m[92m  Downloaded[0m is-wsl v0.4.0
+[1m[92m  Downloaded[0m iptools v0.4.1
+[1m[92m  Downloaded[0m ipnet v2.12.0
+[1m[92m  Downloaded[0m inout v0.2.2
+[1m[92m  Downloaded[0m infer v0.19.0
+[1m[92m  Downloaded[0m idna_adapter v1.2.1
+[1m[92m  Downloaded[0m ident_case v1.0.1
+[1m[92m  Downloaded[0m icu_provider v2.2.0
+[1m[92m  Downloaded[0m icu_properties v2.0.2
+[1m[92m  Downloaded[0m icu_normalizer v2.0.1
+[1m[92m  Downloaded[0m brotli v8.0.4
+[1m[92m  Downloaded[0m boa_engine v0.21.1
+[1m[92m  Downloaded[0m ordered-multimap v0.7.3
+[1m[92m  Downloaded[0m open v5.3.6
+[1m[92m  Downloaded[0m num_threads v0.1.7
+[1m[92m  Downloaded[0m num_enum_derive v0.7.6
+[1m[92m  Downloaded[0m num_enum v0.7.6
+[1m[92m  Downloaded[0m num-conv v0.2.2
+[1m[92m  Downloaded[0m normpath v1.5.1
+[1m[92m  Downloaded[0m new_debug_unreachable v1.0.6
+[1m[92m  Downloaded[0m network-interface v2.0.5
+[1m[92m  Downloaded[0m neli-proc-macros v0.1.4
+[1m[92m  Downloaded[0m neli v0.6.5
+[1m[92m  Downloaded[0m nanoid v0.5.0
+[1m[92m  Downloaded[0m munge_macro v0.4.7
+[1m[92m  Downloaded[0m minimal-lexical v0.2.1
+[1m[92m  Downloaded[0m mime_guess v2.0.5
+[1m[92m  Downloaded[0m mime v0.3.17
+[1m[92m  Downloaded[0m memoffset v0.9.1
+[1m[92m  Downloaded[0m md-5 v0.10.6
+[1m[92m  Downloaded[0m markup5ever v0.38.0
+[1m[92m  Downloaded[0m lru-slab v0.1.2
+[1m[92m  Downloaded[0m lock_api v0.4.14
+[1m[92m  Downloaded[0m local-ip-address v0.5.7
+[1m[92m  Downloaded[0m litrs v1.0.0
+[1m[92m  Downloaded[0m litemap v0.8.2
+[1m[92m  Downloaded[0m libloading v0.7.4
+[1m[92m  Downloaded[0m intrusive-collections v0.9.7
+[1m[92m  Downloaded[0m icu_locale_core v2.2.0
+[1m[92m  Downloaded[0m icu_collections v2.0.0
+[1m[92m  Downloaded[0m ico v0.5.0
+[1m[92m  Downloaded[0m hyper-util v0.1.20
+[1m[92m  Downloaded[0m hyper v1.10.1
+[1m[92m  Downloaded[0m hyper v0.14.32
+[1m[92m  Downloaded[0m http v1.4.2
+[1m[92m  Downloaded[0m http v0.2.12
+[1m[92m  Downloaded[0m html5ever v0.38.0
+[1m[92m  Downloaded[0m half v2.7.1
+[1m[92m  Downloaded[0m gobject-sys v0.18.0
+[1m[92m  Downloaded[0m gio-sys v0.18.1
+[1m[92m  Downloaded[0m gio v0.18.4
+[1m[92m  Downloaded[0m bstr v1.12.3
+[1m[92m  Downloaded[0m minisign-verify v0.2.5
+[1m[92m  Downloaded[0m matchit v0.8.4
+[1m[92m  Downloaded[0m matchit v0.7.3
+[1m[92m  Downloaded[0m matchers v0.2.0
+[1m[92m  Downloaded[0m log v0.4.33
+[1m[92m  Downloaded[0m iana-time-zone v0.1.65
+[1m[92m  Downloaded[0m hyper-timeout v0.5.2
+[1m[92m  Downloaded[0m hyper-timeout v0.4.1
+[1m[92m  Downloaded[0m hyper-rustls v0.27.9
+[1m[92m  Downloaded[0m hybrid-array v0.4.13
+[1m[92m  Downloaded[0m humantime v2.4.0
+[1m[92m  Downloaded[0m httpdate v1.0.3
+[1m[92m  Downloaded[0m httparse v1.10.1
+[1m[92m  Downloaded[0m http-range v0.1.5
+[1m[92m  Downloaded[0m http-body-util v0.1.3
+[1m[92m  Downloaded[0m http-body v1.0.1
+[1m[92m  Downloaded[0m http-body v0.4.6
+[1m[92m  Downloaded[0m hmac v0.13.0
+[1m[92m  Downloaded[0m hex v0.4.3
+[1m[92m  Downloaded[0m heck v0.5.0
+[1m[92m  Downloaded[0m heck v0.4.1
+[1m[92m  Downloaded[0m headers-core v0.3.0
+[1m[92m  Downloaded[0m gtk3-macros v0.18.2
+[1m[92m  Downloaded[0m globwalk v0.8.1
+[1m[92m  Downloaded[0m globset v0.4.18
+[1m[92m  Downloaded[0m glob v0.3.3
+[1m[92m  Downloaded[0m glib v0.18.5
+[1m[92m  Downloaded[0m futures-util v0.3.32
+[1m[92m  Downloaded[0m encoding_rs v0.8.35
+[1m[92m  Downloaded[0m dbus v0.9.12
+[1m[92m  Downloaded[0m clap_builder v4.6.0
+[1m[92m  Downloaded[0m chrono v0.4.45
+[1m[92m  Downloaded[0m bumpalo v3.20.3
+[1m[92m  Downloaded[0m brotli-decompressor v5.0.3
+[1m[92m  Downloaded[0m boa_parser v0.21.1
+[1m[92m  Downloaded[0m axum v0.8.9
+[1m[92m  Downloaded[0m axum v0.6.20
+[1m[92m  Downloaded[0m aws-lc-rs v1.17.1
+[1m[92m  Downloaded[0m async-compression v0.4.42
+[1m[92m  Downloaded[0m arboard v3.6.1
+[1m[92m  Downloaded[0m aho-corasick v1.1.4
+[1m[92m  Downloaded[0m aes-gcm v0.11.0
+[1m[92m  Downloaded[0m glib-sys v0.18.1
+[1m[92m  Downloaded[0m getrandom v0.4.3
+[1m[92m  Downloaded[0m getrandom v0.3.4
+[1m[92m  Downloaded[0m getrandom v0.2.17
+[1m[92m  Downloaded[0m gdkwayland-sys v0.18.2
+[1m[92m  Downloaded[0m gdk-sys v0.18.2
+[1m[92m  Downloaded[0m gdk v0.18.2
+[1m[92m  Downloaded[0m futures-concurrency v7.7.1
+[1m[92m  Downloaded[0m futures-channel v0.3.32
+[1m[92m  Downloaded[0m futures v0.3.32
+[1m[92m  Downloaded[0m float16 v0.1.5
+[1m[92m  Downloaded[0m flexi_logger v0.31.9
+[1m[92m  Downloaded[0m flate2 v1.1.9
+[1m[92m  Downloaded[0m filetime v0.2.29
+[1m[92m  Downloaded[0m erased-serde v0.4.10
+[1m[92m  Downloaded[0m either v1.16.0
+[1m[92m  Downloaded[0m dom_query v0.27.0
+[1m[92m  Downloaded[0m digest v0.11.3
+[1m[92m  Downloaded[0m devtools-wire-format v0.5.3
+[1m[92m  Downloaded[0m derive_more-impl v2.1.1
+[1m[92m  Downloaded[0m derive_more v2.1.1
+[1m[92m  Downloaded[0m const-oid v0.10.2
+[1m[92m  Downloaded[0m console-subscriber v0.5.0
+[1m[92m  Downloaded[0m compact_str v0.9.1
+[1m[92m  Downloaded[0m clap v4.6.1
+[1m[92m  Downloaded[0m cfg-expr v0.15.8
+[1m[92m  Downloaded[0m cfb v0.7.3
+[1m[92m  Downloaded[0m cc v1.2.65
+[1m[92m  Downloaded[0m cairo-rs v0.18.5
+[1m[92m  Downloaded[0m bytes v1.12.0
+[1m[92m  Downloaded[0m bytemuck v1.25.0
+[1m[92m  Downloaded[0m boa_ast v0.21.1
+[1m[92m  Downloaded[0m bitflags v2.13.0
+[1m[92m  Downloaded[0m base64 v0.22.1
+[1m[92m  Downloaded[0m base64 v0.21.7
+[1m[92m  Downloaded[0m atk v0.18.2
+[1m[92m  Downloaded[0m async-trait v0.1.89
+[1m[92m  Downloaded[0m async-task v4.7.1
+[1m[92m  Downloaded[0m async-lock v3.4.2
+[1m[92m  Downloaded[0m arrayvec v0.7.8
+[1m[92m  Downloaded[0m arc-swap v1.9.2
+[1m[92m  Downloaded[0m anstyle v1.0.14
+[1m[92m  Downloaded[0m anes v0.1.6
+[1m[92m  Downloaded[0m aes v0.9.1
+[1m[92m  Downloaded[0m gethostname v1.1.0
+[1m[92m  Downloaded[0m generic-array v0.14.7
+[1m[92m  Downloaded[0m gdkx11-sys v0.18.2
+[1m[92m  Downloaded[0m gdkx11 v0.18.2
+[1m[92m  Downloaded[0m gdk-pixbuf-sys v0.18.0
+[1m[92m  Downloaded[0m gdk-pixbuf v0.18.5
+[1m[92m  Downloaded[0m futures-io v0.3.32
+[1m[92m  Downloaded[0m futures-executor v0.3.32
+[1m[92m  Downloaded[0m fs_extra v1.3.0
+[1m[92m  Downloaded[0m foldhash v0.2.0
+[1m[92m  Downloaded[0m foldhash v0.1.5
+[1m[92m  Downloaded[0m find-msvc-tools v0.1.9
+[1m[92m  Downloaded[0m fdeflate v0.3.7
+[1m[92m  Downloaded[0m fastrand v2.4.1
+[1m[92m  Downloaded[0m event-listener-strategy v0.5.4
+[1m[92m  Downloaded[0m event-listener v5.4.1
+[1m[92m  Downloaded[0m errno v0.3.14
+[1m[92m  Downloaded[0m equivalent v1.0.2
+[1m[92m  Downloaded[0m equator-macro v0.4.2
+[1m[92m  Downloaded[0m enumflags2_derive v0.7.12
+[1m[92m  Downloaded[0m enumflags2 v0.7.12
+[1m[92m  Downloaded[0m endi v1.1.1
+[1m[92m  Downloaded[0m embed-resource v3.0.11
+[1m[92m  Downloaded[0m dynify-macros v0.1.2
+[1m[92m  Downloaded[0m dynify v0.1.2
+[1m[92m  Downloaded[0m dunce v1.0.5
+[1m[92m  Downloaded[0m dtor v0.3.0
+[1m[92m  Downloaded[0m dtoa-short v0.3.5
+[1m[92m  Downloaded[0m dtoa v1.0.11
+[1m[92m  Downloaded[0m dpi v0.1.2
+[1m[92m  Downloaded[0m dlv-list v0.5.2
+[1m[92m  Downloaded[0m dlopen2_derive v0.4.3
+[1m[92m  Downloaded[0m dlopen2 v0.8.2
+[1m[92m  Downloaded[0m displaydoc v0.2.6
+[1m[92m  Downloaded[0m dirs-sys v0.3.7
+[1m[92m  Downloaded[0m dirs v6.0.0
+[1m[92m  Downloaded[0m devtools-core v0.3.6
+[1m[92m  Downloaded[0m deranged v0.5.8
+[1m[92m  Downloaded[0m deflate64 v0.1.12
+[1m[92m  Downloaded[0m data-url v0.3.2
+[1m[92m  Downloaded[0m data-encoding v2.11.0
+[1m[92m  Downloaded[0m dashmap v6.2.1
+[1m[92m  Downloaded[0m darling_macro v0.23.0
+[1m[92m  Downloaded[0m darling_core v0.23.0
+[1m[92m  Downloaded[0m ctr v0.10.1
+[1m[92m  Downloaded[0m crypto-common v0.1.7
+[1m[92m  Downloaded[0m crossbeam-channel v0.5.15
+[1m[92m  Downloaded[0m criterion v0.8.2
+[1m[92m  Downloaded[0m cpufeatures v0.3.0
+[1m[92m  Downloaded[0m cpufeatures v0.2.17
+[1m[92m  Downloaded[0m cpubits v0.1.1
+[1m[92m  Downloaded[0m cow-utils v0.1.3
+[1m[92m  Downloaded[0m cookie_store v0.22.1
+[1m[92m  Downloaded[0m cookie v0.18.1
+[1m[92m  Downloaded[0m console-api v0.9.0
+[1m[92m  Downloaded[0m concurrent-queue v2.5.0
+[1m[92m  Downloaded[0m compression-codecs v0.4.38
+[1m[92m  Downloaded[0m colored v2.2.0
+[1m[92m  Downloaded[0m cmov v0.5.4
+[1m[92m  Downloaded[0m cmake v0.1.58
+[1m[92m  Downloaded[0m cipher v0.5.2
+[1m[92m  Downloaded[0m ciborium v0.2.2
+[1m[92m  Downloaded[0m chacha20 v0.10.1
+[1m[92m  Downloaded[0m cargo_toml v0.22.3
+[1m[92m  Downloaded[0m cargo_metadata v0.19.2
+[1m[92m  Downloaded[0m cargo-platform v0.1.9
+[1m[92m  Downloaded[0m bzip2 v0.6.1
+[1m[92m  Downloaded[0m bytemuck_derive v1.10.2
+[1m[92m  Downloaded[0m bs58 v0.5.1
+[1m[92m  Downloaded[0m boa_string v0.21.1
+[1m[92m  Downloaded[0m boa_macros v0.21.1
+[1m[92m  Downloaded[0m boa_interner v0.21.1
+[1m[92m  Downloaded[0m boa_gc v0.21.1
+[1m[92m  Downloaded[0m blocking v1.6.2
+[1m[92m  Downloaded[0m block-buffer v0.12.1
+[1m[92m  Downloaded[0m bitflags v1.3.2
+[1m[92m  Downloaded[0m bit-vec v0.8.0
+[1m[92m  Downloaded[0m base62 v2.2.4
+[1m[92m  Downloaded[0m axum-core v0.5.6
+[1m[92m  Downloaded[0m axum-core v0.3.4
+[1m[92m  Downloaded[0m autocfg v1.5.1
+[1m[92m  Downloaded[0m atk-sys v0.18.2
+[1m[92m  Downloaded[0m async-stream-impl v0.3.6
+[1m[92m  Downloaded[0m async-signal v0.2.14
+[1m[92m  Downloaded[0m async-io v2.6.0
+[1m[92m  Downloaded[0m async-broadcast v0.7.2
+[1m[92m  Downloaded[0m arraydeque v0.5.1
+[1m[92m  Downloaded[0m allocator-api2 v0.2.21
+[1m[92m  Downloaded[0m futures-task v0.3.32
+[1m[92m  Downloaded[0m futures-sink v0.3.32
+[1m[92m  Downloaded[0m futures-macro v0.3.32
+[1m[92m  Downloaded[0m futures-lite v2.6.1
+[1m[92m  Downloaded[0m futures-core v0.3.32
+[1m[92m  Downloaded[0m form_urlencoded v1.2.2
+[1m[92m  Downloaded[0m fnv v1.0.7
+[1m[92m  Downloaded[0m fixedbitset v0.5.7
+[1m[92m  Downloaded[0m field-offset v0.3.6
+[1m[92m  Downloaded[0m fax v0.2.7
+[1m[92m  Downloaded[0m fast-float2 v0.2.3
+[1m[92m  Downloaded[0m equator v0.4.2
+[1m[92m  Downloaded[0m dyn-clone v1.0.20
+[1m[92m  Downloaded[0m dtor-proc-macro v0.0.6
+[1m[92m  Downloaded[0m downcast-rs v1.2.1
+[1m[92m  Downloaded[0m document-features v0.2.12
+[1m[92m  Downloaded[0m dirs-sys v0.5.0
+[1m[92m  Downloaded[0m dirs v4.0.0
+[1m[92m  Downloaded[0m digest_auth v0.3.1
+[1m[92m  Downloaded[0m ctutils v0.4.2
+[1m[92m  Downloaded[0m ctor-proc-macro v0.0.7
+[1m[92m  Downloaded[0m cssparser-macros v0.6.1
+[1m[92m  Downloaded[0m cssparser v0.36.0
+[1m[92m  Downloaded[0m crypto-common v0.2.2
+[1m[92m  Downloaded[0m crossbeam-epoch v0.9.18
+[1m[92m  Downloaded[0m crossbeam-deque v0.8.6
+[1m[92m  Downloaded[0m crc32fast v1.5.0
+[1m[92m  Downloaded[0m constant_time_eq v0.4.2
+[1m[92m  Downloaded[0m const-random-macro v0.1.16
+[1m[92m  Downloaded[0m const-random v0.1.18
+[1m[92m  Downloaded[0m compression-core v0.4.32
+[1m[92m  Downloaded[0m clap_lex v1.1.0
+[1m[92m  Downloaded[0m ciborium-ll v0.2.2
+[1m[92m  Downloaded[0m cfg_aliases v0.2.1
+[1m[92m  Downloaded[0m cfg-if v1.0.4
+[1m[92m  Downloaded[0m castaway v0.2.4
+[1m[92m  Downloaded[0m cast v0.3.0
+[1m[92m  Downloaded[0m cairo-sys-rs v0.18.2
+[1m[92m  Downloaded[0m byteorder-lite v0.1.0
+[1m[92m  Downloaded[0m block-buffer v0.10.4
+[1m[92m  Downloaded[0m bit-set v0.8.0
+[1m[92m  Downloaded[0m auto-launch v0.5.0
+[1m[92m  Downloaded[0m atomic-waker v1.1.2
+[1m[92m  Downloaded[0m async-stream v0.3.6
+[1m[92m  Downloaded[0m crossbeam-queue v0.3.12
+[1m[92m  Downloaded[0m crossbeam v0.8.4
+[1m[92m  Downloaded[0m async-executor v1.14.0
+[1m[92m  Downloaded[0m anyhow v1.0.103
+[1m[92m  Downloaded[0m ctor v0.8.0
+[1m[92m  Downloaded[0m criterion-plot v0.8.2
+[1m[92m  Downloaded[0m async-recursion v1.1.1
+[1m[92m  Downloaded[0m async-process v2.5.0
+[1m[92m  Downloaded[0m async-channel v2.5.0
+[1m[92m  Downloaded[0m aligned-vec v0.6.4
+[1m[92m  Downloaded[0m digest v0.10.7
+[1m[92m  Downloaded[0m crossbeam-utils v0.8.21
+[1m[92m  Downloaded[0m ciborium-io v0.2.2
+[1m[92m  Downloaded[0m backon v1.6.0
+[1m[92m  Downloaded[0m aead v0.6.1
+[1m[92m  Downloaded[0m alloc-stdlib v0.2.4
+[1m[92m  Downloaded[0m adler2 v2.0.1
+[1m[92m   Compiling[0m quote v1.0.46
+[1m[92m   Compiling[0m proc-macro2 v1.0.106
+[1m[92m   Compiling[0m unicode-ident v1.0.24
+[1m[92m   Compiling[0m serde_core v1.0.228
+[1m[92m   Compiling[0m libc v0.2.186
+[1m[92m   Compiling[0m serde v1.0.228
+[1m[92m    Checking[0m cfg-if v1.0.4
+[1m[92m   Compiling[0m equivalent v1.0.2
+[1m[92m   Compiling[0m hashbrown v0.17.1
+[1m[92m   Compiling[0m syn v2.0.118
+[1m[92m   Compiling[0m indexmap v2.14.0
+[1m[92m   Compiling[0m parking_lot_core v0.9.12
+[1m[92m   Compiling[0m smallvec v1.15.2
+[1m[92m   Compiling[0m pkg-config v0.3.33
+[1m[92m   Compiling[0m autocfg v1.5.1
+[1m[92m   Compiling[0m winnow v0.7.15
+[1m[92m    Checking[0m pin-project-lite v0.2.17
+[1m[92m   Compiling[0m heck v0.5.0
+[1m[92m    Checking[0m memchr v2.8.2
+[1m[92m    Checking[0m futures-core v0.3.32
+[1m[92m    Checking[0m once_cell v1.21.4
+[1m[92m   Compiling[0m siphasher v1.0.3
+[1m[92m   Compiling[0m toml_write v0.1.2
+[1m[92m   Compiling[0m target-lexicon v0.12.16
+[1m[92m   Compiling[0m synstructure v0.13.2
+[1m[92m   Compiling[0m zmij v1.0.21
+[1m[92m   Compiling[0m thiserror v1.0.69
+[1m[92m   Compiling[0m icu_properties_data v2.0.1
+[1m[92m   Compiling[0m icu_normalizer_data v2.0.0
+[1m[92m   Compiling[0m version-compare v0.2.1
+[1m[92m   Compiling[0m cfg-expr v0.15.8
+[1m[92m   Compiling[0m fastrand v2.4.1
+[1m[92m   Compiling[0m thiserror v2.0.18
+[1m[92m    Checking[0m futures-io v0.3.32
+[1m[92m   Compiling[0m jobserver v0.1.34
+[1m[92m   Compiling[0m find-msvc-tools v0.1.9
+[1m[92m    Checking[0m bytes v1.12.0
+[1m[92m   Compiling[0m shlex v2.0.1
+[1m[92m   Compiling[0m cc v1.2.65
+[1m[92m   Compiling[0m phf_shared v0.13.1
+[1m[92m    Checking[0m itoa v1.0.18
+[1m[92m    Checking[0m slab v0.4.12
+[1m[92m   Compiling[0m anyhow v1.0.103
+[1m[92m   Compiling[0m stable_deref_trait v1.2.1
+[1m[92m    Checking[0m log v0.4.33
+[1m[92m   Compiling[0m phf_generator v0.13.1
+[1m[92m   Compiling[0m version_check v0.9.5
+[1m[92m   Compiling[0m winnow v1.0.3
+[1m[92m    Checking[0m futures-sink v0.3.32
+[1m[92m   Compiling[0m toml_datetime v1.1.1+spec-1.1.0
+[1m[92m   Compiling[0m serde_derive v1.0.228
+[1m[92m   Compiling[0m zerofrom-derive v0.1.7
+[1m[92m   Compiling[0m yoke-derive v0.8.2
+[1m[92m   Compiling[0m zerovec-derive v0.11.3
+[1m[92m   Compiling[0m displaydoc v0.2.6
+[1m[92m   Compiling[0m thiserror-impl v1.0.69
+[1m[92m   Compiling[0m thiserror-impl v2.0.18
+[1m[92m   Compiling[0m toml_parser v1.1.2+spec-1.1.0
+[1m[92m    Checking[0m futures-channel v0.3.32
+[1m[92m   Compiling[0m aho-corasick v1.1.4
+[1m[92m    Checking[0m bitflags v2.13.0
+[1m[92m   Compiling[0m semver v1.0.28
+[1m[92m   Compiling[0m num-conv v0.2.2
+[1m[92m   Compiling[0m toml_datetime v0.6.11
+[1m[92m   Compiling[0m serde_spanned v0.6.9
+[1m[92m   Compiling[0m regex-syntax v0.8.11
+[1m[92m   Compiling[0m time-core v0.1.9
+[1m[92m   Compiling[0m toml_edit v0.22.27
+[1m[92m   Compiling[0m zerofrom v0.1.8
+[1m[92m   Compiling[0m phf_macros v0.13.1
+[1m[92m    Checking[0m errno v0.3.14
+[1m[92m   Compiling[0m dunce v1.0.5
+[1m[92m    Checking[0m signal-hook-registry v1.4.8
+[1m[92m   Compiling[0m regex-automata v0.4.14
+[1m[92m   Compiling[0m toml v0.8.23
+[1m[92m   Compiling[0m system-deps v6.2.2
+[1m[92m   Compiling[0m yoke v0.8.3
+[1m[92m   Compiling[0m futures-macro v0.3.32
+[1m[92m    Checking[0m futures-task v0.3.32
+[1m[92m   Compiling[0m zerovec v0.11.6
+[1m[92m    Checking[0m futures-util v0.3.32
+[1m[92m   Compiling[0m typeid v1.0.3
+[1m[92m   Compiling[0m serde_json v1.0.150
+[1m[92m   Compiling[0m regex v1.12.4
+[1m[92m   Compiling[0m tinystr v0.8.3
+[1m[92m   Compiling[0m phf_codegen v0.13.1
+[1m[92m   Compiling[0m writeable v0.6.3
+[1m[92m   Compiling[0m erased-serde v0.4.10
+[1m[92m   Compiling[0m same-file v1.0.6
+[1m[92m   Compiling[0m litemap v0.8.2
+[1m[92m   Compiling[0m ident_case v1.0.1
+[1m[92m   Compiling[0m strsim v0.11.1
+[1m[92m   Compiling[0m walkdir v2.5.0
+[1m[92m   Compiling[0m icu_locale_core v2.2.0
+[1m[92m   Compiling[0m darling_core v0.23.0
+[1m[92m   Compiling[0m potential_utf v0.1.5
+[1m[92m   Compiling[0m zerotrie v0.2.4
+[1m[92m   Compiling[0m icu_provider v2.2.0
+[1m[92m   Compiling[0m icu_collections v2.0.0
+[1m[92m   Compiling[0m new_debug_unreachable v1.0.6
+[1m[92m   Compiling[0m scopeguard v1.2.0
+[1m[92m   Compiling[0m lock_api v0.4.14
+[1m[92m   Compiling[0m phf v0.13.1
+[1m[92m   Compiling[0m tokio-macros v2.7.0
+[1m[92m   Compiling[0m string_cache_codegen v0.6.1
+[1m[92m    Checking[0m mio v1.2.1
+[1m[92m    Checking[0m socket2 v0.6.4
+[1m[92m   Compiling[0m getrandom v0.4.3
+[1m[92m   Compiling[0m precomputed-hash v0.1.1
+[1m[92m   Compiling[0m web_atoms v0.2.5
+[1m[92m    Checking[0m tokio v1.52.3
+[1m[92m   Compiling[0m icu_properties v2.0.2
+[1m[92m   Compiling[0m icu_normalizer v2.0.1
+[1m[92m   Compiling[0m darling_macro v0.23.0
+[1m[92m   Compiling[0m parking_lot v0.12.5
+[1m[92m   Compiling[0m serde_spanned v1.1.1
+[1m[92m   Compiling[0m toml_writer v1.1.1+spec-1.1.0
+[1m[92m   Compiling[0m darling v0.23.0
+[1m[92m   Compiling[0m serde_with_macros v3.21.0
+[1m[92m   Compiling[0m ctor-proc-macro v0.0.7
+[1m[92m   Compiling[0m string_cache v0.9.0
+[1m[92m   Compiling[0m idna_adapter v1.2.1
+[1m[92m   Compiling[0m utf-8 v0.7.6
+[1m[92m   Compiling[0m percent-encoding v2.3.2
+[1m[92m   Compiling[0m dtoa v1.0.11
+[1m[92m   Compiling[0m utf8_iter v1.0.4
+[1m[92m   Compiling[0m idna v1.1.0
+[1m[92m   Compiling[0m dtoa-short v0.3.5
+[1m[92m   Compiling[0m form_urlencoded v1.2.2
+[1m[92m   Compiling[0m tendril v0.5.0
+[1m[92m   Compiling[0m uuid v1.23.4
+[1m[92m   Compiling[0m selectors v0.36.1
+[1m[92m   Compiling[0m derive_more-impl v2.1.1
+[1m[92m   Compiling[0m cssparser-macros v0.6.1
+[1m[92m   Compiling[0m indexmap v1.9.3
+[1m[92m   Compiling[0m unic-char-range v0.9.0
+[1m[92m   Compiling[0m alloc-no-stdlib v2.0.4
+[1m[92m   Compiling[0m camino v1.2.4
+[1m[92m   Compiling[0m glob v0.3.3
+[1m[92m   Compiling[0m byteorder v1.5.0
+[1m[92m   Compiling[0m unic-common v0.9.0
+[1m[92m   Compiling[0m unic-ucd-version v0.9.0
+[1m[92m   Compiling[0m cssparser v0.36.0
+[1m[92m   Compiling[0m alloc-stdlib v0.2.4
+[1m[92m   Compiling[0m unic-char-property v0.9.0
+[1m[92m   Compiling[0m derive_more v2.1.1
+[1m[92m   Compiling[0m markup5ever v0.38.0
+[1m[92m   Compiling[0m url v2.5.8
+[1m[92m   Compiling[0m toml v1.1.2+spec-1.1.0
+[1m[92m   Compiling[0m servo_arc v0.4.3
+[1m[92m   Compiling[0m serde_derive_internals v0.29.1
+[1m[92m   Compiling[0m fnv v1.0.7
+[1m[92m   Compiling[0m rustc-hash v2.1.3
+[1m[92m   Compiling[0m deranged v0.5.8
+[1m[92m   Compiling[0m hashbrown v0.12.3
+[1m[92m   Compiling[0m bit-vec v0.8.0
+[1m[92m   Compiling[0m schemars v0.8.22
+[1m[92m   Compiling[0m powerfmt v0.2.0
+[1m[92m   Compiling[0m bit-set v0.8.0
+[1m[92m   Compiling[0m schemars_derive v0.8.22
+[1m[92m   Compiling[0m time v0.3.53
+[1m[92m   Compiling[0m cfb v0.7.3
+[1m[92m   Compiling[0m html5ever v0.38.0
+[1m[92m   Compiling[0m unic-ucd-ident v0.9.0
+[1m[92m   Compiling[0m brotli-decompressor v5.0.3
+[1m[92m   Compiling[0m jsonptr v0.6.3
+[1m[92m   Compiling[0m cargo-platform v0.1.9
+[1m[92m   Compiling[0m quick-xml v0.41.0
+[1m[92m   Compiling[0m dyn-clone v1.0.20
+[1m[92m   Compiling[0m foldhash v0.2.0
+[1m[92m   Compiling[0m base64 v0.22.1
+[1m[92m   Compiling[0m dom_query v0.27.0
+[1m[92m   Compiling[0m http v1.4.2
+[1m[92m   Compiling[0m plist v1.10.0
+[1m[92m   Compiling[0m json-patch v3.0.1
+[1m[92m   Compiling[0m brotli v8.0.4
+[1m[92m   Compiling[0m cargo_metadata v0.19.2
+[1m[92m   Compiling[0m urlpattern v0.3.0
+[1m[92m   Compiling[0m serde-untagged v0.1.9
+[1m[92m   Compiling[0m infer v0.19.0
+[1m[92m   Compiling[0m serde_with v3.21.0
+[1m[92m   Compiling[0m ctor v0.8.0
+[1m[92m   Compiling[0m glib-sys v0.18.1
+[1m[92m    Checking[0m tracing-core v0.1.36
+[1m[92m   Compiling[0m tracing-attributes v0.1.31
+[1m[92m   Compiling[0m gobject-sys v0.18.0
+[1m[92m   Compiling[0m crossbeam-utils v0.8.21
+[1m[92m   Compiling[0m tauri-utils v2.9.3
+[1m[92m   Compiling[0m rustc_version v0.4.1
+[1m[92m   Compiling[0m gio-sys v0.18.1
+[1m[92m    Checking[0m tracing v0.1.44
+[1m[92m   Compiling[0m syn v1.0.109
+[1m[92m   Compiling[0m gdk-sys v0.18.2
+[1m[92m   Compiling[0m winnow v0.5.40
+[1m[92m   Compiling[0m proc-macro-error-attr v1.0.4
+[1m[92m   Compiling[0m crc32fast v1.5.0
+[1m[92m    Checking[0m futures-executor v0.3.32
+[1m[92m   Compiling[0m proc-macro-error v1.0.4
+[1m[92m   Compiling[0m generic-array v0.14.7
+[1m[92m   Compiling[0m toml_edit v0.20.7
+[1m[92m   Compiling[0m gdk-pixbuf-sys v0.18.0
+[1m[92m   Compiling[0m cairo-sys-rs v0.18.2
+[1m[92m   Compiling[0m atk-sys v0.18.2
+[1m[92m   Compiling[0m pango-sys v0.18.0
+[1m[92m   Compiling[0m toml_datetime v0.7.5+spec-1.1.0
+[1m[92m   Compiling[0m option-ext v0.2.0
+[1m[92m   Compiling[0m proc-macro-crate v2.0.0
+[1m[92m   Compiling[0m dirs-sys v0.5.0
+[1m[92m   Compiling[0m toml v0.9.12+spec-1.1.0
+[1m[92m   Compiling[0m tauri-plugin v2.6.3
+[1m[92m   Compiling[0m embed-resource v3.0.11
+[1m[92m   Compiling[0m num-traits v0.2.19
+[1m[92m   Compiling[0m heck v0.4.1
+[1m[92m   Compiling[0m glib-macros v0.18.5
+[1m[92m   Compiling[0m tauri-winres v0.3.6
+[1m[92m   Compiling[0m cargo_toml v0.22.3
+[1m[92m   Compiling[0m dirs v6.0.0
+[1m[92m    Checking[0m write16 v1.0.0
+[1m[92m    Checking[0m mime v0.3.17
+[1m[92m    Checking[0m utf16_iter v1.0.5
+[1m[92m   Compiling[0m tauri-build v2.6.3
+[1m[92m    Checking[0m glib v0.18.5
+[1m[92m   Compiling[0m gtk-sys v0.18.2
+[1m[92m    Checking[0m typenum v1.20.1
+[1m[92m    Checking[0m simd-adler32 v0.3.9
+[1m[92m    Checking[0m tokio-util v0.7.18
+[1m[92m   Compiling[0m gio v0.18.4
+[1m[92m    Checking[0m adler2 v2.0.1
+[1m[92m   Compiling[0m rustversion v1.0.22
+[1m[92m    Checking[0m miniz_oxide v0.8.9
+[1m[92m   Compiling[0m memoffset v0.9.1
+[1m[92m    Checking[0m tower-service v0.3.3
+[1m[92m    Checking[0m zlib-rs v0.6.5
+[1m[92m   Compiling[0m httparse v1.10.1
+[1m[92m    Checking[0m flate2 v1.1.9
+[1m[92m   Compiling[0m time-macros v0.2.31
+[1m[92m   Compiling[0m tauri v2.11.5
+[1m[92m    Checking[0m num_threads v0.1.7
+[1m[92m    Checking[0m bitflags v1.3.2
+[1m[92m    Checking[0m cairo-rs v0.18.5
+[1m[92m   Compiling[0m toml_edit v0.19.15
+[1m[92m   Compiling[0m field-offset v0.3.6
+[1m[92m   Compiling[0m zerocopy v0.8.52
+[1m[92m    Checking[0m zeroize v1.9.0
+[1m[92m   Compiling[0m zerocopy-derive v0.8.52
+[1m[92m   Compiling[0m gtk v0.18.2
+[1m[92m   Compiling[0m rustix v1.1.4
+[1m[92m   Compiling[0m proc-macro-crate v1.3.1
+[1m[92m   Compiling[0m getrandom v0.3.4
+[1m[92m    Checking[0m atk v0.18.2
+[1m[92m   Compiling[0m gtk3-macros v0.18.2
+[1m[92m   Compiling[0m cookie v0.18.1
+[1m[92m   Compiling[0m either v1.16.0
+[1m[92m    Checking[0m linux-raw-sys v0.12.1
+[1m[92m    Checking[0m try-lock v0.2.5
+[1m[92m    Checking[0m httpdate v1.0.3
+[1m[92m    Checking[0m pango v0.18.3
+[1m[92m    Checking[0m gdk-pixbuf v0.18.5
+[1m[92m    Checking[0m want v0.3.1
+[1m[92m   Compiling[0m javascriptcore-rs-sys v1.1.1
+[1m[92m    Checking[0m gdk v0.18.2
+[1m[92m   Compiling[0m soup3-sys v0.5.0
+[1m[92m    Checking[0m getrandom v0.2.17
+[1m[92m    Checking[0m tower-layer v0.3.3
+[1m[92m    Checking[0m crossbeam-channel v0.5.15
+[1m[92m   Compiling[0m webkit2gtk-sys v2.0.2
+[1m[92m   Compiling[0m x11 v2.21.0
+[1m[92m    Checking[0m socket2 v0.5.10
+[1m[92m   Compiling[0m gdkx11-sys v0.18.2
+[1m[92m    Checking[0m dpi v0.1.2
+[1m[92m    Checking[0m atomic-waker v1.1.2
+[1m[92m   Compiling[0m x11-dl v2.21.0
+[1m[92m   Compiling[0m libdbus-sys v0.2.7
+[1m[92m    Checking[0m rand_core v0.10.1
+[1m[92m    Checking[0m raw-window-handle v0.6.2
+[1m[92m   Compiling[0m block-buffer v0.10.4
+[1m[92m   Compiling[0m crypto-common v0.1.7
+[1m[92m    Checking[0m soup3 v0.5.0
+[1m[92m    Checking[0m javascriptcore-rs v1.1.2
+[1m[92m   Compiling[0m fdeflate v0.3.7
+[1m[92m    Checking[0m ppv-lite86 v0.2.21
+[1m[92m   Compiling[0m bytemuck_derive v1.10.2
+[1m[92m    Checking[0m unicode-segmentation v1.13.3
+[1m[92m    Checking[0m keyboard-types v0.7.0
+[1m[92m    Checking[0m bytemuck v1.25.0
+[1m[92m    Checking[0m png v0.18.1
+[1m[92m   Compiling[0m png v0.17.16
+[1m[92m   Compiling[0m digest v0.10.7
+[1m[92m    Checking[0m http-body v1.0.1
+[1m[92m   Compiling[0m dlopen2_derive v0.4.3
+[1m[92m   Compiling[0m serde_repr v0.1.20
+[1m[92m    Checking[0m libloading v0.7.4
+[1m[92m   Compiling[0m cpufeatures v0.2.17
+[1m[92m   Compiling[0m tauri-runtime v2.11.3
+[1m[92m   Compiling[0m wry v0.55.1
+[1m[92m    Checking[0m pxfm v0.1.29
+[1m[92m   Compiling[0m sha2 v0.10.9
+[1m[92m    Checking[0m libappindicator-sys v0.9.0
+[1m[92m    Checking[0m dlopen2 v0.8.2
+[1m[92m    Checking[0m dbus v0.9.12
+[1m[92m    Checking[0m moxcms v0.8.1
+[1m[92m   Compiling[0m ico v0.5.0
+[1m[92m    Checking[0m gdkx11 v0.18.2
+[1m[92m    Checking[0m hybrid-array v0.4.13
+[1m[92m    Checking[0m gdkwayland-sys v0.18.2
+[1m[92m   Compiling[0m tauri-runtime-wry v2.11.4
+[1m[92m    Checking[0m byteorder-lite v0.1.0
+[1m[92m   Compiling[0m tauri-codegen v2.6.3
+[1m[92m   Compiling[0m pin-project-internal v1.1.13
+[1m[92m    Checking[0m image v0.25.10
+[1m[92m   Compiling[0m async-trait v0.1.89
+[1m[92m   Compiling[0m serialize-to-javascript-impl v0.1.2
+[1m[92m   Compiling[0m cmake v0.1.58
+[1m[92m   Compiling[0m fs_extra v1.3.0
+[1m[92m    Checking[0m parking v2.2.1
+[1m[92m    Checking[0m serialize-to-javascript v0.1.2
+[1m[92m   Compiling[0m tauri-macros v2.6.3
+[1m[92m    Checking[0m pin-project v1.1.13
+[1m[92m    Checking[0m webkit2gtk v2.0.2
+[1m[92m    Checking[0m libappindicator v0.9.0
+[1m[92m    Checking[0m tao v0.35.3
+[1m[92m    Checking[0m muda v0.19.3
+[1m[92m    Checking[0m tray-icon v0.24.1
+[1m[92m   Compiling[0m aws-lc-sys v0.42.0
+[1m[92m    Checking[0m http-range v0.1.5
+[1m[92m    Checking[0m crypto-common v0.2.2
+[1m[92m    Checking[0m h2 v0.4.15
+[1m[92m    Checking[0m http-body-util v0.1.3
+[1m[92m    Checking[0m concurrent-queue v2.5.0
+[1m[92m   Compiling[0m toml_edit v0.25.12+spec-1.1.0
+[1m[92m   Compiling[0m ring v0.17.14
+[1m[92m    Checking[0m sync_wrapper v1.0.2
+[1m[92m   Compiling[0m aws-lc-rs v1.17.1
+[1m[92m    Checking[0m ryu v1.0.23
+[1m[92m    Checking[0m ipnet v2.12.0
+[1m[92m    Checking[0m hyper v1.10.1
+[1m[92m    Checking[0m hyper-util v0.1.20
+[1m[92m   Compiling[0m proc-macro-crate v3.5.0
+[1m[92m    Checking[0m rustls-pki-types v1.15.0
+[1m[92m    Checking[0m http v0.2.12
+[1m[92m    Checking[0m tower v0.5.3
+[1m[92m    Checking[0m rand_core v0.6.4
+[1m[92m    Checking[0m tokio-stream v0.1.18
+[1m[92m    Checking[0m static_assertions v1.1.0
+[1m[92m    Checking[0m untrusted v0.9.0
+[1m[92m    Checking[0m cpufeatures v0.3.0
+[1m[92m    Checking[0m cmov v0.5.4
+[1m[92m    Checking[0m ctutils v0.4.2
+[1m[92m    Checking[0m rand_chacha v0.3.1
+[1m[92m    Checking[0m http-body v0.4.6
+[1m[92m    Checking[0m futures-lite v2.6.1
+[1m[92m    Checking[0m block-buffer v0.12.1
+[1m[92m   Compiling[0m enumflags2_derive v0.7.12
+[1m[92m    Checking[0m subtle v2.6.1
+[1m[92m   Compiling[0m rustls v0.23.41
+[1m[92m    Checking[0m rand v0.8.6
+[1m[92m    Checking[0m event-listener v5.4.1
+[1m[92m   Compiling[0m zvariant_utils v3.4.0
+[1m[92m   Compiling[0m wayland-sys v0.31.11
+[1m[92m    Checking[0m event-listener-strategy v0.5.4
+[1m[92m   Compiling[0m zvariant_derive v5.12.0
+[1m[92m   Compiling[0m crossbeam-epoch v0.9.18
+[1m[92m    Checking[0m h2 v0.3.27
+[1m[92m   Compiling[0m itertools v0.12.1
+[1m[92m   Compiling[0m axum-core v0.3.4
+[1m[92m   Compiling[0m wayland-backend v0.3.15
+[1m[92m   Compiling[0m bstr v1.12.3
+[1m[92m    Checking[0m compression-core v0.4.32
+[1m[92m   Compiling[0m crunchy v0.2.4
+[1m[92m   Compiling[0m globset v0.4.18
+[1m[92m    Checking[0m compression-codecs v0.4.38
+[1m[92m   Compiling[0m prost-derive v0.12.6
+[1m[92m   Compiling[0m crossbeam-deque v0.8.6
+[1m[92m    Checking[0m hyper v0.14.32
+[1m[92m    Checking[0m rand_core v0.9.5
+[1m[92m   Compiling[0m axum v0.6.20
+[1m[92m   Compiling[0m ptr_meta_derive v0.3.1
+[1m[92m   Compiling[0m quick-xml v0.39.4
+[1m[92m   Compiling[0m async-io v2.6.0
+[1m[92m    Checking[0m psl-types v2.0.11
+[1m[92m   Compiling[0m litrs v1.0.0
+[1m[92m    Checking[0m downcast-rs v1.2.1
+[1m[92m   Compiling[0m tiny-keccak v2.0.2
+[1m[92m    Checking[0m fixedbitset v0.5.7
+[1m[92m    Checking[0m base64 v0.21.7
+[1m[92m    Checking[0m nu-ansi-term v0.50.3
+[1m[92m   Compiling[0m paste v1.0.15
+[1m[92m   Compiling[0m wayland-client v0.31.14
+[1m[92m   Compiling[0m document-features v0.2.12
+[1m[92m    Checking[0m publicsuffix v2.3.0
+[1m[92m    Checking[0m prost v0.12.6
+[1m[92m   Compiling[0m wayland-scanner v0.31.10
+[1m[92m    Checking[0m ptr_meta v0.3.1
+[1m[92m    Checking[0m rand_chacha v0.9.0
+[1m[92m   Compiling[0m ignore v0.4.27
+[1m[92m    Checking[0m async-compression v0.4.42
+[1m[92m    Checking[0m tower v0.4.13
+[1m[92m   Compiling[0m enumflags2 v0.7.12
+[1m[92m    Checking[0m webpki-roots v1.0.8
+[1m[92m    Checking[0m serde_urlencoded v0.7.1
+[1m[92m    Checking[0m polling v3.11.0
+[1m[92m   Compiling[0m tauri-plugin-fs v2.5.1
+[1m[92m    Checking[0m tokio-io-timeout v1.2.1
+[1m[92m   Compiling[0m async-stream-impl v0.3.6
+[1m[92m   Compiling[0m munge_macro v0.4.7
+[1m[92m    Checking[0m os_pipe v1.2.3
+[1m[92m    Checking[0m encoding_rs v0.8.35
+[1m[92m    Checking[0m const-oid v0.10.2
+[1m[92m    Checking[0m allocator-api2 v0.2.21
+[1m[92m   Compiling[0m endi v1.1.1
+[1m[92m    Checking[0m foldhash v0.1.5
+[1m[92m    Checking[0m matchit v0.7.3
+[1m[92m    Checking[0m sync_wrapper v0.1.2
+[1m[92m    Checking[0m async-task v4.7.1
+[1m[92m    Checking[0m hashbrown v0.15.5
+[1m[92m    Checking[0m hashbrown v0.16.1
+[1m[92m   Compiling[0m zvariant v5.12.0
+[1m[92m    Checking[0m digest v0.11.3
+[1m[92m    Checking[0m munge v0.4.7
+[1m[92m    Checking[0m async-stream v0.3.6
+[1m[92m    Checking[0m hyper-timeout v0.4.1
+[1m[92m    Checking[0m tower-http v0.6.11
+[1m[92m   Compiling[0m globwalk v0.8.1
+[1m[92m    Checking[0m rand v0.9.4
+[1m[92m    Checking[0m rancor v0.1.2
+[1m[92m    Checking[0m cookie_store v0.22.1
+[1m[92m    Checking[0m async-channel v2.5.0
+[1m[92m    Checking[0m inout v0.2.2
+[1m[92m    Checking[0m gethostname v1.1.0
+[1m[92m   Compiling[0m itertools v0.14.0
+[1m[92m   Compiling[0m zstd-sys v2.0.16+zstd.1.5.7
+[1m[92m   Compiling[0m rkyv_derive v0.8.17
+[1m[92m    Checking[0m rend v0.5.4
+[1m[92m    Checking[0m ryu-js v1.0.2
+[1m[92m    Checking[0m fast-float2 v0.2.3
+[1m[92m    Checking[0m iana-time-zone v0.1.65
+[1m[92m    Checking[0m hex v0.4.3
+[1m[92m    Checking[0m x11rb-protocol v0.13.2
+[1m[92m    Checking[0m lazy_static v1.5.0
+[1m[92m    Checking[0m openssl-probe v0.2.1
+[1m[92m   Compiling[0m semver-parser v0.7.0
+[1m[92m   Compiling[0m cow-utils v0.1.3
+[1m[92m    Checking[0m boa_string v0.21.1
+[1m[92m    Checking[0m rkyv v0.8.17
+[1m[92m   Compiling[0m boa_macros v0.21.1
+[1m[92m   Compiling[0m semver v0.9.0
+[1m[92m    Checking[0m rustls-native-certs v0.8.4
+[1m[92m    Checking[0m chrono v0.4.45
+[1m[92m    Checking[0m x11rb v0.13.2
+[1m[92m   Compiling[0m prost-derive v0.14.4
+[1m[92m   Compiling[0m const-random-macro v0.1.16
+[1m[92m    Checking[0m wayland-protocols v0.32.13
+[1m[92m    Checking[0m tonic v0.10.2
+[1m[92m   Compiling[0m zbus_names v4.3.2
+[1m[92m    Checking[0m async-signal v0.2.14
+[1m[92m    Checking[0m petgraph v0.8.3
+[1m[92m    Checking[0m sha1 v0.10.6
+[1m[92m    Checking[0m async-lock v3.4.2
+[1m[92m    Checking[0m axum-core v0.5.6
+[1m[92m    Checking[0m piper v0.2.5
+[1m[92m   Compiling[0m arc-swap v1.9.2
+[1m[92m    Checking[0m castaway v0.2.4
+[1m[92m    Checking[0m nom v8.0.0
+[1m[92m   Compiling[0m signal-hook v0.3.18
+[1m[92m   Compiling[0m unsafe-libyaml v0.2.11
+[1m[92m    Checking[0m hashbrown v0.14.5
+[1m[92m    Checking[0m matchit v0.8.4
+[1m[92m    Checking[0m cpubits v0.1.1
+[1m[92m    Checking[0m thin-vec v0.2.18
+[1m[92m    Checking[0m boa_gc v0.21.1
+[1m[92m    Checking[0m tree_magic_mini v3.2.2
+[1m[92m    Checking[0m axum v0.8.9
+[1m[92m   Compiling[0m serde_yaml v0.9.34+deprecated
+[1m[92m    Checking[0m compact_str v0.9.1
+[1m[92m   Compiling[0m triomphe v0.1.16
+[1m[92m    Checking[0m blocking v1.6.2
+[1m[92m    Checking[0m async-process v2.5.0
+[1m[92m   Compiling[0m zbus_macros v5.16.0
+[1m[92m    Checking[0m wayland-protocols-wlr v0.3.12
+[1m[92m    Checking[0m prost v0.14.4
+[1m[92m    Checking[0m const-random v0.1.18
+[1m[92m   Compiling[0m rustc_version v0.2.3
+[1m[92m    Checking[0m sharded-slab v0.1.7
+[1m[92m    Checking[0m cipher v0.5.2
+[1m[92m    Checking[0m async-executor v1.14.0
+[1m[92m    Checking[0m async-broadcast v0.7.2
+[1m[92m    Checking[0m hyper-timeout v0.5.2
+[1m[92m   Compiling[0m itertools v0.11.0
+[1m[92m   Compiling[0m tauri-plugin-clipboard-manager v2.3.2
+[1m[92m    Checking[0m matchers v0.2.0
+[1m[92m    Checking[0m num-integer v0.1.46
+[1m[92m    Checking[0m futures v0.3.32
+[1m[92m    Checking[0m tracing-log v0.2.0
+[1m[92m   Compiling[0m async-recursion v1.1.1
+[1m[92m   Compiling[0m phf_shared v0.14.0
+[1m[92m    Checking[0m ordered-stream v0.2.0
+[1m[92m    Checking[0m thread_local v1.1.9
+[1m[92m    Checking[0m http-range-header v0.3.1
+[1m[92m   Compiling[0m unicase v2.9.0
+[1m[92m   Compiling[0m normpath v1.5.1
+[1m[92m   Compiling[0m zstd-safe v7.2.4
+[1m[92m   Compiling[0m base62 v2.2.4
+[1m[92m   Compiling[0m mime_guess v2.0.5
+[1m[92m    Checking[0m zbus v5.16.0
+[1m[92m   Compiling[0m rust-i18n-support v4.1.0
+[1m[92m    Checking[0m tower-http v0.4.4
+[1m[92m    Checking[0m tracing-subscriber v0.3.23
+[1m[92m   Compiling[0m phf_generator v0.14.0
+[1m[92m    Checking[0m num-bigint v0.4.7
+[1m[92m    Checking[0m tonic v0.14.6
+[1m[92m   Compiling[0m float16 v0.1.5
+[1m[92m    Checking[0m dlv-list v0.5.2
+[1m[92m    Checking[0m wl-clipboard-rs v0.9.3
+[1m[92m    Checking[0m boa_interner v0.21.1
+[1m[92m    Checking[0m flexi_logger v0.31.9
+[1m[92m   Compiling[0m rust-i18n v4.1.0
+[1m[92m    Checking[0m prost-types v0.12.6
+[1m[92m    Checking[0m universal-hash v0.6.1
+[1m[92m    Checking[0m chacha20 v0.10.1
+[1m[92m   Compiling[0m neli-proc-macros v0.1.4
+[1m[92m   Compiling[0m tauri-plugin-devtools v2.1.0
+[1m[92m   Compiling[0m tauri-plugin-notification v2.3.3
+[1m[92m   Compiling[0m tauri-plugin-global-shortcut v2.3.2
+[1m[92m   Compiling[0m tauri-plugin-http v2.5.9
+[1m[92m   Compiling[0m tauri-plugin-window-state v2.4.1
+[1m[92m   Compiling[0m tauri-plugin-mihomo v0.5.4 (https://github.com/clash-verge-rev/tauri-plugin-mihomo?branch=fix%2Fapi-robustness#cf97ff99)
+[1m[92m   Compiling[0m tauri-plugin-updater v2.10.1
+[1m[92m   Compiling[0m tauri-plugin-dialog v2.7.1
+[1m[92m   Compiling[0m tauri-plugin-shell v2.3.5
+[1m[92m   Compiling[0m tauri-plugin-deep-link v2.4.9
+[1m[92m   Compiling[0m tauri-plugin-autostart v2.5.1
+[1m[92m   Compiling[0m tauri-plugin-process v2.3.1
+[1m[92m   Compiling[0m lazy-regex-proc_macros v3.6.0
+[1m[92m   Compiling[0m equator-macro v0.4.2
+[1m[92m    Checking[0m is-docker v0.2.0
+[1m[92m    Checking[0m dirs-sys v0.3.7
+[1m[92m    Checking[0m tinyvec_macros v0.1.1
+[1m[92m    Checking[0m data-encoding v2.11.0
+[1m[92m   Compiling[0m rfd v0.16.0
+[1m[92m    Checking[0m minimal-lexical v0.2.1
+[1m[92m   Compiling[0m termcolor v1.4.1
+[1m[92m   Compiling[0m doctest-file v1.1.1
+[1m[92m   Compiling[0m portable-atomic v1.13.1
+[1m[92m    Checking[0m interprocess v2.4.2
+[1m[92m   Compiling[0m ts-rs-macros v11.1.0
+[1m[92m    Checking[0m nom v7.1.3
+[1m[92m    Checking[0m tungstenite v0.28.0
+[1m[92m    Checking[0m equator v0.4.2
+[1m[92m    Checking[0m tinyvec v1.11.0
+[1m[92m    Checking[0m dirs v4.0.0
+[1m[92m    Checking[0m lazy-regex v3.6.0
+[1m[92m    Checking[0m is-wsl v0.4.0
+[1m[92m    Checking[0m neli v0.6.5
+[1m[92m    Checking[0m devtools-wire-format v0.5.3
+[1m[92m    Checking[0m rand v0.10.2
+[1m[92m    Checking[0m polyval v0.7.1
+[1m[92m    Checking[0m boa_ast v0.21.1
+[1m[92m    Checking[0m sigchld v0.2.4
+[1m[92m    Checking[0m tonic-prost v0.14.6
+[1m[92m    Checking[0m arboard v3.6.1
+[1m[92m    Checking[0m ordered-multimap v0.7.3
+[1m[92m   Compiling[0m phf_macros v0.14.0
+[1m[92m   Compiling[0m rust-i18n-macro v4.1.0
+[1m[92m    Checking[0m tonic-web v0.10.2
+[1m[92m    Checking[0m aes v0.9.1
+[1m[92m    Checking[0m prost-types v0.14.4
+[1m[92m    Checking[0m tonic-health v0.10.2
+[1m[92m    Checking[0m hmac v0.13.0
+[1m[92m    Checking[0m sha2 v0.11.0
+[1m[92m    Checking[0m regress v0.10.5
+[1m[92m    Checking[0m md-5 v0.10.6
+[1m[92m   Compiling[0m num_enum_derive v0.7.6
+[1m[92m    Checking[0m xattr v1.6.1
+[1m[92m    Checking[0m headers-core v0.3.0
+[1m[92m    Checking[0m ringbuf v0.4.8
+[1m[92m    Checking[0m crossbeam-queue v0.3.12
+[1m[92m   Compiling[0m network-interface v2.0.5
+[1m[92m   Compiling[0m dynify-macros v0.1.2
+[1m[92m   Compiling[0m smartstring v1.0.1
+[1m[92m    Checking[0m path-tree v0.8.3
+[1m[92m    Checking[0m filetime v0.2.29
+[1m[92m    Checking[0m xml-rs v0.8.28
+[1m[92m    Checking[0m bumpalo v3.20.3
+[1m[92m    Checking[0m xkeysym v0.2.1
+[1m[92m    Checking[0m arrayvec v0.7.8
+[1m[92m    Checking[0m libbz2-rs-sys v0.2.5
+[1m[92m   Compiling[0m rayon-core v1.13.0
+[1m[92m   Compiling[0m dark-light v2.0.0 (https://github.com/rust-dark-light/dark-light#0f18d2fb)
+[1m[92m    Checking[0m global-hotkey v0.8.0
+[1m[92m    Checking[0m bzip2 v0.6.1
+[1m[92m    Checking[0m dynify v0.1.2
+[1m[92m    Checking[0m small_btree v0.1.0
+[1m[92m    Checking[0m serde-xml-rs v0.6.0
+[1m[92m    Checking[0m zopfli v0.8.3
+[1m[92m    Checking[0m tar v0.4.46
+[1m[92m    Checking[0m kode-bridge v0.4.0
+[1m[92m    Checking[0m num_enum v0.7.6
+[1m[92m    Checking[0m boa_parser v0.21.1
+[1m[92m    Checking[0m crossbeam v0.8.4
+[1m[92m    Checking[0m devtools-core v0.3.6
+[1m[92m    Checking[0m headers v0.4.1
+[1m[92m    Checking[0m phf v0.14.0
+[1m[92m    Checking[0m digest_auth v0.3.1
+[1m[92m    Checking[0m lzma-rust2 v0.16.4
+[1m[92m    Checking[0m console-api v0.9.0
+[1m[92m    Checking[0m pbkdf2 v0.13.0
+[1m[92m    Checking[0m zstd v0.13.3
+[1m[92m    Checking[0m rust-ini v0.21.3
+[1m[92m    Checking[0m local-ip-address v0.5.7
+[1m[92m    Checking[0m shared_child v1.1.1
+[1m[92m    Checking[0m ghash v0.6.0
+[1m[92m    Checking[0m ts-rs v11.1.0
+[1m[92m    Checking[0m iptools v0.4.1
+[1m[92m    Checking[0m open v5.3.6
+[1m[92m    Checking[0m auto-launch v0.5.0
+[1m[92m    Checking[0m hdrhistogram v7.5.4
+[1m[92m    Checking[0m aligned-vec v0.6.4
+[1m[92m    Checking[0m tokio-tungstenite v0.28.0
+[1m[92m    Checking[0m notify-rust v4.18.0
+[1m[92m    Checking[0m clash-verge-logging v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-logging)
+[1m[92m    Checking[0m ctr v0.10.1
+[1m[92m    Checking[0m dashmap v6.2.1
+[1m[92m    Checking[0m colored v2.2.0
+[1m[92m    Checking[0m aead v0.6.1
+[1m[92m    Checking[0m sha1 v0.11.0
+[1m[92m    Checking[0m futures-concurrency v7.7.1
+[1m[92m    Checking[0m tempfile v3.27.0
+[1m[92m    Checking[0m half v2.7.1
+[1m[92m    Checking[0m intrusive-collections v0.9.7
+[1m[92m   Compiling[0m clash-verge v2.5.3 (/home/runner/work/clash-verge-rev/clash-verge-rev/src-tauri)
+[1m[92m   Compiling[0m alloca v0.4.0
+[1m[92m   Compiling[0m strum_macros v0.28.0
+[1m[92m    Checking[0m sysinfo v0.39.5
+[1m[92m    Checking[0m humantime v2.4.0
+[1m[92m    Checking[0m data-url v0.3.2
+[1m[92m    Checking[0m sys-locale v0.3.2
+[1m[92m    Checking[0m urlencoding v2.1.3
+[1m[92m    Checking[0m tap v1.0.1
+[1m[92m    Checking[0m minisign-verify v0.2.5
+[1m[92m    Checking[0m clap_lex v1.1.0
+[1m[92m    Checking[0m ciborium-io v0.2.2
+[1m[92m    Checking[0m constant_time_eq v0.4.2
+[1m[92m    Checking[0m plotters-backend v0.3.7
+[1m[92m    Checking[0m xsum v0.1.6
+[1m[92m    Checking[0m strum v0.28.0
+[1m[92m    Checking[0m anstyle v1.0.14
+[1m[92m    Checking[0m deflate64 v0.1.12
+[1m[92m    Checking[0m scoped-tls v1.0.1
+[1m[92m    Checking[0m xdg v3.0.0
+[1m[92m    Checking[0m ppmd-rust v1.4.0
+[1m[92m    Checking[0m windows-link v0.2.1
+[1m[92m    Checking[0m typed-path v0.12.3
+[1m[92m    Checking[0m arraydeque v0.5.1
+[1m[92m    Checking[0m tag_ptr v0.1.0
+[1m[92m    Checking[0m boa_engine v0.21.1
+[1m[92m    Checking[0m clash_verge_logger v0.2.2 (https://github.com/clash-verge-rev/clash-verge-logger#e4768e38)
+[1m[92m    Checking[0m windows-sys v0.61.2
+[1m[92m    Checking[0m zip v8.6.0
+[1m[92m    Checking[0m sysproxy v0.5.4 (https://github.com/clash-verge-rev/sysproxy-rs#d214eba9)
+[1m[92m    Checking[0m warp v0.4.3
+[1m[92m    Checking[0m clap_builder v4.6.0
+[1m[92m    Checking[0m clash_verge_service_ipc v2.3.3 (https://github.com/clash-verge-rev/clash-verge-service-ipc#b964ed29)
+[1m[92m    Checking[0m serde_yaml_ng v0.10.0
+[1m[92m    Checking[0m plotters-svg v0.3.7
+[1m[92m    Checking[0m ciborium-ll v0.2.2
+[1m[92m    Checking[0m clash-verge-i18n v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-i18n)
+[1m[92m    Checking[0m console-subscriber v0.5.0
+[1m[92m    Checking[0m tauri-plugin-clash-verge-sysinfo v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/tauri-plugin-clash-verge-sysinfo)
+[1m[33mwarning[0m: clash-verge@2.5.3: Skipping tauri_build during Clippy
+[1m[92m    Checking[0m aes-gcm v0.11.0
+[1m[92m    Checking[0m clash-verge-signal v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-signal)
+[1m[92m    Checking[0m rust_iso3166 v0.2.0
+[1m[92m    Checking[0m itertools v0.13.0
+[1m[92m    Checking[0m nanoid v0.5.0
+[1m[92m    Checking[0m backon v1.6.0
+[1m[92m    Checking[0m clash-verge-draft v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-draft)
+[1m[92m    Checking[0m clash-verge-limiter v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-limiter)
+[1m[92m    Checking[0m cast v0.3.0
+[1m[92m    Checking[0m rayon v1.12.0
+[1m[92m    Checking[0m rustls-webpki v0.103.13
+[1m[92m    Checking[0m criterion-plot v0.8.2
+[1m[92m    Checking[0m ciborium v0.2.2
+[1m[92m    Checking[0m plotters v0.3.7
+[1m[92m    Checking[0m clap v4.6.1
+[1m[92m    Checking[0m tinytemplate v1.2.1
+[1m[92m    Checking[0m page_size v0.6.0
+[1m[92m    Checking[0m oorandom v11.1.5
+[1m[92m    Checking[0m anes v0.1.6
+[1m[92m    Checking[0m criterion v0.8.2
+[1m[92m    Checking[0m tokio-rustls v0.26.4
+[1m[92m    Checking[0m rustls-platform-verifier v0.7.0
+[1m[92m    Checking[0m hyper-rustls v0.27.9
+[1m[92m    Checking[0m reqwest v0.13.4
+[1m[92m    Checking[0m reqwest v0.12.28
+[1m[92m    Checking[0m reqwest_dav v0.3.3
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion.rs:389:13
+    [1m[94m|[0m
+[1m[94m389[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m390[0m [1m[94m|[0m [1m[91m|[0m proxies:
+[1m[94m391[0m [1m[94m|[0m [1m[91m|[0m   - name: node-a
+[1m[94m392[0m [1m[94m|[0m [1m[91m|[0m     type: ss
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m411[0m [1m[94m|[0m [1m[91m|[0m           value: openai.com
+[1m[94m412[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+    [1m[94m= [0m[1mnote[0m: requested on the command line with `-D clippy::needless-raw-string-hashes`
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m389[0m [92m~ [0m            r"
+[1m[94m390[0m [1m[94m|[0m proxies:
+[1m[94m...[0m
+[1m[94m411[0m [1m[94m|[0m           value: openai.com
+[1m[94m412[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion.rs:427:13
+    [1m[94m|[0m
+[1m[94m427[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m428[0m [1m[94m|[0m [1m[91m|[0m rules:
+[1m[94m429[0m [1m[94m|[0m [1m[91m|[0m   - DOMAIN-SUFFIX,airport.example,DIRECT
+[1m[94m430[0m [1m[94m|[0m [1m[91m|[0m   - MATCH,DIRECT
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m436[0m [1m[94m|[0m [1m[91m|[0m   groups: []
+[1m[94m437[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m427[0m [92m~ [0m            r"
+[1m[94m428[0m [1m[94m|[0m rules:
+[1m[94m...[0m
+[1m[94m436[0m [1m[94m|[0m   groups: []
+[1m[94m437[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:140:13
+    [1m[94m|[0m
+[1m[94m140[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m141[0m [1m[94m|[0m [1m[91m|[0m x-karing-diversion-builtins:
+[1m[94m142[0m [1m[94m|[0m [1m[91m|[0m   - name: 中国大陆直连
+[1m[94m143[0m [1m[94m|[0m [1m[91m|[0m     enabled: false
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m148[0m [1m[94m|[0m [1m[91m|[0m         value: geosite:cn
+[1m[94m149[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m140[0m [92m~ [0m            r"
+[1m[94m141[0m [1m[94m|[0m x-karing-diversion-builtins:
+[1m[94m...[0m
+[1m[94m148[0m [1m[94m|[0m         value: geosite:cn
+[1m[94m149[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:161:13
+    [1m[94m|[0m
+[1m[94m161[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m162[0m [1m[94m|[0m [1m[91m|[0m x-karing-diversion-builtins:
+[1m[94m163[0m [1m[94m|[0m [1m[91m|[0m   - name: 无效规则
+[1m[94m164[0m [1m[94m|[0m [1m[91m|[0m     enabled: true
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m172[0m [1m[94m|[0m [1m[91m|[0m         value: geoip:cn
+[1m[94m173[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m161[0m [92m~ [0m            r"
+[1m[94m162[0m [1m[94m|[0m x-karing-diversion-builtins:
+[1m[94m...[0m
+[1m[94m172[0m [1m[94m|[0m         value: geoip:cn
+[1m[94m173[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:185:13
+    [1m[94m|[0m
+[1m[94m185[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m186[0m [1m[94m|[0m [1m[91m|[0m x-karing-diversion-builtins:
+[1m[94m187[0m [1m[94m|[0m [1m[91m|[0m   - name: 中国大陆直连
+[1m[94m188[0m [1m[94m|[0m [1m[91m|[0m     enabled: true
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m196[0m [1m[94m|[0m [1m[91m|[0m         value: geoip:cn
+[1m[94m197[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m185[0m [92m~ [0m            r"
+[1m[94m186[0m [1m[94m|[0m x-karing-diversion-builtins:
+[1m[94m...[0m
+[1m[94m196[0m [1m[94m|[0m         value: geoip:cn
+[1m[94m197[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_managed.rs:107:13
+    [1m[94m|[0m
+[1m[94m107[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m108[0m [1m[94m|[0m [1m[91m|[0m rules:
+[1m[94m109[0m [1m[94m|[0m [1m[91m|[0m   - DOMAIN-SUFFIX,openai.com,CVR-当前选择
+[1m[94m110[0m [1m[94m|[0m [1m[91m|[0m   - MATCH,CVR-当前选择
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m117[0m [1m[94m|[0m [1m[91m|[0m     include-all: true
+[1m[94m118[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m107[0m [92m~ [0m            r"
+[1m[94m108[0m [1m[94m|[0m rules:
+[1m[94m...[0m
+[1m[94m117[0m [1m[94m|[0m     include-all: true
+[1m[94m118[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_managed.rs:143:13
+    [1m[94m|[0m
+[1m[94m143[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m144[0m [1m[94m|[0m [1m[91m|[0m rules:
+[1m[94m145[0m [1m[94m|[0m [1m[91m|[0m   - DOMAIN-SUFFIX,openai.com,CVR-自动选择
+[1m[94m146[0m [1m[94m|[0m [1m[91m|[0m   - MATCH,CVR-当前选择
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m153[0m [1m[94m|[0m [1m[91m|[0m     include-all: true
+[1m[94m154[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m143[0m [92m~ [0m            r"
+[1m[94m144[0m [1m[94m|[0m rules:
+[1m[94m...[0m
+[1m[94m153[0m [1m[94m|[0m     include-all: true
+[1m[94m154[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field.rs:122:13
+    [1m[94m|[0m
+[1m[94m122[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m123[0m [1m[94m|[0m [1m[91m|[0m x-karing-diversion-builtins:
+[1m[94m124[0m [1m[94m|[0m [1m[91m|[0m   - name: 中国大陆直连
+[1m[94m125[0m [1m[94m|[0m [1m[91m|[0m     enabled: true
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m130[0m [1m[94m|[0m [1m[91m|[0m         value: geosite:cn
+[1m[94m131[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m122[0m [92m~ [0m            r"
+[1m[94m123[0m [1m[94m|[0m x-karing-diversion-builtins:
+[1m[94m...[0m
+[1m[94m130[0m [1m[94m|[0m         value: geosite:cn
+[1m[94m131[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field.rs:146:13
+    [1m[94m|[0m
+[1m[94m146[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m147[0m [1m[94m|[0m [1m[91m|[0m x-karing-diversion:
+[1m[94m148[0m [1m[94m|[0m [1m[91m|[0m   enabled: true
+[1m[94m149[0m [1m[94m|[0m [1m[91m|[0m   private-network-direct: false
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m158[0m [1m[94m|[0m [1m[91m|[0m           value: openai.com
+[1m[94m159[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m146[0m [92m~ [0m            r"
+[1m[94m147[0m [1m[94m|[0m x-karing-diversion:
+[1m[94m...[0m
+[1m[94m158[0m [1m[94m|[0m           value: openai.com
+[1m[94m159[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field.rs:171:13
+    [1m[94m|[0m
+[1m[94m171[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m172[0m [1m[94m|[0m [1m[91m|[0m x-karing-diversion:
+[1m[94m173[0m [1m[94m|[0m [1m[91m|[0m   enabled: true
+[1m[94m174[0m [1m[94m|[0m [1m[91m|[0m   private-network-direct: false
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m183[0m [1m[94m|[0m [1m[91m|[0m           value: openai.com
+[1m[94m184[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m171[0m [92m~ [0m            r"
+[1m[94m172[0m [1m[94m|[0m x-karing-diversion:
+[1m[94m...[0m
+[1m[94m183[0m [1m[94m|[0m           value: openai.com
+[1m[94m184[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: unnecessary hashes around raw string literal[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field.rs:194:13
+    [1m[94m|[0m
+[1m[94m194[0m [1m[94m|[0m [1m[91m/[0m             r#"
+[1m[94m195[0m [1m[94m|[0m [1m[91m|[0m x-karing-diversion:
+[1m[94m196[0m [1m[94m|[0m [1m[91m|[0m   enabled: true
+[1m[94m197[0m [1m[94m|[0m [1m[91m|[0m   private-network-direct: false
+[1m[94m...[0m   [1m[91m|[0m
+[1m[94m206[0m [1m[94m|[0m [1m[91m|[0m           value: remote-rules
+[1m[94m207[0m [1m[94m|[0m [1m[91m|[0m "#,
+    [1m[94m|[0m [1m[91m|__^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#needless_raw_string_hashes
+[1m[96mhelp[0m: remove all the hashes around the string literal
+    [1m[94m|[0m
+[1m[94m194[0m [92m~ [0m            r"
+[1m[94m195[0m [1m[94m|[0m x-karing-diversion:
+[1m[94m...[0m
+[1m[94m206[0m [1m[94m|[0m           value: remote-rules
+[1m[94m207[0m [92m~ [0m",
+    [1m[94m|[0m
+
+[1m[91merror[0m[1m: used `expect()` on a `Result` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion.rs:383:9
+    [1m[94m|[0m
+[1m[94m383[0m [1m[94m|[0m         serde_yaml_ng::from_str(yaml).expect("test yaml should be valid")
+    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is an `Err`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+    [1m[94m= [0m[1mnote[0m: `-D clippy::expect-used` implied by `-D warnings`
+    [1m[94m= [0m[1mhelp[0m: to override `-D warnings` add `#[allow(clippy::expect_used)]`
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion.rs:418:21
+    [1m[94m|[0m
+[1m[94m418[0m [1m[94m|[0m         let rules = config.get("rules").and_then(Value::as_sequence).expect("rules");
+    [1m[94m|[0m                     [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion.rs:441:21
+    [1m[94m|[0m
+[1m[94m441[0m [1m[94m|[0m         let rules = config.get("rules").and_then(Value::as_sequence).expect("rules");
+    [1m[94m|[0m                     [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on a `Result` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:134:9
+    [1m[94m|[0m
+[1m[94m134[0m [1m[94m|[0m         serde_yaml_ng::from_str(yaml).expect("test yaml should be valid")
+    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is an `Err`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:202:25
+    [1m[94m|[0m
+[1m[94m202[0m [1m[94m|[0m           let diversion = config
+    [1m[94m|[0m [1m[91m _________________________^[0m
+[1m[94m203[0m [1m[94m|[0m [1m[91m|[0m             .get(CONFIG_KEY)
+[1m[94m204[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_mapping)
+[1m[94m205[0m [1m[94m|[0m [1m[91m|[0m             .expect("diversion config should be created");
+    [1m[94m|[0m [1m[91m|_________________________________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:208:22
+    [1m[94m|[0m
+[1m[94m208[0m [1m[94m|[0m           let groups = diversion
+    [1m[94m|[0m [1m[91m ______________________^[0m
+[1m[94m209[0m [1m[94m|[0m [1m[91m|[0m             .get("groups")
+[1m[94m210[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_sequence)
+[1m[94m211[0m [1m[94m|[0m [1m[91m|[0m             .expect("groups should exist");
+    [1m[94m|[0m [1m[91m|__________________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:212:24
+    [1m[94m|[0m
+[1m[94m212[0m [1m[94m|[0m           let matchers = groups[0]
+    [1m[94m|[0m [1m[91m ________________________^[0m
+[1m[94m213[0m [1m[94m|[0m [1m[91m|[0m             .as_mapping()
+[1m[94m214[0m [1m[94m|[0m [1m[91m|[0m             .and_then(|group| group.get("matchers"))
+[1m[94m215[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_sequence)
+[1m[94m216[0m [1m[94m|[0m [1m[91m|[0m             .expect("matchers should exist");
+    [1m[94m|[0m [1m[91m|____________________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:218:23
+    [1m[94m|[0m
+[1m[94m218[0m [1m[94m|[0m         let geosite = matchers[0].as_mapping().expect("geosite matcher");
+    [1m[94m|[0m                       [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_builtin/mod.rs:223:21
+    [1m[94m|[0m
+[1m[94m223[0m [1m[94m|[0m         let geoip = matchers[1].as_mapping().expect("geoip matcher");
+    [1m[94m|[0m                     [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on a `Result` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_managed.rs:101:9
+    [1m[94m|[0m
+[1m[94m101[0m [1m[94m|[0m         serde_yaml_ng::from_str(yaml).expect("test yaml should be valid")
+    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is an `Err`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_managed.rs:127:22
+    [1m[94m|[0m
+[1m[94m127[0m [1m[94m|[0m           let groups = config
+    [1m[94m|[0m [1m[91m ______________________^[0m
+[1m[94m128[0m [1m[94m|[0m [1m[91m|[0m             .get("proxy-groups")
+[1m[94m129[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_sequence)
+[1m[94m130[0m [1m[94m|[0m [1m[91m|[0m             .expect("proxy groups");
+    [1m[94m|[0m [1m[91m|___________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_managed.rs:132:23
+    [1m[94m|[0m
+[1m[94m132[0m [1m[94m|[0m         let current = groups[0].as_mapping().expect("current group");
+    [1m[94m|[0m                       [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_managed.rs:133:23
+    [1m[94m|[0m
+[1m[94m133[0m [1m[94m|[0m           let proxies = current
+    [1m[94m|[0m [1m[91m _______________________^[0m
+[1m[94m134[0m [1m[94m|[0m [1m[91m|[0m             .get("proxies")
+[1m[94m135[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_sequence)
+[1m[94m136[0m [1m[94m|[0m [1m[91m|[0m             .expect("current proxies");
+    [1m[94m|[0m [1m[91m|______________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field/diversion_managed.rs:163:22
+    [1m[94m|[0m
+[1m[94m163[0m [1m[94m|[0m           let groups = config
+    [1m[94m|[0m [1m[91m ______________________^[0m
+[1m[94m164[0m [1m[94m|[0m [1m[91m|[0m             .get("proxy-groups")
+[1m[94m165[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_sequence)
+[1m[94m166[0m [1m[94m|[0m [1m[91m|[0m             .expect("proxy groups");
+    [1m[94m|[0m [1m[91m|___________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on a `Result` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field.rs:104:9
+    [1m[94m|[0m
+[1m[94m104[0m [1m[94m|[0m         serde_yaml_ng::from_str(yaml).expect("test yaml should be valid")
+    [1m[94m|[0m         [1m[91m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is an `Err`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field.rs:135:21
+    [1m[94m|[0m
+[1m[94m135[0m [1m[94m|[0m           let rules = sorted
+    [1m[94m|[0m [1m[91m _____________________^[0m
+[1m[94m136[0m [1m[94m|[0m [1m[91m|[0m             .get("rules")
+[1m[94m137[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_sequence)
+[1m[94m138[0m [1m[94m|[0m [1m[91m|[0m             .expect("compiled rules should exist");
+    [1m[94m|[0m [1m[91m|__________________________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[91merror[0m[1m: used `expect()` on an `Option` value[0m
+   [1m[94m--> [0msrc-tauri/src/enhance/field.rs:211:21
+    [1m[94m|[0m
+[1m[94m211[0m [1m[94m|[0m           let rules = sorted
+    [1m[94m|[0m [1m[91m _____________________^[0m
+[1m[94m212[0m [1m[94m|[0m [1m[91m|[0m             .get("rules")
+[1m[94m213[0m [1m[94m|[0m [1m[91m|[0m             .and_then(Value::as_sequence)
+[1m[94m214[0m [1m[94m|[0m [1m[91m|[0m             .expect("compiled rules should exist");
+    [1m[94m|[0m [1m[91m|__________________________________________________^[0m
+    [1m[94m|[0m
+    [1m[94m= [0m[1mnote[0m: if this value is `None`, it will panic
+    [1m[94m= [0m[1mhelp[0m: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+[1m[33mwarning[0m: clash-verge@2.5.3: Skipping tauri_build during Clippy
+[1m[91merror[0m: could not compile `clash-verge` (lib test) due to 28 previous errors
