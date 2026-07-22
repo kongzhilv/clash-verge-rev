@@ -1,9 +1,0 @@
-[1m[92m    Checking[0m clash-verge-logging v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-logging)
-[1m[92m   Compiling[0m clash-verge v2.5.3 (/home/runner/work/clash-verge-rev/clash-verge-rev/src-tauri)
-[1m[92m    Checking[0m clash-verge-i18n v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-i18n)
-[1m[92m    Checking[0m tauri-plugin-clash-verge-sysinfo v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/tauri-plugin-clash-verge-sysinfo)
-[1m[92m    Checking[0m clash-verge-signal v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-signal)
-[1m[33mwarning[0m: clash-verge@2.5.3: Skipping tauri_build during Clippy
-[1m[92m    Checking[0m clash-verge-draft v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-draft)
-[1m[92m    Checking[0m clash-verge-limiter v0.1.0 (/home/runner/work/clash-verge-rev/clash-verge-rev/crates/clash-verge-limiter)
-[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 10.39s
