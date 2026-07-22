@@ -1,4 +1,4 @@
-name: Karing Fix and Verify Once
+name: Karing Windows Bundle Once
 
 on:
   push:
@@ -10,108 +10,92 @@ permissions:
 
 env:
   HUSKY: 0
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
 
 jobs:
-  fix-and-verify:
+  windows-bundle:
     if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-22.04
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout branch
+        uses: actions/checkout@v7
         with:
           ref: feature/karing-style-diversion
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: 'karing-windows-bundle'
+          key: 'x86_64-pc-windows-msvc'
+          workspaces: |
+            . -> target
+          cache-all-crates: true
+          cache-workspace-crates: true
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - uses: actions/setup-node@v6
+      - name: Install Node
+        uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Mihomo sidecars
+        run: pnpm run prebuild x86_64-pc-windows-msvc
+
+      - name: Build unsigned Windows test bundle
+        id: build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force .ci | Out-Null
+          pnpm tauri build --target x86_64-pc-windows-msvc --config '{"bundle":{"createUpdaterArtifacts":false}}' *>&1 | Tee-Object -FilePath .ci/windows-build.log
+          $status = $LASTEXITCODE
+          "build_status=$status" | Set-Content -Encoding utf8 .ci/windows-build-summary.txt
+          if ($status -eq 0) {
+            Get-ChildItem 'target/x86_64-pc-windows-msvc/release/bundle' -Recurse -File |
+              Sort-Object FullName |
+              ForEach-Object {
+                $relative = $_.FullName.Replace("$pwd\", '')
+                "$relative`t$($_.Length) bytes"
+              } | Add-Content -Encoding utf8 .ci/windows-build-summary.txt
+          }
+          exit $status
+
+      - name: Upload Windows installers
+        if: success()
+        uses: actions/upload-artifact@v6
         with:
-          components: clippy,rustfmt
+          name: clash-verge-karing-windows-x64
+          path: |
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
 
-      - run: pnpm install --frozen-lockfile
-
-      - name: Install Linux dependencies
+      - name: Commit build result
+        if: always()
+        shell: pwsh
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev libasound2-dev
-
-      - name: Fix MUI 9 system props
-        run: |
-          npx --yes @mui/codemod@latest v9.0.0/system-props src/components/rule -- --jsx=Box,Typography,Stack,Link,Grid,DialogContentText
-
-      - name: Allow strict test-only unwrap assertions
-        shell: python
-        run: |
-          from pathlib import Path
-
-          paths = [
-              Path('src-tauri/src/enhance/field.rs'),
-              Path('src-tauri/src/enhance/field/diversion.rs'),
-              Path('src-tauri/src/enhance/field/diversion_builtin/mod.rs'),
-              Path('src-tauri/src/enhance/field/diversion_managed.rs'),
-          ]
-          marker = '#[cfg(test)]\nmod tests {\n'
-          replacement = '#[cfg(test)]\nmod tests {\n    #![allow(clippy::expect_used, clippy::unwrap_used)]\n'
-          for path in paths:
-              text = path.read_text(encoding='utf-8')
-              if replacement in text:
-                  continue
-              if marker not in text:
-                  raise SystemExit(f'test module marker not found: {path}')
-              path.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
-
-      - name: Apply Clippy suggestions
-        shell: bash
-        run: |
-          cargo clippy --fix \
-            --manifest-path src-tauri/Cargo.toml \
-            --target x86_64-unknown-linux-gnu \
-            --all-targets --all-features \
-            --allow-dirty --allow-staged \
-            -- -D warnings || true
-
-      - name: Format changed files
-        run: |
-          pnpm format
-          cargo fmt --manifest-path src-tauri/Cargo.toml --all
-
-      - name: Verify and capture results
-        shell: bash
-        run: |
-          mkdir -p .ci
-          set +e
-          pnpm web:build > .ci/frontend-check.txt 2>&1
-          frontend_status=$?
-          pnpm format:check > .ci/format-check.txt 2>&1
-          format_status=$?
-          cargo clippy \
-            --manifest-path src-tauri/Cargo.toml \
-            --target x86_64-unknown-linux-gnu \
-            --all-targets --all-features \
-            -- -D warnings > .ci/clippy-check.txt 2>&1
-          clippy_status=$?
-          set -e
-
-          {
-            echo "frontend_status=${frontend_status}"
-            echo "format_status=${format_status}"
-            echo "clippy_status=${clippy_status}"
-          } > .ci/fix-summary.txt
-
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src src-tauri .ci
-          if ! git diff --cached --quiet; then
-            git commit -m 'fix: make karing diversion branch pass frontend and clippy checks'
+          git add .ci/windows-build-summary.txt .ci/windows-build.log
+          if (-not (git diff --cached --quiet)) {
+            git commit -m 'chore: record karing Windows bundle result'
             git push origin HEAD:feature/karing-style-diversion
-          fi
-
-          if [ "$frontend_status" -ne 0 ] || [ "$format_status" -ne 0 ] || [ "$clippy_status" -ne 0 ]; then
-            exit 1
-          fi
+          }
