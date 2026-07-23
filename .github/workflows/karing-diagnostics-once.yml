@@ -6,6 +6,7 @@ on:
       - feature/karing-style-diversion
 
 permissions:
+  actions: read
   contents: write
 
 env:
@@ -100,3 +101,45 @@ jobs:
             git commit -m 'chore: record karing Windows bundle result'
             git push origin HEAD:feature/karing-style-diversion
           }
+
+  publish-existing-artifact:
+    if: contains(github.event.head_commit.message, '[artifact-index]')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: karing-test-latest
+    steps:
+      - name: Download latest successful installer artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name == "clash-verge-karing-windows-x64" and .expired == false) | [.created_at, (.id|tostring)] | @tsv' \
+            | sort -r | head -n 1 | cut -f2)"
+          test -n "$artifact_id"
+          echo "artifact_id=$artifact_id"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > artifact.zip
+          mkdir artifact
+          unzip -o artifact.zip -d artifact
+          exe="$(find artifact -type f -iname '*.exe' -print -quit)"
+          test -n "$exe"
+          cp "$exe" Clash.Verge_2.5.3_karing_x64-setup.exe
+          sha256sum Clash.Verge_2.5.3_karing_x64-setup.exe > Clash.Verge_2.5.3_karing_x64-setup.exe.sha256
+
+      - name: Publish installer to test release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              Clash.Verge_2.5.3_karing_x64-setup.exe \
+              Clash.Verge_2.5.3_karing_x64-setup.exe.sha256 \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              --target feature/karing-style-diversion \
+              --title 'Clash Verge Rev Karing diversion test build' \
+              --notes 'Unsigned Windows x64 test build from the latest successful Karing diversion workflow artifact.' \
+              Clash.Verge_2.5.3_karing_x64-setup.exe \
+              Clash.Verge_2.5.3_karing_x64-setup.exe.sha256
+          fi
