@@ -88,9 +88,16 @@ pub async fn change_clash_core(clash_core: String) -> CmdResult<Option<String>> 
     }
 }
 
-/// 启动核心
+/// 启动核心。
+///
+/// `proxy_switch` 仅供首页代理总开关使用；旧调用不传该参数时保持原有的
+/// “只启动核心”语义，不改动系统代理、PAC、TUN、节点或规则偏好。
 #[tauri::command]
-pub async fn start_core() -> CmdResult {
+pub async fn start_core(proxy_switch: Option<bool>) -> CmdResult {
+    if proxy_switch.unwrap_or(false) {
+        return start_proxy().await;
+    }
+
     let result = CoreManager::global().start_core().await.stringify_err();
     if result.is_ok() {
         handle::Handle::refresh_clash();
@@ -102,8 +109,7 @@ pub async fn start_core() -> CmdResult {
 ///
 /// 启动核心后，按照用户已经保存的系统代理、PAC 与 TUN 设置恢复流量接管，
 /// 不改写这些偏好，也不改变节点、规则或运行模式配置。
-#[tauri::command]
-pub async fn start_proxy() -> CmdResult {
+async fn start_proxy() -> CmdResult {
     CoreManager::global().start_core().await.stringify_err()?;
 
     if let Err(error) = Sysopt::global().update_sysproxy().await {
@@ -122,9 +128,16 @@ pub async fn start_proxy() -> CmdResult {
     Ok(())
 }
 
-/// 关闭核心
+/// 关闭核心。
+///
+/// `proxy_switch` 仅供首页代理总开关使用；旧调用不传该参数时保持原有的
+/// “只停止核心”语义。
 #[tauri::command]
-pub async fn stop_core() -> CmdResult {
+pub async fn stop_core(proxy_switch: Option<bool>) -> CmdResult {
+    if proxy_switch.unwrap_or(false) {
+        return stop_proxy().await;
+    }
+
     logging_error!(Type::Core, Config::profiles().await.data_arc().save_file().await);
     let result = CoreManager::global().stop_core().await.stringify_err();
     if result.is_ok() {
@@ -137,8 +150,7 @@ pub async fn stop_core() -> CmdResult {
 ///
 /// 撤销操作系统当前的全局代理/PAC 后停止核心，但保留系统代理、TUN、
 /// 节点和规则偏好，下一次启动时按原配置恢复。
-#[tauri::command]
-pub async fn stop_proxy() -> CmdResult {
+async fn stop_proxy() -> CmdResult {
     let reset_result = Sysopt::global().reset_sysproxy().await;
     logging_error!(Type::Core, Config::profiles().await.data_arc().save_file().await);
     let stop_result = CoreManager::global().stop_core().await;
