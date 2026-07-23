@@ -7,6 +7,7 @@ use crate::{
     constants,
     core::{
         CoreManager, handle,
+        sysopt::Sysopt,
         validate::{CoreConfigValidator, ValidationOutcome},
     },
 };
@@ -97,6 +98,20 @@ pub async fn start_core() -> CmdResult {
     result
 }
 
+/// 按现有配置启动代理。
+///
+/// 与 FlClash 的总开关语义一致：启动核心后，按用户已经保存的
+/// `enable_system_proxy` / PAC 设置恢复操作系统代理；不会改写这些偏好。
+/// TUN 设置由核心启动时读取现有配置并恢复。
+#[tauri::command]
+pub async fn start_proxy() -> CmdResult {
+    CoreManager::global().start_core().await.stringify_err()?;
+    Sysopt::global().update_sysproxy().await.stringify_err()?;
+    Sysopt::global().refresh_guard().await;
+    handle::Handle::refresh_clash();
+    Ok(())
+}
+
 /// 关闭核心
 #[tauri::command]
 pub async fn stop_core() -> CmdResult {
@@ -106,6 +121,20 @@ pub async fn stop_core() -> CmdResult {
         handle::Handle::refresh_clash();
     }
     result
+}
+
+/// 停止代理但保留用户设置。
+///
+/// 先撤销操作系统当前的全局代理/PAC，避免核心停止后系统仍指向失效的
+/// 本地端口；随后停止核心。`enable_system_proxy`、`enable_tun_mode` 等配置
+/// 均保持不变，下次 `start_proxy` 会按原配置恢复。
+#[tauri::command]
+pub async fn stop_proxy() -> CmdResult {
+    Sysopt::global().reset_sysproxy().await.stringify_err()?;
+    logging_error!(Type::Core, Config::profiles().await.data_arc().save_file().await);
+    CoreManager::global().stop_core().await.stringify_err()?;
+    handle::Handle::refresh_clash();
+    Ok(())
 }
 
 /// 重启核心
@@ -141,7 +170,7 @@ pub async fn save_dns_config(dns_config: Mapping) -> CmdResult {
     // 获取DNS配置文件路径
     let dns_path = dirs::app_home_dir().stringify_err()?.join(constants::files::DNS_CONFIG);
 
-    // 保存DNS配置到文件
+    // 保存DNS配置
     let yaml_str = yaml_emitter::to_mihomo_config_string(&dns_config).stringify_err()?;
     fs::write(&dns_path, yaml_str).await.stringify_err()?;
     logging!(info, Type::Config, "DNS config saved to {dns_path:?}");
