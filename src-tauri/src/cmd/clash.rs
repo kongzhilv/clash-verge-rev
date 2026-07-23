@@ -88,52 +88,53 @@ pub async fn change_clash_core(clash_core: String) -> CmdResult<Option<String>> 
     }
 }
 
-/// 启动核心
+/// 启动代理（FlClash 风格总开关）。
+///
+/// 启动核心后，按用户已经保存的 `enable_system_proxy` / PAC 设置恢复
+/// 操作系统代理。TUN 设置由核心启动时读取现有配置并恢复。该命令不会
+/// 改写任何代理、TUN、节点或规则偏好。
 #[tauri::command]
 pub async fn start_core() -> CmdResult {
-    let result = CoreManager::global().start_core().await.stringify_err();
-    if result.is_ok() {
-        handle::Handle::refresh_clash();
-    }
-    result
+    start_proxy().await
 }
 
-/// 按现有配置启动代理。
-///
-/// 与 FlClash 的总开关语义一致：启动核心后，按用户已经保存的
-/// `enable_system_proxy` / PAC 设置恢复操作系统代理；不会改写这些偏好。
-/// TUN 设置由核心启动时读取现有配置并恢复。
-#[tauri::command]
-pub async fn start_proxy() -> CmdResult {
+async fn start_proxy() -> CmdResult {
     CoreManager::global().start_core().await.stringify_err()?;
-    Sysopt::global().update_sysproxy().await.stringify_err()?;
+
+    if let Err(error) = Sysopt::global().update_sysproxy().await {
+        logging!(error, Type::Core, "failed to restore system proxy after core start: {error}");
+        let _ = CoreManager::global().stop_core().await;
+        handle::Handle::refresh_clash();
+        return Err(error.to_string().into());
+    }
+
     Sysopt::global().refresh_guard().await;
     handle::Handle::refresh_clash();
     Ok(())
 }
 
-/// 关闭核心
+/// 停止代理（FlClash 风格总开关）。
+///
+/// 撤销当前操作系统全局代理/PAC，再停止核心，但保留
+/// `enable_system_proxy`、`enable_tun_mode` 等用户设置；下次启动会按原配置恢复。
 #[tauri::command]
 pub async fn stop_core() -> CmdResult {
-    logging_error!(Type::Core, Config::profiles().await.data_arc().save_file().await);
-    let result = CoreManager::global().stop_core().await.stringify_err();
-    if result.is_ok() {
-        handle::Handle::refresh_clash();
-    }
-    result
+    stop_proxy().await
 }
 
-/// 停止代理但保留用户设置。
-///
-/// 先撤销操作系统当前的全局代理/PAC，避免核心停止后系统仍指向失效的
-/// 本地端口；随后停止核心。`enable_system_proxy`、`enable_tun_mode` 等配置
-/// 均保持不变，下次 `start_proxy` 会按原配置恢复。
-#[tauri::command]
-pub async fn stop_proxy() -> CmdResult {
-    Sysopt::global().reset_sysproxy().await.stringify_err()?;
+async fn stop_proxy() -> CmdResult {
+    let reset_result = Sysopt::global().reset_sysproxy().await;
     logging_error!(Type::Core, Config::profiles().await.data_arc().save_file().await);
-    CoreManager::global().stop_core().await.stringify_err()?;
+    let stop_result = CoreManager::global().stop_core().await;
     handle::Handle::refresh_clash();
+
+    if let Err(error) = stop_result {
+        return Err(error.to_string().into());
+    }
+    if let Err(error) = reset_result {
+        return Err(error.to_string().into());
+    }
+
     Ok(())
 }
 
