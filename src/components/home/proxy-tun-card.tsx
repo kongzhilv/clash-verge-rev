@@ -147,6 +147,7 @@ export const ProxyTunCard: FC = () => {
   const { verge } = useVerge()
   const {
     runningMode,
+    isCoreRunning,
     isTunModeAvailable,
     mutateSystemState,
     isLoading: systemStateLoading,
@@ -159,8 +160,7 @@ export const ProxyTunCard: FC = () => {
 
   const { enable_tun_mode } = verge ?? {}
   const tunEnabled = Boolean(enable_tun_mode && isTunModeAvailable)
-  const masterEnabled =
-    !systemStateLoading && String(runningMode) !== 'NotRunning'
+  const masterEnabled = !systemStateLoading && isCoreRunning
 
   const handleError = (err: unknown) => {
     showNotice.error(err)
@@ -179,7 +179,9 @@ export const ProxyTunCard: FC = () => {
 
     setMasterSwitchPending(true)
     try {
-      await invoke<void>(value ? 'start_core' : 'stop_core')
+      await invoke<void>(value ? 'start_core' : 'stop_core', {
+        proxySwitch: true,
+      })
       await Promise.all([mutateSystemState(), invalidateProxyState()])
     } catch (error) {
       showNotice.error(error)
