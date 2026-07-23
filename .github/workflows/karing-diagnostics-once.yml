@@ -6,7 +6,6 @@ on:
       - feature/karing-style-diversion
 
 permissions:
-  actions: read
   contents: write
 
 env:
@@ -15,8 +14,8 @@ env:
   RUST_BACKTRACE: short
 
 jobs:
-  windows-bundle:
-    if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[artifact-index]')
+  build-and-publish:
+    if: github.actor != 'github-actions[bot]'
     runs-on: windows-latest
     steps:
       - name: Checkout branch
@@ -59,87 +58,24 @@ jobs:
         run: pnpm run prebuild x86_64-pc-windows-msvc
 
       - name: Build unsigned Windows test bundle
-        id: build
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Continue'
           New-Item -ItemType Directory -Force .ci | Out-Null
           '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding utf8 .ci/tauri-test.conf.json
-          pnpm tauri build --target x86_64-pc-windows-msvc --config .ci/tauri-test.conf.json *>&1 | Tee-Object -FilePath .ci/windows-build.log
-          $status = $LASTEXITCODE
-          "build_status=$status" | Set-Content -Encoding utf8 .ci/windows-build-summary.txt
-          if ($status -eq 0) {
-            Get-ChildItem 'target/x86_64-pc-windows-msvc/release/bundle' -Recurse -File |
-              Sort-Object FullName |
-              ForEach-Object {
-                $relative = $_.FullName.Replace("$pwd\", '')
-                "$relative`t$($_.Length) bytes"
-              } | Add-Content -Encoding utf8 .ci/windows-build-summary.txt
-          }
-          exit $status
+          pnpm tauri build --target x86_64-pc-windows-msvc --config .ci/tauri-test.conf.json
+          $exe = Get-ChildItem 'target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'NSIS installer not found' }
+          Copy-Item $exe.FullName 'Clash.Verge_2.5.3_karing_x64-setup.exe'
+          (Get-FileHash 'Clash.Verge_2.5.3_karing_x64-setup.exe' -Algorithm SHA256).Hash.ToLower() | Set-Content 'Clash.Verge_2.5.3_karing_x64-setup.exe.sha256'
 
-      - name: Upload Windows installers
-        if: success()
-        uses: actions/upload-artifact@v6
+      - name: Publish test release
+        uses: softprops/action-gh-release@v2
         with:
-          name: clash-verge-karing-windows-x64
-          path: |
-            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-
-      - name: Commit build result
-        if: always()
-        shell: pwsh
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .ci/windows-build-summary.txt .ci/windows-build.log
-          if (-not (git diff --cached --quiet)) {
-            git commit -m 'chore: record karing Windows bundle result'
-            git push origin HEAD:feature/karing-style-diversion
-          }
-
-  publish-existing-artifact:
-    if: contains(github.event.head_commit.message, '[artifact-index]')
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: karing-test-latest
-    steps:
-      - name: Download latest successful installer artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          artifact_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.name == "clash-verge-karing-windows-x64" and .expired == false) | [.created_at, (.id|tostring)] | @tsv' \
-            | sort -r | head -n 1 | cut -f2)"
-          test -n "$artifact_id"
-          echo "artifact_id=$artifact_id"
-          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > artifact.zip
-          mkdir artifact
-          unzip -o artifact.zip -d artifact
-          exe="$(find artifact -type f -iname '*.exe' -print -quit)"
-          test -n "$exe"
-          cp "$exe" Clash.Verge_2.5.3_karing_x64-setup.exe
-          sha256sum Clash.Verge_2.5.3_karing_x64-setup.exe > Clash.Verge_2.5.3_karing_x64-setup.exe.sha256
-
-      - name: Publish installer to test release
-        shell: bash
-        run: |
-          set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              Clash.Verge_2.5.3_karing_x64-setup.exe \
-              Clash.Verge_2.5.3_karing_x64-setup.exe.sha256 \
-              --clobber
-          else
-            gh release create "$RELEASE_TAG" \
-              --target feature/karing-style-diversion \
-              --title 'Clash Verge Rev Karing diversion test build' \
-              --notes 'Unsigned Windows x64 test build from the latest successful Karing diversion workflow artifact.' \
-              Clash.Verge_2.5.3_karing_x64-setup.exe \
-              Clash.Verge_2.5.3_karing_x64-setup.exe.sha256
-          fi
+          tag_name: karing-test-latest
+          name: Clash Verge Rev Karing diversion test build
+          prerelease: true
+          make_latest: false
+          body: Unsigned Windows x64 test build from feature/karing-style-diversion.
+          files: |
+            Clash.Verge_2.5.3_karing_x64-setup.exe
+            Clash.Verge_2.5.3_karing_x64-setup.exe.sha256
