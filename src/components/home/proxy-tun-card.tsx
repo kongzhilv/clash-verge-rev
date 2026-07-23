@@ -16,7 +16,8 @@ import {
   alpha,
   useTheme,
 } from '@mui/material'
-import { FC, memo, useMemo, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { ChangeEvent, FC, memo, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Switch } from '@/components/base'
@@ -143,17 +144,23 @@ export const ProxyTunCard: FC = () => {
   )
   const [masterSwitchPending, setMasterSwitchPending] = useState(false)
 
-  const { verge, mutateVerge, patchVerge } = useVerge()
-  const { isTunModeAvailable } = useSystemState()
+  const { verge } = useVerge()
+  const {
+    runningMode,
+    isTunModeAvailable,
+    mutateSystemState,
+    isLoading: systemStateLoading,
+  } = useSystemState()
   const {
     configState: systemProxyConfigState,
     indicator: systemProxyIndicator,
-    toggleSystemProxy,
+    invalidateProxyState,
   } = useSystemProxyState()
 
   const { enable_tun_mode } = verge ?? {}
   const tunEnabled = Boolean(enable_tun_mode && isTunModeAvailable)
-  const masterEnabled = systemProxyIndicator || tunEnabled
+  const masterEnabled =
+    !systemStateLoading && String(runningMode) !== 'NotRunning'
 
   const handleError = (err: unknown) => {
     showNotice.error(err)
@@ -164,57 +171,40 @@ export const ProxyTunCard: FC = () => {
     localStorage.setItem(LOCAL_STORAGE_TAB_KEY, tab)
   }
 
-  const setTunMode = async (value: boolean) => {
-    const previousValue = Boolean(enable_tun_mode)
-    mutateVerge({ ...verge, enable_tun_mode: value }, false)
-    try {
-      await patchVerge({ enable_tun_mode: value })
-    } catch (error) {
-      mutateVerge({ ...verge, enable_tun_mode: previousValue }, false)
-      throw error
-    }
-  }
-
   const handleMasterSwitch = async (
-    _: React.ChangeEvent,
+    _: ChangeEvent<HTMLInputElement>,
     value: boolean,
   ) => {
-    if (masterSwitchPending) return
+    if (masterSwitchPending || systemStateLoading) return
 
     setMasterSwitchPending(true)
     try {
-      if (!value) {
-        if (systemProxyIndicator) await toggleSystemProxy(false)
-        if (enable_tun_mode) await setTunMode(false)
-        return
-      }
-
-      if (activeTab === 'tun') {
-        if (!isTunModeAvailable) {
-          throw new Error(
-            t('settings.sections.proxyControl.tooltips.tunUnavailable'),
-          )
-        }
-        if (systemProxyIndicator) await toggleSystemProxy(false)
-        if (!enable_tun_mode) await setTunMode(true)
-        return
-      }
-
-      if (enable_tun_mode) await setTunMode(false)
-      if (!systemProxyIndicator) await toggleSystemProxy(true)
+      await invoke<void>(value ? 'start_core' : 'stop_core')
+      await Promise.all([mutateSystemState(), invalidateProxyState()])
     } catch (error) {
       showNotice.error(error)
+      await Promise.allSettled([
+        mutateSystemState(),
+        invalidateProxyState(),
+      ])
     } finally {
       setMasterSwitchPending(false)
     }
   }
 
   const masterStatus = useMemo(() => {
-    if (masterSwitchPending) return '正在切换代理状态…'
-    if (tunEnabled) return '已开启 · TUN 模式接管全部流量'
-    if (systemProxyIndicator) return '已开启 · 系统代理模式'
-    return `已关闭 · 打开后启用${activeTab === 'tun' ? ' TUN 模式' : '系统代理'}`
-  }, [activeTab, masterSwitchPending, systemProxyIndicator, tunEnabled])
+    if (systemStateLoading) return '正在读取代理运行状态…'
+    if (masterSwitchPending) return '正在切换代理运行状态…'
+    if (!masterEnabled) return '已停止 · 系统代理、TUN 和规则设置保持不变'
+    return runningMode === 'Service'
+      ? '运行中 · 服务模式'
+      : '运行中 · Sidecar 模式'
+  }, [
+    masterEnabled,
+    masterSwitchPending,
+    runningMode,
+    systemStateLoading,
+  ])
 
   const tabDescription = useMemo(() => {
     if (activeTab === 'system') {
@@ -275,7 +265,7 @@ export const ProxyTunCard: FC = () => {
                 : alpha(theme.palette.text.primary, 0.06),
             }}
           >
-            {masterSwitchPending ? (
+            {masterSwitchPending || systemStateLoading ? (
               <CircularProgress size={21} />
             ) : (
               <PowerSettingsNewRounded fontSize="small" />
@@ -294,7 +284,7 @@ export const ProxyTunCard: FC = () => {
         <Switch
           edge="end"
           checked={masterEnabled}
-          disabled={masterSwitchPending}
+          disabled={masterSwitchPending || systemStateLoading}
           onChange={handleMasterSwitch}
           inputProps={{ 'aria-label': '代理总开关' }}
         />
@@ -315,7 +305,7 @@ export const ProxyTunCard: FC = () => {
           onClick={() => handleTabChange('system')}
           icon={ComputerRounded}
           label={t('settings.sections.system.toggles.systemProxy')}
-          hasIndicator={systemProxyConfigState}
+          hasIndicator={systemProxyIndicator}
         />
         <TabButton
           isActive={activeTab === 'tun'}
