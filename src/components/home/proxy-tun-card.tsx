@@ -1,22 +1,25 @@
 import {
   ComputerRounded,
-  TroubleshootRounded,
   HelpOutlineRounded,
+  PowerSettingsNewRounded,
   SvgIconComponent,
+  TroubleshootRounded,
 } from '@mui/icons-material'
 import {
   Box,
-  Typography,
-  Stack,
+  CircularProgress,
+  Fade,
   Paper,
+  Stack,
   Tooltip,
+  Typography,
   alpha,
   useTheme,
-  Fade,
 } from '@mui/material'
-import { useState, useMemo, memo, FC } from 'react'
+import { FC, memo, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Switch } from '@/components/base'
 import ProxyControlSwitches from '@/components/shared/proxy-control-switches'
 import { useSystemProxyState } from '@/hooks/use-system-proxy-state'
 import { useSystemState } from '@/hooks/use-system-state'
@@ -33,7 +36,6 @@ interface TabButtonProps {
   hasIndicator?: boolean
 }
 
-// Tab组件
 const TabButton: FC<TabButtonProps> = memo(
   ({ isActive, onClick, icon: Icon, label, hasIndicator = false }) => (
     <Paper
@@ -98,7 +100,6 @@ interface TabDescriptionProps {
   tooltipTitle: string
 }
 
-// 描述文本组件
 const TabDescription: FC<TabDescriptionProps> = memo(
   ({ description, tooltipTitle }) => (
     <Fade in={true} timeout={200}>
@@ -140,12 +141,19 @@ export const ProxyTunCard: FC = () => {
   const [activeTab, setActiveTab] = useState<string>(
     () => localStorage.getItem(LOCAL_STORAGE_TAB_KEY) || 'system',
   )
+  const [masterSwitchPending, setMasterSwitchPending] = useState(false)
 
-  const { verge } = useVerge()
+  const { verge, mutateVerge, patchVerge } = useVerge()
   const { isTunModeAvailable } = useSystemState()
-  const { configState: systemProxyConfigState } = useSystemProxyState()
+  const {
+    configState: systemProxyConfigState,
+    indicator: systemProxyIndicator,
+    toggleSystemProxy,
+  } = useSystemProxyState()
 
   const { enable_tun_mode } = verge ?? {}
+  const tunEnabled = Boolean(enable_tun_mode && isTunModeAvailable)
+  const masterEnabled = systemProxyIndicator || tunEnabled
 
   const handleError = (err: unknown) => {
     showNotice.error(err)
@@ -156,6 +164,58 @@ export const ProxyTunCard: FC = () => {
     localStorage.setItem(LOCAL_STORAGE_TAB_KEY, tab)
   }
 
+  const setTunMode = async (value: boolean) => {
+    const previousValue = Boolean(enable_tun_mode)
+    mutateVerge({ ...verge, enable_tun_mode: value }, false)
+    try {
+      await patchVerge({ enable_tun_mode: value })
+    } catch (error) {
+      mutateVerge({ ...verge, enable_tun_mode: previousValue }, false)
+      throw error
+    }
+  }
+
+  const handleMasterSwitch = async (
+    _: React.ChangeEvent,
+    value: boolean,
+  ) => {
+    if (masterSwitchPending) return
+
+    setMasterSwitchPending(true)
+    try {
+      if (!value) {
+        if (systemProxyIndicator) await toggleSystemProxy(false)
+        if (enable_tun_mode) await setTunMode(false)
+        return
+      }
+
+      if (activeTab === 'tun') {
+        if (!isTunModeAvailable) {
+          throw new Error(
+            t('settings.sections.proxyControl.tooltips.tunUnavailable'),
+          )
+        }
+        if (systemProxyIndicator) await toggleSystemProxy(false)
+        if (!enable_tun_mode) await setTunMode(true)
+        return
+      }
+
+      if (enable_tun_mode) await setTunMode(false)
+      if (!systemProxyIndicator) await toggleSystemProxy(true)
+    } catch (error) {
+      showNotice.error(error)
+    } finally {
+      setMasterSwitchPending(false)
+    }
+  }
+
+  const masterStatus = useMemo(() => {
+    if (masterSwitchPending) return '正在切换代理状态…'
+    if (tunEnabled) return '已开启 · TUN 模式接管全部流量'
+    if (systemProxyIndicator) return '已开启 · 系统代理模式'
+    return `已关闭 · 打开后启用${activeTab === 'tun' ? ' TUN 模式' : '系统代理'}`
+  }, [activeTab, masterSwitchPending, systemProxyIndicator, tunEnabled])
+
   const tabDescription = useMemo(() => {
     if (activeTab === 'system') {
       return {
@@ -164,15 +224,15 @@ export const ProxyTunCard: FC = () => {
           : t('home.components.proxyTun.status.systemProxyDisabled'),
         tooltip: t('home.components.proxyTun.tooltips.systemProxy'),
       }
-    } else {
-      return {
-        text: !isTunModeAvailable
-          ? t('home.components.proxyTun.status.tunModeServiceRequired')
-          : enable_tun_mode
-            ? t('home.components.proxyTun.status.tunModeEnabled')
-            : t('home.components.proxyTun.status.tunModeDisabled'),
-        tooltip: t('home.components.proxyTun.tooltips.tunMode'),
-      }
+    }
+
+    return {
+      text: !isTunModeAvailable
+        ? t('home.components.proxyTun.status.tunModeServiceRequired')
+        : enable_tun_mode
+          ? t('home.components.proxyTun.status.tunModeEnabled')
+          : t('home.components.proxyTun.status.tunModeDisabled'),
+      tooltip: t('home.components.proxyTun.tooltips.tunMode'),
     }
   }, [
     activeTab,
@@ -184,6 +244,62 @@ export const ProxyTunCard: FC = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          mb: 1.5,
+          p: 1.5,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: masterEnabled ? 'success.main' : 'divider',
+          bgcolor: masterEnabled
+            ? alpha(theme.palette.success.main, 0.08)
+            : alpha(theme.palette.text.primary, 0.025),
+          transition: 'background-color 0.2s, border-color 0.2s',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box
+            sx={{
+              width: 38,
+              height: 38,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: '50%',
+              color: masterEnabled ? 'success.main' : 'text.secondary',
+              bgcolor: masterEnabled
+                ? alpha(theme.palette.success.main, 0.12)
+                : alpha(theme.palette.text.primary, 0.06),
+            }}
+          >
+            {masterSwitchPending ? (
+              <CircularProgress size={21} />
+            ) : (
+              <PowerSettingsNewRounded fontSize="small" />
+            )}
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              代理总开关
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {masterStatus}
+            </Typography>
+          </Box>
+        </Box>
+
+        <Switch
+          edge="end"
+          checked={masterEnabled}
+          disabled={masterSwitchPending}
+          onChange={handleMasterSwitch}
+          inputProps={{ 'aria-label': '代理总开关' }}
+        />
+      </Box>
+
       <Stack
         direction="row"
         spacing={1}
@@ -206,7 +322,7 @@ export const ProxyTunCard: FC = () => {
           onClick={() => handleTabChange('tun')}
           icon={TroubleshootRounded}
           label={t('settings.sections.system.toggles.tunMode')}
-          hasIndicator={enable_tun_mode && isTunModeAvailable}
+          hasIndicator={tunEnabled}
         />
       </Stack>
 
