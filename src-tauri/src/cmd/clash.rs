@@ -88,21 +88,30 @@ pub async fn change_clash_core(clash_core: String) -> CmdResult<Option<String>> 
     }
 }
 
-/// 启动代理（FlClash 风格总开关）。
-///
-/// 启动核心后，按用户已经保存的 `enable_system_proxy` / PAC 设置恢复
-/// 操作系统代理。TUN 设置由核心启动时读取现有配置并恢复。该命令不会
-/// 改写任何代理、TUN、节点或规则偏好。
+/// 启动核心
 #[tauri::command]
 pub async fn start_core() -> CmdResult {
-    start_proxy().await
+    let result = CoreManager::global().start_core().await.stringify_err();
+    if result.is_ok() {
+        handle::Handle::refresh_clash();
+    }
+    result
 }
 
-async fn start_proxy() -> CmdResult {
+/// 启动代理（FlClash 风格总开关）。
+///
+/// 启动核心后，按照用户已经保存的系统代理、PAC 与 TUN 设置恢复流量接管，
+/// 不改写这些偏好，也不改变节点、规则或运行模式配置。
+#[tauri::command]
+pub async fn start_proxy() -> CmdResult {
     CoreManager::global().start_core().await.stringify_err()?;
 
     if let Err(error) = Sysopt::global().update_sysproxy().await {
-        logging!(error, Type::Core, "failed to restore system proxy after core start: {error}");
+        logging!(
+            error,
+            Type::Core,
+            "failed to restore system proxy after core start: {error}"
+        );
         let _ = CoreManager::global().stop_core().await;
         handle::Handle::refresh_clash();
         return Err(error.to_string().into());
@@ -113,16 +122,23 @@ async fn start_proxy() -> CmdResult {
     Ok(())
 }
 
-/// 停止代理（FlClash 风格总开关）。
-///
-/// 撤销当前操作系统全局代理/PAC，再停止核心，但保留
-/// `enable_system_proxy`、`enable_tun_mode` 等用户设置；下次启动会按原配置恢复。
+/// 关闭核心
 #[tauri::command]
 pub async fn stop_core() -> CmdResult {
-    stop_proxy().await
+    logging_error!(Type::Core, Config::profiles().await.data_arc().save_file().await);
+    let result = CoreManager::global().stop_core().await.stringify_err();
+    if result.is_ok() {
+        handle::Handle::refresh_clash();
+    }
+    result
 }
 
-async fn stop_proxy() -> CmdResult {
+/// 停止代理（FlClash 风格总开关）。
+///
+/// 撤销操作系统当前的全局代理/PAC 后停止核心，但保留系统代理、TUN、
+/// 节点和规则偏好，下一次启动时按原配置恢复。
+#[tauri::command]
+pub async fn stop_proxy() -> CmdResult {
     let reset_result = Sysopt::global().reset_sysproxy().await;
     logging_error!(Type::Core, Config::profiles().await.data_arc().save_file().await);
     let stop_result = CoreManager::global().stop_core().await;
