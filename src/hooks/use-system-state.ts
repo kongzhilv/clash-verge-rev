@@ -58,6 +58,8 @@ export function useSystemState() {
 
   const isSidecarMode = systemState.runningMode === 'Sidecar'
   const isServiceMode = systemState.runningMode === 'Service'
+  // The master proxy switch derives its checked state from the actual core runtime,
+  // not from persisted system-proxy or TUN preferences.
   const isCoreRunning = systemState.runningMode !== 'NotRunning'
   const isTunModeAvailable = systemState.isAdminMode || systemState.isServiceOk
 
