@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
 
+# Captures the exact Biome output from the pull request merge ref.
 jobs:
   diagnose:
     runs-on: ubuntu-latest
