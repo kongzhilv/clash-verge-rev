@@ -1,2 +1,0 @@
-build_status=0
-target\x86_64-pc-windows-msvc\release\bundle\nsis\Clash Verge_2.5.3_x64-setup.exe	46973140 bytes
