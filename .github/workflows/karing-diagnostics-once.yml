@@ -43,6 +43,17 @@ jobs:
           ref: feature/karing-style-diversion
           fetch-depth: 0
 
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxslt1.1 \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
@@ -71,8 +82,17 @@ jobs:
           test "$version" = '2.5.3'
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Check formatting
-        run: pnpm exec biome check .
+      - name: Check frontend formatting
+        run: pnpm format:check
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run TypeScript typecheck
+        run: pnpm typecheck
+
+      - name: Check unused frontend code
+        run: pnpm knip:report
 
       - name: Build frontend
         run: pnpm run web:build
@@ -85,7 +105,6 @@ jobs:
         run: |
           set -euo pipefail
           test ! -e mobile/android/upstream.env
-          test -f src-tauri/src/cmd/clash.rs
           grep -q 'pub async fn start_proxy()' src-tauri/src/cmd/clash.rs
           grep -q 'pub async fn stop_proxy()' src-tauri/src/cmd/clash.rs
           grep -q 'cmd::start_proxy' src-tauri/src/lib.rs
@@ -145,7 +164,6 @@ jobs:
 
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
-        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -167,11 +185,10 @@ jobs:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Prepare Mihomo sidecars
-        run: pnpm run prebuild ${{ matrix.target }}
+      - name: Install dependencies and prepare sidecars
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run prebuild ${{ matrix.target }}
 
       - name: Create unsigned bundle config
         shell: bash
@@ -481,7 +498,7 @@ jobs:
 
           Android is intentionally not included. These fork builds are not signed with the upstream project's official signing or Apple notarization credentials. Verify downloads with SHA256SUMS.txt.
 
-          Commit: \`${GITHUB_SHA}\`
+          Commit: `${GITHUB_SHA}`
           EOF
 
       - name: Create draft, upload, then publish as formal Latest
