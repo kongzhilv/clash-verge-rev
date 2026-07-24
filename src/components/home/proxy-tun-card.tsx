@@ -179,9 +179,7 @@ export const ProxyTunCard: FC = () => {
 
     setMasterSwitchPending(true)
     try {
-      await invoke<void>(value ? 'start_core' : 'stop_core', {
-        proxySwitch: true,
-      })
+      await invoke<void>(value ? 'start_proxy' : 'stop_proxy')
       await Promise.all([mutateSystemState(), invalidateProxyState()])
     } catch (error) {
       showNotice.error(error)
