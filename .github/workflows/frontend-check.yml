@@ -66,7 +66,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         if: steps.check_frontend.outputs.frontend == 'true'
 
-      - name: Run format check
+      - name: Run Prettier check
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm format:check
 
@@ -74,35 +74,9 @@ jobs:
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm lint
 
-      - name: Capture TypeScript diagnostics
+      - name: Run TypeScript typecheck
         if: steps.check_frontend.outputs.frontend == 'true'
-        shell: bash
-        run: |
-          set +e
-          pnpm typecheck > typescript-diagnostics.log 2>&1
-          status=$?
-          printf '%s\n' "$status" > typescript-status.txt
-          exit 0
-
-      - name: Upload TypeScript diagnostics
-        if: steps.check_frontend.outputs.frontend == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: typescript-diagnostics
-          path: |
-            typescript-diagnostics.log
-            typescript-status.txt
-          if-no-files-found: error
-          retention-days: 2
-
-      - name: Fail on TypeScript errors
-        if: steps.check_frontend.outputs.frontend == 'true'
-        shell: bash
-        run: |
-          if [ "$(cat typescript-status.txt)" != '0' ]; then
-            cat typescript-diagnostics.log
-            exit 1
-          fi
+        run: pnpm typecheck
 
       - name: Report unused frontend code and dependencies
         if: steps.check_frontend.outputs.frontend == 'true'
