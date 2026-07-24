@@ -1,6 +1,20 @@
 name: Karing Desktop Release
 
 on:
+  pull_request:
+    branches:
+      - dev
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   workflow_dispatch:
   push:
     branches:
@@ -33,9 +47,11 @@ concurrency:
 jobs:
   review:
     name: Review and validate source
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.ref == 'feature/karing-style-diversion'
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.meta.outputs.version }}
+      commit: ${{ steps.meta.outputs.commit }}
     steps:
       - name: Checkout reviewed branch
         uses: actions/checkout@v7
@@ -73,14 +89,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Read package version
+      - name: Read release metadata
         id: meta
         shell: bash
         run: |
           set -euo pipefail
           version=$(jq -r .version package.json)
+          commit=$(git rev-parse HEAD)
           test "$version" = '2.5.3'
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
       - name: Check frontend formatting
         run: pnpm format:check
@@ -477,7 +495,7 @@ jobs:
           cat > release-assets/BUILD_INFO.txt <<EOF
           Repository: ${GITHUB_REPOSITORY}
           Branch: feature/karing-style-diversion
-          Commit: ${GITHUB_SHA}
+          Commit: ${{ needs.review.outputs.commit }}
           Version: ${{ needs.review.outputs.version }}
           Release tag: ${RELEASE_TAG}
           Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
@@ -498,7 +516,7 @@ jobs:
 
           Android is intentionally not included. These fork builds are not signed with the upstream project's official signing or Apple notarization credentials. Verify downloads with SHA256SUMS.txt.
 
-          Commit: `${GITHUB_SHA}`
+          Commit: `${{ needs.review.outputs.commit }}`
           EOF
 
       - name: Create draft, upload, then publish as formal Latest
@@ -513,7 +531,7 @@ jobs:
           fi
 
           gh release create "${RELEASE_TAG}" \
-            --target "${GITHUB_SHA}" \
+            --target "${{ needs.review.outputs.commit }}" \
             --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }}" \
             --notes-file release-notes.md \
             --draft
