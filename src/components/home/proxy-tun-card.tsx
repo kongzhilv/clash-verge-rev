@@ -278,7 +278,7 @@ export const ProxyTunCard: FC = () => {
           checked={masterEnabled}
           disabled={masterSwitchPending || systemStateLoading}
           onChange={handleMasterSwitch}
-          inputProps={{ 'aria-label': '代理总开关' }}
+          slotProps={{ input: { 'aria-label': '代理总开关' } }}
         />
       </Box>
 
