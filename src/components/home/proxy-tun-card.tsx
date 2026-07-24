@@ -1,22 +1,26 @@
 import {
   ComputerRounded,
-  TroubleshootRounded,
   HelpOutlineRounded,
+  PowerSettingsNewRounded,
   SvgIconComponent,
+  TroubleshootRounded,
 } from '@mui/icons-material'
 import {
   Box,
-  Typography,
-  Stack,
+  CircularProgress,
+  Fade,
   Paper,
+  Stack,
   Tooltip,
+  Typography,
   alpha,
   useTheme,
-  Fade,
 } from '@mui/material'
-import { useState, useMemo, memo, FC } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { ChangeEvent, FC, memo, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Switch } from '@/components/base'
 import ProxyControlSwitches from '@/components/shared/proxy-control-switches'
 import { useSystemProxyState } from '@/hooks/use-system-proxy-state'
 import { useSystemState } from '@/hooks/use-system-state'
@@ -33,7 +37,6 @@ interface TabButtonProps {
   hasIndicator?: boolean
 }
 
-// Tab组件
 const TabButton: FC<TabButtonProps> = memo(
   ({ isActive, onClick, icon: Icon, label, hasIndicator = false }) => (
     <Paper
@@ -98,7 +101,6 @@ interface TabDescriptionProps {
   tooltipTitle: string
 }
 
-// 描述文本组件
 const TabDescription: FC<TabDescriptionProps> = memo(
   ({ description, tooltipTitle }) => (
     <Fade in={true} timeout={200}>
@@ -140,12 +142,25 @@ export const ProxyTunCard: FC = () => {
   const [activeTab, setActiveTab] = useState<string>(
     () => localStorage.getItem(LOCAL_STORAGE_TAB_KEY) || 'system',
   )
+  const [masterSwitchPending, setMasterSwitchPending] = useState(false)
 
   const { verge } = useVerge()
-  const { isTunModeAvailable } = useSystemState()
-  const { configState: systemProxyConfigState } = useSystemProxyState()
+  const {
+    runningMode,
+    isCoreRunning,
+    isTunModeAvailable,
+    mutateSystemState,
+    isLoading: systemStateLoading,
+  } = useSystemState()
+  const {
+    configState: systemProxyConfigState,
+    indicator: systemProxyIndicator,
+    invalidateProxyState,
+  } = useSystemProxyState()
 
   const { enable_tun_mode } = verge ?? {}
+  const tunEnabled = Boolean(enable_tun_mode && isTunModeAvailable)
+  const masterEnabled = !systemStateLoading && isCoreRunning
 
   const handleError = (err: unknown) => {
     showNotice.error(err)
@@ -156,6 +171,41 @@ export const ProxyTunCard: FC = () => {
     localStorage.setItem(LOCAL_STORAGE_TAB_KEY, tab)
   }
 
+  const handleMasterSwitch = async (
+    _: ChangeEvent<HTMLInputElement>,
+    value: boolean,
+  ) => {
+    if (masterSwitchPending || systemStateLoading) return
+
+    setMasterSwitchPending(true)
+    try {
+      await invoke<void>(value ? 'start_proxy' : 'stop_proxy')
+      await Promise.all([mutateSystemState(), invalidateProxyState()])
+    } catch (error) {
+      showNotice.error(error)
+      await Promise.allSettled([
+        mutateSystemState(),
+        invalidateProxyState(),
+      ])
+    } finally {
+      setMasterSwitchPending(false)
+    }
+  }
+
+  const masterStatus = useMemo(() => {
+    if (systemStateLoading) return '正在读取代理运行状态…'
+    if (masterSwitchPending) return '正在切换代理运行状态…'
+    if (!masterEnabled) return '已停止 · 系统代理、TUN 和规则设置保持不变'
+    return runningMode === 'Service'
+      ? '运行中 · 服务模式'
+      : '运行中 · Sidecar 模式'
+  }, [
+    masterEnabled,
+    masterSwitchPending,
+    runningMode,
+    systemStateLoading,
+  ])
+
   const tabDescription = useMemo(() => {
     if (activeTab === 'system') {
       return {
@@ -164,15 +214,15 @@ export const ProxyTunCard: FC = () => {
           : t('home.components.proxyTun.status.systemProxyDisabled'),
         tooltip: t('home.components.proxyTun.tooltips.systemProxy'),
       }
-    } else {
-      return {
-        text: !isTunModeAvailable
-          ? t('home.components.proxyTun.status.tunModeServiceRequired')
-          : enable_tun_mode
-            ? t('home.components.proxyTun.status.tunModeEnabled')
-            : t('home.components.proxyTun.status.tunModeDisabled'),
-        tooltip: t('home.components.proxyTun.tooltips.tunMode'),
-      }
+    }
+
+    return {
+      text: !isTunModeAvailable
+        ? t('home.components.proxyTun.status.tunModeServiceRequired')
+        : enable_tun_mode
+          ? t('home.components.proxyTun.status.tunModeEnabled')
+          : t('home.components.proxyTun.status.tunModeDisabled'),
+      tooltip: t('home.components.proxyTun.tooltips.tunMode'),
     }
   }, [
     activeTab,
@@ -184,6 +234,62 @@ export const ProxyTunCard: FC = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          mb: 1.5,
+          p: 1.5,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: masterEnabled ? 'success.main' : 'divider',
+          bgcolor: masterEnabled
+            ? alpha(theme.palette.success.main, 0.08)
+            : alpha(theme.palette.text.primary, 0.025),
+          transition: 'background-color 0.2s, border-color 0.2s',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box
+            sx={{
+              width: 38,
+              height: 38,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: '50%',
+              color: masterEnabled ? 'success.main' : 'text.secondary',
+              bgcolor: masterEnabled
+                ? alpha(theme.palette.success.main, 0.12)
+                : alpha(theme.palette.text.primary, 0.06),
+            }}
+          >
+            {masterSwitchPending || systemStateLoading ? (
+              <CircularProgress size={21} />
+            ) : (
+              <PowerSettingsNewRounded fontSize="small" />
+            )}
+          </Box>
+          <Box>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              代理总开关
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {masterStatus}
+            </Typography>
+          </Box>
+        </Box>
+
+        <Switch
+          edge="end"
+          checked={masterEnabled}
+          disabled={masterSwitchPending || systemStateLoading}
+          onChange={handleMasterSwitch}
+          inputProps={{ 'aria-label': '代理总开关' }}
+        />
+      </Box>
+
       <Stack
         direction="row"
         spacing={1}
@@ -199,14 +305,14 @@ export const ProxyTunCard: FC = () => {
           onClick={() => handleTabChange('system')}
           icon={ComputerRounded}
           label={t('settings.sections.system.toggles.systemProxy')}
-          hasIndicator={systemProxyConfigState}
+          hasIndicator={systemProxyIndicator}
         />
         <TabButton
           isActive={activeTab === 'tun'}
           onClick={() => handleTabChange('tun')}
           icon={TroubleshootRounded}
           label={t('settings.sections.system.toggles.tunMode')}
-          hasIndicator={enable_tun_mode && isTunModeAvailable}
+          hasIndicator={tunEnabled}
         />
       </Stack>
 

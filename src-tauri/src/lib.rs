@@ -147,6 +147,8 @@ mod app_init {
             cmd::restart_app,
             cmd::start_core,
             cmd::stop_core,
+            cmd::start_proxy,
+            cmd::stop_proxy,
             cmd::restart_core,
             cmd::get_running_mode,
             cmd::get_auto_launch_status,
