@@ -1,0 +1,59 @@
+name: Diagnose PR Format Once
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/diagnose-pr-format-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR merge ref
+        uses: actions/checkout@v7
+        with:
+          ref: refs/pull/1/merge
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Capture Biome format diagnostics
+        shell: bash
+        run: |
+          set +e
+          pnpm format:check > /tmp/pr-format-report.txt 2>&1
+          status=$?
+          echo >> /tmp/pr-format-report.txt
+          echo "exit_status=$status" >> /tmp/pr-format-report.txt
+          exit 0
+
+      - name: Commit diagnostic report to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feature/karing-style-diversion
+          git checkout -B feature/karing-style-diversion origin/feature/karing-style-diversion
+          mkdir -p .ci
+          cp /tmp/pr-format-report.txt .ci/pr-format-report.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .ci/pr-format-report.txt
+          git commit -m 'chore: record PR merge format diagnostics'
+          git push origin HEAD:feature/karing-style-diversion
