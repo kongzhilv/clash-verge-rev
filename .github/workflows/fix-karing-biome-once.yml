@@ -13,7 +13,6 @@ permissions:
 # One-shot repository formatter using the project's checked-in Biome config.
 jobs:
   format:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
@@ -47,9 +46,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          if git diff --cached --quiet; then
-            echo 'No formatting changes were needed.'
-            exit 0
-          fi
           git commit -m 'style: apply repository Biome formatting'
           git push origin HEAD:feature/karing-style-diversion
