@@ -183,10 +183,7 @@ export const ProxyTunCard: FC = () => {
       await Promise.all([mutateSystemState(), invalidateProxyState()])
     } catch (error) {
       showNotice.error(error)
-      await Promise.allSettled([
-        mutateSystemState(),
-        invalidateProxyState(),
-      ])
+      await Promise.allSettled([mutateSystemState(), invalidateProxyState()])
     } finally {
       setMasterSwitchPending(false)
     }
@@ -199,12 +196,7 @@ export const ProxyTunCard: FC = () => {
     return runningMode === 'Service'
       ? '运行中 · 服务模式'
       : '运行中 · Sidecar 模式'
-  }, [
-    masterEnabled,
-    masterSwitchPending,
-    runningMode,
-    systemStateLoading,
-  ])
+  }, [masterEnabled, masterSwitchPending, runningMode, systemStateLoading])
 
   const tabDescription = useMemo(() => {
     if (activeTab === 'system') {
