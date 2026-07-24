@@ -66,42 +66,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
         if: steps.check_frontend.outputs.frontend == 'true'
 
-      - name: Generate Biome format diagnostics
+      - name: Run Prettier check
         if: steps.check_frontend.outputs.frontend == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +e
-          pnpm format:check > biome-check.log 2>&1
-          check_status=$?
-          set -e
-          pnpm format > biome-write.log 2>&1
-          git diff --name-only > biome-changed-files.txt
-          git diff > biome-format.diff
-          printf '%s\n' "$check_status" > biome-check-status.txt
-
-      - name: Upload Biome format diagnostics
-        if: steps.check_frontend.outputs.frontend == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: biome-format-diagnostics
-          path: |
-            biome-check.log
-            biome-write.log
-            biome-changed-files.txt
-            biome-format.diff
-            biome-check-status.txt
-          if-no-files-found: error
-          retention-days: 2
-
-      - name: Fail when Biome changes files
-        if: steps.check_frontend.outputs.frontend == 'true'
-        shell: bash
-        run: |
-          if [ -s biome-changed-files.txt ]; then
-            cat biome-changed-files.txt
-            exit 1
-          fi
+        run: pnpm format:check
 
       - name: Run ESLint
         if: steps.check_frontend.outputs.frontend == 'true'
