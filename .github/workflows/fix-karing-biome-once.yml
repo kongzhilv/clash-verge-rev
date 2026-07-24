@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
 
+# One-shot repository formatter using the project's checked-in Biome config.
 jobs:
   format:
     if: github.actor != 'github-actions[bot]'
