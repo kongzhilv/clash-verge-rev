@@ -21,6 +21,8 @@ pub async fn save_profile_file(index: String, file_data: Option<String>) -> CmdR
         Some(d) => d,
         None => return Ok(ValidationOutcome::Valid),
     };
+    let is_karing_diversion = index == "Merge"
+        && (file_data.contains("x-karing-diversion") || file_data.contains("x-karing-diversion-builtins"));
 
     let backup_trigger = match index.as_str() {
         "Merge" => Some(AutoBackupTrigger::GlobalMerge),
@@ -65,6 +67,9 @@ pub async fn save_profile_file(index: String, file_data: Option<String>) -> CmdR
 
     // 保存新的配置文件
     fs::write(&file_path, &file_data).await.stringify_err()?;
+    if is_karing_diversion {
+        logging!(info, Type::Config, "[Karing] merge changed");
+    }
 
     logging!(
         info,
@@ -82,6 +87,7 @@ pub async fn save_profile_file(index: String, file_data: Option<String>) -> CmdR
         is_merge_file,
         is_script_file,
         affects_runtime,
+        is_karing_diversion,
     )
     .await?;
 
@@ -107,6 +113,12 @@ async fn restore_original(
 }
 
 fn profile_affects_runtime(profiles: &IProfiles, index: &str) -> bool {
+    // Global Merge and Script are always collected and applied by enhance(), even when
+    // the active profile also selects a profile-specific merge or script.
+    if matches!(index, "Merge" | "Script") {
+        return true;
+    }
+
     let Some(current_uid) = profiles.get_current() else {
         return false;
     };
@@ -127,6 +139,7 @@ fn profile_affects_runtime(profiles: &IProfiles, index: &str) -> bool {
     .contains(&index)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_saved_profile_file(
     file_path_str: &str,
     file_path: &std::path::Path,
@@ -135,6 +148,7 @@ async fn handle_saved_profile_file(
     is_merge_file: bool,
     is_script_file: bool,
     affects_runtime: bool,
+    is_karing_diversion: bool,
 ) -> CmdResult<ValidationOutcome> {
     let (target, file_type) = if is_script_file {
         (ValidationNoticeTarget::Script, "脚本文件")
@@ -178,8 +192,14 @@ async fn handle_saved_profile_file(
         Type::Config,
         "[cmd配置save] 保存项影响当前运行时配置，开始统一应用"
     );
+    if is_karing_diversion {
+        logging!(info, Type::Config, "[Karing] compile rules");
+    }
     match CoreManager::global().update_config_forced().await {
         Ok(outcome) if outcome.is_valid() => {
+            if is_karing_diversion {
+                logging!(info, Type::Config, "[Karing] runtime regenerated and applied");
+            }
             handle::Handle::refresh_clash();
             Ok(ValidationOutcome::Valid)
         }
@@ -194,5 +214,71 @@ async fn handle_saved_profile_file(
             restore_original(file_path, original_content, original_existed).await?;
             Err(err.to_string().into())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::profile_affects_runtime;
+    use crate::config::{IProfiles, PrfItem, PrfOption};
+
+    fn item(uid: &str, option: Option<PrfOption>) -> PrfItem {
+        PrfItem {
+            uid: Some(uid.into()),
+            option,
+            ..PrfItem::default()
+        }
+    }
+
+    #[test]
+    fn global_merge_affects_runtime_with_profile_specific_merge() {
+        let profiles = IProfiles {
+            current: Some("profile".into()),
+            items: Some(vec![
+                item(
+                    "profile",
+                    Some(PrfOption {
+                        merge: Some("custom-merge".into()),
+                        ..PrfOption::default()
+                    }),
+                ),
+                item("Merge", None),
+                item("custom-merge", None),
+            ]),
+        };
+
+        assert!(profile_affects_runtime(&profiles, "Merge"));
+        assert!(profile_affects_runtime(&profiles, "custom-merge"));
+    }
+
+    #[test]
+    fn global_script_affects_runtime_with_profile_specific_script() {
+        let profiles = IProfiles {
+            current: Some("profile".into()),
+            items: Some(vec![
+                item(
+                    "profile",
+                    Some(PrfOption {
+                        script: Some("custom-script".into()),
+                        ..PrfOption::default()
+                    }),
+                ),
+                item("Script", None),
+                item("custom-script", None),
+            ]),
+        };
+
+        assert!(profile_affects_runtime(&profiles, "Script"));
+        assert!(profile_affects_runtime(&profiles, "custom-script"));
+    }
+
+    #[test]
+    fn unrelated_profile_file_does_not_affect_runtime() {
+        let profiles = IProfiles {
+            current: Some("profile".into()),
+            items: Some(vec![item("profile", None), item("unrelated", None)]),
+        };
+
+        assert!(!profile_affects_runtime(&profiles, "unrelated"));
     }
 }
