@@ -44,11 +44,7 @@ const reportPath = path.join(
   `service-ipc-build-info-${target}.txt`,
 )
 
-const run = (
-  command,
-  args,
-  { allowFailure = false, extraEnv = {} } = {},
-) => {
+const run = (command, args, { allowFailure = false, extraEnv = {} } = {}) => {
   console.log(`> ${command} ${args.join(' ')}`)
   const result = spawnSync(command, args, {
     cwd: rootDir,
