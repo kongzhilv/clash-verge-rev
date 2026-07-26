@@ -1,0 +1,107 @@
+name: Karing 正式发行（一次性）
+run-name: 发布 v2.5.3-karing 正式版本
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/publish-karing-release-once.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  RELEASE_TAG: v2.5.3-karing
+  REVIEWED_RUN_ID: '30195791681'
+
+jobs:
+  publish:
+    name: 下载已审查产物并发布正式版本
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载已通过审查的完整发行资产
+        uses: actions/download-artifact@v8
+        with:
+          name: karing-release-assets
+          path: release-assets
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.REVIEWED_RUN_ID }}
+
+      - name: 复核安装包、校验和与构建信息
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f release-assets/SHA256SUMS.txt
+          test -f release-assets/BUILD_INFO.txt
+          test -f release-assets/release-notes.md
+
+          installer_count=$(find release-assets -maxdepth 1 -type f \
+            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
+            | wc -l)
+          if [ "$installer_count" -ne 12 ]; then
+            echo "[失败] 应有 12 个安装包，实际为 $installer_count 个"
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
+
+          (
+            cd release-assets
+            sha256sum --check SHA256SUMS.txt
+          )
+
+          build_commit=$(awk -F': ' '$1 == "Commit" { print $2 }' release-assets/BUILD_INFO.txt)
+          if ! [[ "$build_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "[失败] BUILD_INFO.txt 中的构建提交无效：$build_commit"
+            exit 1
+          fi
+
+          gh api --repo "$GITHUB_REPOSITORY" "repos/$GITHUB_REPOSITORY/commits/$build_commit" >/dev/null
+          echo "build_commit=$build_commit" >> "$GITHUB_OUTPUT"
+
+          echo '[通过] 12 个安装包及 SHA256 校验全部有效'
+          echo "[通过] 构建提交：$build_commit"
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: 创建并发布正式 Latest 版本
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+
+          if gh release view "$RELEASE_TAG" --repo "$repo" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --repo "$repo" --yes --cleanup-tag
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            release-assets/*.exe \
+            release-assets/*.dmg \
+            release-assets/*.deb \
+            release-assets/*.rpm \
+            release-assets/SHA256SUMS.txt \
+            release-assets/BUILD_INFO.txt \
+            --repo "$repo" \
+            --target "${{ steps.verify.outputs.build_commit }}" \
+            --title 'Clash Verge Rev Karing v2.5.3' \
+            --notes-file release-assets/release-notes.md \
+            --latest
+
+          asset_count=$(gh release view "$RELEASE_TAG" --repo "$repo" --json assets --jq '.assets | length')
+          if [ "$asset_count" -ne 14 ]; then
+            echo "[失败] Release 应上传 14 个资产，实际为 $asset_count 个"
+            gh release view "$RELEASE_TAG" --repo "$repo" --json assets --jq '.assets[].name'
+            exit 1
+          fi
+
+          gh release view "$RELEASE_TAG" --repo "$repo" \
+            --json url,tagName,isDraft,isPrerelease,assets \
+            --jq '{url, tagName, isDraft, isPrerelease, assets: [.assets[].name]}'
