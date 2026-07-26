@@ -1,20 +1,6 @@
 name: Karing Desktop Release
 
 on:
-  pull_request:
-    branches:
-      - dev
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - '.github/workflows/karing-diagnostics-once.yml'
-      - 'src/**'
-      - 'src-tauri/**'
-      - 'crates/**'
-      - 'scripts/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
   workflow_dispatch:
   push:
     branches:
@@ -29,6 +15,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/**'
 
 permissions:
   contents: write
@@ -39,6 +26,7 @@ env:
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
   RELEASE_TAG: v2.5.3-karing
+  REVIEWED_BRANCH: feature/karing-style-diversion
 
 concurrency:
   group: karing-desktop-release
@@ -47,7 +35,6 @@ concurrency:
 jobs:
   review:
     name: Review and validate source
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.ref == 'feature/karing-style-diversion'
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -56,7 +43,7 @@ jobs:
       - name: Checkout reviewed branch
         uses: actions/checkout@v7
         with:
-          ref: feature/karing-style-diversion
+          ref: ${{ env.REVIEWED_BRANCH }}
           fetch-depth: 0
 
       - name: Install Linux build dependencies
@@ -128,6 +115,8 @@ jobs:
           grep -q 'cmd::start_proxy' src-tauri/src/lib.rs
           grep -q 'cmd::stop_proxy' src-tauri/src/lib.rs
           grep -q "value ? 'start_proxy' : 'stop_proxy'" src/components/home/proxy-tun-card.tsx
+          grep -q 'x-karing-diversion' src-tauri/src/enhance/karing.rs
+          grep -q 'Global Merge and Script are always collected' src-tauri/src/cmd/save_profile.rs
 
   native-builds:
     name: Build ${{ matrix.id }}
@@ -156,13 +145,12 @@ jobs:
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             platform: linux
-
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout reviewed branch
         uses: actions/checkout@v7
         with:
-          ref: feature/karing-style-diversion
+          ref: ${{ env.REVIEWED_BRANCH }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
@@ -173,10 +161,11 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-native
+          prefix-key: karing-desktop-native-v2
           key: ${{ matrix.os }}-${{ matrix.target }}
           workspaces: |
             . -> target
+            .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
           cache-workspace-crates: true
 
@@ -203,10 +192,14 @@ jobs:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies and prepare sidecars
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run prebuild ${{ matrix.target }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build matching service from locked source
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: Prepare Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
 
       - name: Create unsigned bundle config
         shell: bash
@@ -258,15 +251,16 @@ jobs:
         include:
           - target: aarch64-unknown-linux-gnu
             arch: arm64
+            deb_arch: arm64
           - target: armv7-unknown-linux-gnueabihf
             arch: armhf
-
+            deb_arch: armhf
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout reviewed branch
         uses: actions/checkout@v7
         with:
-          ref: feature/karing-style-diversion
+          ref: ${{ env.REVIEWED_BRANCH }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
@@ -277,28 +271,13 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-linux-arm
+          prefix-key: karing-desktop-linux-arm-v2
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
+            .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
           cache-workspace-crates: true
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - name: Install Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.0'
-          cache: pnpm
-
-      - name: Install dependencies and prepare sidecars
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run prebuild ${{ matrix.target }}
 
       - name: Configure Ubuntu multiarch
         shell: bash
@@ -318,23 +297,56 @@ jobs:
             sudo mv /etc/apt/sources.list /etc/apt/sources.list.default
           fi
           sudo mv /tmp/sources.list /etc/apt/sources.list
-          sudo dpkg --add-architecture ${{ matrix.arch }}
+          sudo dpkg --add-architecture ${{ matrix.deb_arch }}
           sudo apt-get update
           sudo apt-get install -y \
-            libxslt1.1:${{ matrix.arch }} \
-            libwebkit2gtk-4.1-dev:${{ matrix.arch }} \
-            libayatana-appindicator3-dev:${{ matrix.arch }} \
-            libssl-dev:${{ matrix.arch }} \
-            patchelf:${{ matrix.arch }} \
-            librsvg2-dev:${{ matrix.arch }}
+            libxslt1.1:${{ matrix.deb_arch }} \
+            libwebkit2gtk-4.1-dev:${{ matrix.deb_arch }} \
+            libayatana-appindicator3-dev:${{ matrix.deb_arch }} \
+            libssl-dev:${{ matrix.deb_arch }} \
+            patchelf:${{ matrix.deb_arch }} \
+            librsvg2-dev:${{ matrix.deb_arch }}
 
-      - name: Install aarch64 compiler
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      - name: Install cross compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-gnu' ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"
+            echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"
+            echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/' >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"
+            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"
+            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/' >> "$GITHUB_ENV"
+          fi
+          echo 'PKG_CONFIG_ALLOW_CROSS=1' >> "$GITHUB_ENV"
 
-      - name: Install armv7 compiler
-        if: matrix.target == 'armv7-unknown-linux-gnueabihf'
-        run: sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build matching service from locked source
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: Prepare Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
 
       - name: Create unsigned bundle config
         shell: bash
@@ -343,18 +355,7 @@ jobs:
           printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
 
       - name: Cross-build Linux packages
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PKG_CONFIG_ALLOW_CROSS=1
-          if [ "${{ matrix.target }}" = 'aarch64-unknown-linux-gnu' ]; then
-            export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig/:${PKG_CONFIG_PATH:-}"
-            export PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/
-          else
-            export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig/:${PKG_CONFIG_PATH:-}"
-            export PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/
-          fi
-          pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
+        run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
 
       - name: Upload Linux ARM packages
         uses: actions/upload-artifact@v7
@@ -378,13 +379,12 @@ jobs:
             arch: x64
           - target: aarch64-pc-windows-msvc
             arch: arm64
-
     runs-on: windows-latest
     steps:
       - name: Checkout reviewed branch
         uses: actions/checkout@v7
         with:
-          ref: feature/karing-style-diversion
+          ref: ${{ env.REVIEWED_BRANCH }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
@@ -395,10 +395,11 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-fixed-webview2
+          prefix-key: karing-desktop-fixed-webview2-v2
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
+            .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
           cache-workspace-crates: true
 
@@ -413,10 +414,14 @@ jobs:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies and prepare sidecars
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run prebuild ${{ matrix.target }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build matching service from locked source
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: Prepare Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
 
       - name: Download fixed WebView2 runtime
         shell: pwsh
@@ -494,7 +499,7 @@ jobs:
 
           cat > release-assets/BUILD_INFO.txt <<EOF
           Repository: ${GITHUB_REPOSITORY}
-          Branch: feature/karing-style-diversion
+          Branch: ${REVIEWED_BRANCH}
           Commit: ${{ needs.review.outputs.commit }}
           Version: ${{ needs.review.outputs.version }}
           Release tag: ${RELEASE_TAG}
@@ -506,7 +511,7 @@ jobs:
           cat > release-notes.md <<EOF
           # Clash Verge Rev Karing v${{ needs.review.outputs.version }}
 
-          This desktop release contains the Karing-style diversion manager and the reviewed FlClash-style master proxy switch.
+          This desktop release contains the Karing-style diversion manager, immediate Merge-profile runtime application, and the reviewed master proxy switch.
 
           ## Desktop packages
           - Windows x64 and ARM64 installers
@@ -514,36 +519,25 @@ jobs:
           - macOS Apple Silicon and Intel disk images
           - Linux x64, ARM64 and ARMv7 DEB/RPM packages
 
-          Android is intentionally not included. These fork builds are not signed with the upstream project's official signing or Apple notarization credentials. Verify downloads with SHA256SUMS.txt.
+          Android is intentionally not included. These fork builds are unsigned and are not notarized with the upstream project's credentials. Verify downloads with SHA256SUMS.txt.
 
           Commit: `${{ needs.review.outputs.commit }}`
           EOF
 
-      - name: Create draft, upload, then publish as formal Latest
+      - name: Create and publish formal Latest release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
           fi
 
-          gh release create "${RELEASE_TAG}" \
+          gh release create "${RELEASE_TAG}" release-assets/* \
             --target "${{ needs.review.outputs.commit }}" \
             --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }}" \
             --notes-file release-notes.md \
-            --draft
-
-          gh release upload "${RELEASE_TAG}" release-assets/*
-
-          release_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.id')
-          gh api --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
-            -F draft=false \
-            -F prerelease=false \
-            -f make_latest=true \
-            --silent
+            --latest
 
           gh release view "${RELEASE_TAG}" --json url,assets --jq '{url: .url, assets: [.assets[].name]}'
