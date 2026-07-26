@@ -98,7 +98,7 @@ const cargoArgs = [
   '--target',
   target,
   '--features',
-  'standalone,client',
+  'standalone',
 ]
 
 let buildStatus = run('cargo', [...cargoArgs, '--locked'], {
