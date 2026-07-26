@@ -19,28 +19,6 @@ const isWindows = target.includes('windows-msvc')
 const isLinux =
   target.includes('linux-gnu') || target.includes('linux-gnueabihf')
 const extension = isWindows ? '.exe' : ''
-const checkoutDir = path.join(rootDir, '.ci', `service-ipc-source-${target}`)
-const reportPath = path.join(
-  rootDir,
-  '.ci',
-  `service-ipc-build-info-${target}.txt`,
-)
-
-const run = (command, args, { allowFailure = false } = {}) => {
-  console.log(`> ${command} ${args.join(' ')}`)
-  const result = spawnSync(command, args, {
-    cwd: rootDir,
-    env: process.env,
-    stdio: 'inherit',
-    shell: false,
-  })
-
-  if (result.error) throw result.error
-  if (!allowFailure && result.status !== 0) {
-    throw new Error(`${command} exited with status ${result.status}`)
-  }
-  return result.status ?? 1
-}
 
 const lockText = fs.readFileSync(path.join(rootDir, 'Cargo.lock'), 'utf8')
 const dependency = lockText.match(
@@ -54,11 +32,44 @@ if (!dependency) {
 }
 
 const [, expectedVersion, revision] = dependency
+const checkoutDir = path.resolve(
+  rootDir,
+  '..',
+  `.clash-verge-service-ipc-${revision}-${target}`,
+)
+const serviceTargetDir = path.join(rootDir, 'target', `service-ipc-${target}`)
+const reportPath = path.join(
+  rootDir,
+  '.ci',
+  `service-ipc-build-info-${target}.txt`,
+)
+
+const run = (
+  command,
+  args,
+  { allowFailure = false, extraEnv = {} } = {},
+) => {
+  console.log(`> ${command} ${args.join(' ')}`)
+  const result = spawnSync(command, args, {
+    cwd: rootDir,
+    env: { ...process.env, ...extraEnv },
+    stdio: 'inherit',
+    shell: false,
+  })
+
+  if (result.error) throw result.error
+  if (!allowFailure && result.status !== 0) {
+    throw new Error(`${command} exited with status ${result.status}`)
+  }
+  return result.status ?? 1
+}
+
 console.log(
   `Building clash-verge-service-ipc ${expectedVersion} from ${revision} for ${target}`,
 )
 
 fs.rmSync(checkoutDir, { recursive: true, force: true })
+fs.rmSync(serviceTargetDir, { recursive: true, force: true })
 fs.mkdirSync(checkoutDir, { recursive: true })
 fs.mkdirSync(path.dirname(reportPath), { recursive: true })
 
@@ -100,21 +111,23 @@ const cargoArgs = [
   '--features',
   'standalone',
 ]
-
-let buildStatus = run('cargo', [...cargoArgs, '--locked'], {
+const cargoOptions = {
   allowFailure: true,
-})
+  extraEnv: { CARGO_TARGET_DIR: serviceTargetDir },
+}
+
+let buildStatus = run('cargo', [...cargoArgs, '--locked'], cargoOptions)
 if (buildStatus !== 0) {
   console.warn(
     'Locked service build failed; retrying with the checked-out manifest lock refresh',
   )
-  buildStatus = run('cargo', cargoArgs, { allowFailure: true })
+  buildStatus = run('cargo', cargoArgs, cargoOptions)
 }
 if (buildStatus !== 0) {
   throw new Error(`Unable to build matching service for ${target}`)
 }
 
-const outputDir = path.join(checkoutDir, 'target', target, 'release')
+const outputDir = path.join(serviceTargetDir, target, 'release')
 const destinationDir = isLinux
   ? path.join(rootDir, 'src-tauri', 'sidecar')
   : path.join(rootDir, 'src-tauri', 'resources')
