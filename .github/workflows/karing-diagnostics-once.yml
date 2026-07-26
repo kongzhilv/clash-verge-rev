@@ -1,7 +1,21 @@
-name: Karing Desktop Release
+name: Karing 桌面版审查与发行
+run-name: ${{ github.event_name == 'pull_request' && '审查 Karing 桌面版安装包' || '构建并发布 Karing 桌面版' }}
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
   push:
     branches:
       - feature/karing-style-diversion
@@ -16,9 +30,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/**'
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   HUSKY: 0
@@ -26,27 +41,26 @@ env:
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
   RELEASE_TAG: v2.5.3-karing
-  REVIEWED_BRANCH: feature/karing-style-diversion
+  RELEASE_BRANCH: feature/karing-style-diversion
 
 concurrency:
-  group: karing-desktop-release
+  group: karing-desktop-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   review:
-    name: Review and validate source
+    name: 审查并验证源码
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.meta.outputs.version }}
       commit: ${{ steps.meta.outputs.commit }}
     steps:
-      - name: Checkout reviewed branch
+      - name: 检出本次运行对应的代码
         uses: actions/checkout@v7
         with:
-          ref: ${{ env.REVIEWED_BRANCH }}
           fetch-depth: 0
 
-      - name: Install Linux build dependencies
+      - name: 安装 Linux 构建依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -57,26 +71,26 @@ jobs:
             libssl-dev \
             patchelf
 
-      - name: Install Rust
+      - name: 安装 Rust
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Read release metadata
+      - name: 读取并验证发行信息
         id: meta
         shell: bash
         run: |
@@ -87,81 +101,102 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
-      - name: Check frontend formatting
+      - name: 检查前端格式
         run: pnpm format:check
 
-      - name: Run ESLint
+      - name: 运行 ESLint
         run: pnpm lint
 
-      - name: Run TypeScript typecheck
+      - name: 运行 TypeScript 类型检查
         run: pnpm typecheck
 
-      - name: Check unused frontend code
+      - name: 检查未使用的前端代码和依赖
         run: pnpm knip:report
 
-      - name: Build frontend
+      - name: 构建前端
         run: pnpm run web:build
 
-      - name: Run Rust Clippy
+      - name: 运行 Rust Clippy
         run: cargo clippy --workspace --all-targets --features clippy -- -D warnings
 
-      - name: Audit release scope
+      - name: 审查 Karing 发行范围
         shell: bash
         run: |
           set -euo pipefail
-          test ! -e mobile/android/upstream.env
-          grep -q 'pub async fn start_proxy()' src-tauri/src/cmd/clash.rs
-          grep -q 'pub async fn stop_proxy()' src-tauri/src/cmd/clash.rs
-          grep -q 'cmd::start_proxy' src-tauri/src/lib.rs
-          grep -q 'cmd::stop_proxy' src-tauri/src/lib.rs
-          grep -q "value ? 'start_proxy' : 'stop_proxy'" src/components/home/proxy-tun-card.tsx
-          grep -q 'x-karing-diversion' src-tauri/src/enhance/karing.rs
-          grep -q 'Global Merge and Script are always collected' src-tauri/src/cmd/save_profile.rs
+
+          check_contains() {
+            local file="$1"
+            local text="$2"
+            local label="$3"
+            if grep -Fq "$text" "$file"; then
+              echo "[通过] $label"
+            else
+              echo "[失败] $label：$file 中未找到 $text"
+              exit 1
+            fi
+          }
+
+          if [ -e mobile/android/upstream.env ]; then
+            echo '[失败] 本桌面发行不应包含 Android 上游环境文件'
+            exit 1
+          fi
+          echo '[通过] Android 不在本次发行范围内'
+
+          check_contains src-tauri/src/cmd/clash.rs 'pub async fn start_proxy()' '后端已实现启动主代理命令'
+          check_contains src-tauri/src/cmd/clash.rs 'pub async fn stop_proxy()' '后端已实现停止主代理命令'
+          check_contains src-tauri/src/lib.rs 'cmd::start_proxy' '已注册启动主代理命令'
+          check_contains src-tauri/src/lib.rs 'cmd::stop_proxy' '已注册停止主代理命令'
+          check_contains src/components/home/proxy-tun-card.tsx "value ? 'start_proxy' : 'stop_proxy'" '前端主开关已连接后端命令'
+          check_contains src-tauri/src/enhance/field/diversion.rs 'const CONFIG_KEY: &str = "x-karing-diversion";' 'Karing 分流编译器使用正确配置键'
+          check_contains src-tauri/src/cmd/save_profile.rs 'Global Merge and Script are always collected' '全局 Merge 与 Script 保存后会刷新运行时'
 
   native-builds:
-    name: Build ${{ matrix.id }}
+    name: 构建 ${{ matrix.name }}
     needs: review
     strategy:
       fail-fast: false
       matrix:
         include:
           - id: windows-x64
+            name: Windows x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows
           - id: windows-arm64
+            name: Windows ARM64
             os: windows-latest
             target: aarch64-pc-windows-msvc
             platform: windows
           - id: macos-arm64
+            name: macOS Apple Silicon
             os: macos-latest
             target: aarch64-apple-darwin
             platform: macos
           - id: macos-x64
+            name: macOS Intel
             os: macos-latest
             target: x86_64-apple-darwin
             platform: macos
           - id: linux-x64
+            name: Linux x64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             platform: linux
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout reviewed branch
+      - name: 检出本次运行对应的代码
         uses: actions/checkout@v7
-        with:
-          ref: ${{ env.REVIEWED_BRANCH }}
 
-      - name: Install Rust
+      - name: 安装 Rust 及目标平台
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
           targets: ${{ matrix.target }}
 
-      - name: Rust cache
+      - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-native-v2
+          prefix-key: karing-desktop-native-v4
           key: ${{ matrix.os }}-${{ matrix.target }}
           workspaces: |
             . -> target
@@ -169,7 +204,7 @@ jobs:
           cache-all-crates: true
           cache-workspace-crates: true
 
-      - name: Install Linux dependencies
+      - name: 安装 Linux 构建依赖
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
@@ -181,36 +216,36 @@ jobs:
             libssl-dev \
             patchelf
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Build matching service from locked source
+      - name: 根据 Cargo.lock 构建匹配服务组件
         run: node scripts/build-matching-service.mjs ${{ matrix.target }}
 
-      - name: Prepare Mihomo and runtime resources
+      - name: 准备 Mihomo 和运行资源
         run: pnpm run prebuild ${{ matrix.target }}
 
-      - name: Create unsigned bundle config
+      - name: 生成无更新签名的打包配置
         shell: bash
         run: |
           mkdir -p .ci
           printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
 
-      - name: Build desktop bundle
+      - name: 构建桌面安装包
         run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
 
-      - name: Upload Windows installer
+      - name: 上传 Windows 安装包
         if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v7
         with:
@@ -220,7 +255,7 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-      - name: Upload macOS image
+      - name: 上传 macOS 磁盘映像
         if: matrix.platform == 'macos'
         uses: actions/upload-artifact@v7
         with:
@@ -230,7 +265,7 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-      - name: Upload Linux packages
+      - name: 上传 Linux 安装包
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v7
         with:
@@ -243,35 +278,35 @@ jobs:
           retention-days: 7
 
   linux-arm-builds:
-    name: Build Linux ${{ matrix.arch }}
+    name: 构建 Linux ${{ matrix.name }}
     needs: review
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: aarch64-unknown-linux-gnu
+            name: ARM64
             arch: arm64
             deb_arch: arm64
           - target: armv7-unknown-linux-gnueabihf
+            name: ARMv7
             arch: armhf
             deb_arch: armhf
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout reviewed branch
+      - name: 检出本次运行对应的代码
         uses: actions/checkout@v7
-        with:
-          ref: ${{ env.REVIEWED_BRANCH }}
 
-      - name: Install Rust
+      - name: 安装 Rust 及目标平台
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
           targets: ${{ matrix.target }}
 
-      - name: Rust cache
+      - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-linux-arm-v2
+          prefix-key: karing-desktop-linux-arm-v4
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -279,7 +314,7 @@ jobs:
           cache-all-crates: true
           cache-workspace-crates: true
 
-      - name: Configure Ubuntu multiarch
+      - name: 配置 Ubuntu 多架构软件源
         shell: bash
         run: |
           set -euo pipefail
@@ -304,10 +339,10 @@ jobs:
             libwebkit2gtk-4.1-dev:${{ matrix.deb_arch }} \
             libayatana-appindicator3-dev:${{ matrix.deb_arch }} \
             libssl-dev:${{ matrix.deb_arch }} \
-            patchelf:${{ matrix.deb_arch }} \
-            librsvg2-dev:${{ matrix.deb_arch }}
+            librsvg2-dev:${{ matrix.deb_arch }} \
+            patchelf
 
-      - name: Install cross compiler
+      - name: 安装交叉编译器
         shell: bash
         run: |
           set -euo pipefail
@@ -328,36 +363,36 @@ jobs:
           fi
           echo 'PKG_CONFIG_ALLOW_CROSS=1' >> "$GITHUB_ENV"
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Build matching service from locked source
+      - name: 根据 Cargo.lock 构建匹配服务组件
         run: node scripts/build-matching-service.mjs ${{ matrix.target }}
 
-      - name: Prepare Mihomo and runtime resources
+      - name: 准备 Mihomo 和运行资源
         run: pnpm run prebuild ${{ matrix.target }}
 
-      - name: Create unsigned bundle config
+      - name: 生成无更新签名的打包配置
         shell: bash
         run: |
           mkdir -p .ci
           printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
 
-      - name: Cross-build Linux packages
+      - name: 交叉编译 Linux 安装包
         run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
 
-      - name: Upload Linux ARM packages
+      - name: 上传 Linux ARM 安装包
         uses: actions/upload-artifact@v7
         with:
           name: karing-linux-${{ matrix.arch }}
@@ -369,33 +404,33 @@ jobs:
           retention-days: 7
 
   fixed-webview2-builds:
-    name: Build fixed WebView2 ${{ matrix.arch }}
+    name: 构建固定 WebView2 ${{ matrix.name }}
     needs: review
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
+            name: x64
             arch: x64
           - target: aarch64-pc-windows-msvc
+            name: ARM64
             arch: arm64
     runs-on: windows-latest
     steps:
-      - name: Checkout reviewed branch
+      - name: 检出本次运行对应的代码
         uses: actions/checkout@v7
-        with:
-          ref: ${{ env.REVIEWED_BRANCH }}
 
-      - name: Install Rust
+      - name: 安装 Rust 及目标平台
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
           targets: ${{ matrix.target }}
 
-      - name: Rust cache
+      - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-fixed-webview2-v2
+          prefix-key: karing-desktop-fixed-webview2-v4
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -403,27 +438,27 @@ jobs:
           cache-all-crates: true
           cache-workspace-crates: true
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Build matching service from locked source
+      - name: 根据 Cargo.lock 构建匹配服务组件
         run: node scripts/build-matching-service.mjs ${{ matrix.target }}
 
-      - name: Prepare Mihomo and runtime resources
+      - name: 准备 Mihomo 和运行资源
         run: pnpm run prebuild ${{ matrix.target }}
 
-      - name: Download fixed WebView2 runtime
+      - name: 下载固定版 WebView2 运行库
         shell: pwsh
         run: |
           $version = '133.0.3065.92'
@@ -433,24 +468,24 @@ jobs:
           Remove-Item ./src-tauri/tauri.windows.conf.json
           Rename-Item ./src-tauri/webview2.${{ matrix.arch }}.json tauri.windows.conf.json
 
-      - name: Create unsigned bundle config
+      - name: 生成无更新签名的打包配置
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force .ci | Out-Null
           '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding utf8 .ci/tauri-release.conf.json
 
-      - name: Build fixed WebView2 installer
+      - name: 构建固定 WebView2 安装包
         shell: pwsh
         run: |
           pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
           $files = Get-ChildItem "target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe"
-          if (-not $files) { throw 'Fixed WebView2 installer not found' }
+          if (-not $files) { throw '没有找到固定 WebView2 安装包' }
           foreach ($file in $files) {
             $newName = $file.Name -replace '-setup\.exe$', '_fixed_webview2-setup.exe'
             Rename-Item $file.FullName $newName
           }
 
-      - name: Upload fixed WebView2 installer
+      - name: 上传固定 WebView2 安装包
         uses: actions/upload-artifact@v7
         with:
           name: karing-fixed-webview2-${{ matrix.arch }}
@@ -459,8 +494,8 @@ jobs:
           compression-level: 0
           retention-days: 7
 
-  publish-release:
-    name: Publish formal Latest release
+  package-release:
+    name: 汇总并审查发行产物
     needs:
       - review
       - native-builds
@@ -468,14 +503,14 @@ jobs:
       - fixed-webview2-builds
     runs-on: ubuntu-latest
     steps:
-      - name: Download all reviewed build artifacts
+      - name: 下载全部安装包
         uses: actions/download-artifact@v8
         with:
           pattern: karing-*
           path: downloaded-assets
           merge-multiple: true
 
-      - name: Validate and prepare release assets
+      - name: 校验并整理发行文件
         shell: bash
         run: |
           set -euo pipefail
@@ -486,12 +521,11 @@ jobs:
 
           count=$(find release-assets -maxdepth 1 -type f | wc -l)
           if [ "$count" -ne 12 ]; then
-            echo "Expected exactly 12 installable files, found $count"
+            echo "应当生成 12 个可安装文件，实际找到 $count 个"
             find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
             exit 1
           fi
 
-          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
           (
             cd release-assets
             sha256sum * > SHA256SUMS.txt
@@ -499,45 +533,80 @@ jobs:
 
           cat > release-assets/BUILD_INFO.txt <<EOF
           Repository: ${GITHUB_REPOSITORY}
-          Branch: ${REVIEWED_BRANCH}
+          Event: ${GITHUB_EVENT_NAME}
           Commit: ${{ needs.review.outputs.commit }}
           Version: ${{ needs.review.outputs.version }}
           Release tag: ${RELEASE_TAG}
           Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
-          Signing: unsigned development-fork build; no official Apple notarization or updater signature
+          Signing: unsigned fork build; no upstream Apple notarization or updater signature
           Android: intentionally not included
           EOF
 
-          cat > release-notes.md <<EOF
+          cat > release-assets/release-notes.md <<EOF
           # Clash Verge Rev Karing v${{ needs.review.outputs.version }}
 
-          This desktop release contains the Karing-style diversion manager, immediate Merge-profile runtime application, and the reviewed master proxy switch.
+          本桌面发行版加入 Karing 风格分流管理、全局 Merge/Script 保存后即时应用，以及经过审查的主代理开关链路。
 
-          ## Desktop packages
-          - Windows x64 and ARM64 installers
-          - Windows x64 and ARM64 fixed-WebView2 installers
-          - macOS Apple Silicon and Intel disk images
-          - Linux x64, ARM64 and ARMv7 DEB/RPM packages
+          ## 安装包
+          - Windows x64 与 ARM64
+          - Windows x64 与 ARM64 固定 WebView2 版本
+          - macOS Apple Silicon 与 Intel
+          - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
 
-          Android is intentionally not included. These fork builds are unsigned and are not notarized with the upstream project's credentials. Verify downloads with SHA256SUMS.txt.
+          Android 不在本次发行范围内。本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
 
           Commit: `${{ needs.review.outputs.commit }}`
           EOF
 
-      - name: Create and publish formal Latest release
+          echo '发行文件：'
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 上传已审查的完整发行资产
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing-release-assets
+          path: release-assets
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish-release:
+    name: 发布正式 GitHub Release
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/feature/karing-style-diversion' }}
+    needs:
+      - review
+      - package-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 下载已审查的发行资产
+        uses: actions/download-artifact@v8
+        with:
+          name: karing-release-assets
+          path: release-assets
+
+      - name: 创建并发布正式 Latest 版本
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
+
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
           fi
 
-          gh release create "${RELEASE_TAG}" release-assets/* \
+          gh release create "${RELEASE_TAG}" \
+            release-assets/*.exe \
+            release-assets/*.dmg \
+            release-assets/*.deb \
+            release-assets/*.rpm \
+            release-assets/SHA256SUMS.txt \
+            release-assets/BUILD_INFO.txt \
             --target "${{ needs.review.outputs.commit }}" \
             --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }}" \
-            --notes-file release-notes.md \
+            --notes-file release-assets/release-notes.md \
             --latest
 
           gh release view "${RELEASE_TAG}" --json url,assets --jq '{url: .url, assets: [.assets[].name]}'
