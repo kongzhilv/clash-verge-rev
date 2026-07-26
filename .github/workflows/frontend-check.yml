@@ -1,4 +1,5 @@
-name: Frontend Check
+name: 前端检查
+run-name: 前端检查
 
 on:
   pull_request:
@@ -12,11 +13,13 @@ env:
 
 jobs:
   frontend:
+    name: 检查前端代码
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: 检出代码
+        uses: actions/checkout@v7
 
-      - name: Check frontend changes
+      - name: 检测前端相关变更
         id: check_frontend
         uses: dorny/paths-filter@v4
         with:
@@ -38,23 +41,24 @@ jobs:
               - 'tsconfig.json'
               - 'vite.config.*'
 
-      - name: Skip if no frontend changes
+      - name: 无前端变更时跳过检查
         if: steps.check_frontend.outputs.frontend != 'true'
-        run: echo "No frontend changes, skipping frontend checks."
+        run: echo "未检测到前端相关变更，跳过前端检查。"
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         if: steps.check_frontend.outputs.frontend == 'true'
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - uses: actions/setup-node@v6
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
         if: steps.check_frontend.outputs.frontend == 'true'
         with:
           node-version: '24.18.0'
           cache: 'pnpm'
 
-      - name: Restore pnpm cache
+      - name: 恢复 pnpm 缓存
         if: steps.check_frontend.outputs.frontend == 'true'
         uses: actions/cache@v6
         with:
@@ -63,21 +67,22 @@ jobs:
           restore-keys: |
             pnpm-shared-stable-${{ runner.os }}-
 
-      - run: pnpm install --frozen-lockfile
+      - name: 安装项目依赖
         if: steps.check_frontend.outputs.frontend == 'true'
+        run: pnpm install --frozen-lockfile
 
-      - name: Run Prettier check
+      - name: 检查代码格式
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm format:check
 
-      - name: Run ESLint
+      - name: 运行 ESLint
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm lint
 
-      - name: Run TypeScript typecheck
+      - name: 运行 TypeScript 类型检查
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm typecheck
 
-      - name: Report unused frontend code and dependencies
+      - name: 检查未使用的前端代码和依赖
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm knip:report
