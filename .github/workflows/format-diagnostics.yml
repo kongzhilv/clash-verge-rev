@@ -1,0 +1,51 @@
+name: 服务构建脚本格式诊断
+run-name: 生成服务构建脚本的 Biome 格式化结果
+
+on:
+  pull_request:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  format-service-script:
+    name: 格式化并导出服务构建脚本
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 使用仓库锁定的 Biome 格式化脚本
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp scripts/build-matching-service.mjs /tmp/build-matching-service.before.mjs
+          pnpm exec biome format --write scripts/build-matching-service.mjs
+          mkdir -p format-result/scripts
+          cp scripts/build-matching-service.mjs format-result/scripts/
+          diff -u /tmp/build-matching-service.before.mjs scripts/build-matching-service.mjs > format-result/formatting.patch || true
+
+      - name: 上传格式化结果
+        uses: actions/upload-artifact@v7
+        with:
+          name: 服务构建脚本格式化结果
+          path: format-result
+          if-no-files-found: error
+          retention-days: 1
