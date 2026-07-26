@@ -10,14 +10,21 @@ const rootDir = path.resolve(scriptDir, '..')
 const target = process.argv[2]
 
 if (!target) {
-  throw new Error('Usage: node scripts/build-matching-service.mjs <rust-target>')
+  throw new Error(
+    'Usage: node scripts/build-matching-service.mjs <rust-target>',
+  )
 }
 
 const isWindows = target.includes('windows-msvc')
-const isLinux = target.includes('linux-gnu') || target.includes('linux-gnueabihf')
+const isLinux =
+  target.includes('linux-gnu') || target.includes('linux-gnueabihf')
 const extension = isWindows ? '.exe' : ''
 const checkoutDir = path.join(rootDir, '.ci', `service-ipc-source-${target}`)
-const reportPath = path.join(rootDir, '.ci', `service-ipc-build-info-${target}.txt`)
+const reportPath = path.join(
+  rootDir,
+  '.ci',
+  `service-ipc-build-info-${target}.txt`,
+)
 
 const run = (command, args, { allowFailure = false } = {}) => {
   console.log(`> ${command} ${args.join(' ')}`)
@@ -41,7 +48,9 @@ const dependency = lockText.match(
 )
 
 if (!dependency) {
-  throw new Error('Unable to find clash_verge_service_ipc git revision in Cargo.lock')
+  throw new Error(
+    'Unable to find clash_verge_service_ipc git revision in Cargo.lock',
+  )
 }
 
 const [, expectedVersion, revision] = dependency
@@ -62,14 +71,24 @@ run('git', [
   'origin',
   'https://github.com/clash-verge-rev/clash-verge-service-ipc.git',
 ])
-run('git', ['-C', checkoutDir, 'fetch', '--depth', '1', 'origin', revision])
+run('git', [
+  '-C',
+  checkoutDir,
+  'fetch',
+  '--depth',
+  '1',
+  'origin',
+  revision,
+])
 run('git', ['-C', checkoutDir, 'checkout', '--detach', 'FETCH_HEAD'])
 
 const manifestPath = path.join(checkoutDir, 'Cargo.toml')
 const manifestText = fs.readFileSync(manifestPath, 'utf8')
 const actualVersion = manifestText.match(/^version\s*=\s*"([^"]+)"/m)?.[1]
 if (!actualVersion) {
-  throw new Error('Unable to read service version from the checked-out Cargo.toml')
+  throw new Error(
+    'Unable to read service version from the checked-out Cargo.toml',
+  )
 }
 if (actualVersion !== expectedVersion) {
   throw new Error(
@@ -90,9 +109,13 @@ const cargoArgs = [
   'standalone,client',
 ]
 
-let buildStatus = run('cargo', [...cargoArgs, '--locked'], { allowFailure: true })
+let buildStatus = run('cargo', [...cargoArgs, '--locked'], {
+  allowFailure: true,
+})
 if (buildStatus !== 0) {
-  console.warn('Locked service build failed; retrying with the checked-out manifest lock refresh')
+  console.warn(
+    'Locked service build failed; retrying with the checked-out manifest lock refresh',
+  )
   buildStatus = run('cargo', cargoArgs, { allowFailure: true })
 }
 if (buildStatus !== 0) {
@@ -129,7 +152,9 @@ for (const binaryName of binaryNames) {
   fs.copyFileSync(source, destination)
   if (!isWindows) fs.chmodSync(destination, 0o755)
 
-  const hash = createHash('sha256').update(fs.readFileSync(destination)).digest('hex')
+  const hash = createHash('sha256')
+    .update(fs.readFileSync(destination))
+    .digest('hex')
   report.push(`${destinationName}=${hash}`)
   console.log(`Installed matching service binary: ${destination} (${hash})`)
 }
