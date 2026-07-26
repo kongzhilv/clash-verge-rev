@@ -61,7 +61,7 @@ jobs:
             exit 1
           fi
 
-          gh api --repo "$GITHUB_REPOSITORY" "repos/$GITHUB_REPOSITORY/commits/$build_commit" >/dev/null
+          gh api "repos/$GITHUB_REPOSITORY/commits/$build_commit" >/dev/null
           echo "build_commit=$build_commit" >> "$GITHUB_OUTPUT"
 
           echo '[通过] 12 个安装包及 SHA256 校验全部有效'
