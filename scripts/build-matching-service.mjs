@@ -71,15 +71,7 @@ run('git', [
   'origin',
   'https://github.com/clash-verge-rev/clash-verge-service-ipc.git',
 ])
-run('git', [
-  '-C',
-  checkoutDir,
-  'fetch',
-  '--depth',
-  '1',
-  'origin',
-  revision,
-])
+run('git', ['-C', checkoutDir, 'fetch', '--depth', '1', 'origin', revision])
 run('git', ['-C', checkoutDir, 'checkout', '--detach', 'FETCH_HEAD'])
 
 const manifestPath = path.join(checkoutDir, 'Cargo.toml')
