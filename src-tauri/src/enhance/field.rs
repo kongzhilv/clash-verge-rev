@@ -2,6 +2,7 @@ mod diversion;
 mod diversion_builtin;
 mod diversion_managed;
 
+use clash_verge_logging::{Type, logging};
 use serde_yaml_ng::{Mapping, Value};
 use smartstring::alias::String;
 
@@ -50,6 +51,72 @@ pub fn use_lowercase_owned(config: Mapping) -> Mapping {
     lowercased
 }
 
+fn sanitize_removed_options(config: &mut Mapping) {
+    if config.remove("global-client-fingerprint").is_some() {
+        logging!(
+            warn,
+            Type::Config,
+            "removed unsupported global-client-fingerprint from generated Mihomo config"
+        );
+    }
+}
+
+fn secure_known_health_check_url(url: &str) -> Option<std::string::String> {
+    let trimmed = url.trim();
+    let lowercase = trimmed.to_ascii_lowercase();
+    let known_http_url = lowercase == "http://www.gstatic.com"
+        || lowercase.starts_with("http://www.gstatic.com/")
+        || lowercase == "http://cp.cloudflare.com"
+        || lowercase.starts_with("http://cp.cloudflare.com/");
+
+    known_http_url.then(|| format!("https://{}", &trimmed["http://".len()..]))
+}
+
+fn secure_mapping_url(mapping: &mut Mapping, key: &str) -> bool {
+    let Some(Value::String(url)) = mapping.get_mut(key) else {
+        return false;
+    };
+    let Some(secure_url) = secure_known_health_check_url(url) else {
+        return false;
+    };
+
+    *url = secure_url;
+    true
+}
+
+fn normalize_known_health_check_urls(config: &mut Mapping) {
+    let mut updated = 0usize;
+
+    if let Some(Value::Sequence(groups)) = config.get_mut("proxy-groups") {
+        for group in groups {
+            if let Some(group) = group.as_mapping_mut()
+                && secure_mapping_url(group, "url")
+            {
+                updated += 1;
+            }
+        }
+    }
+
+    if let Some(Value::Mapping(providers)) = config.get_mut("proxy-providers") {
+        for (_, provider) in providers.iter_mut() {
+            if let Some(provider) = provider.as_mapping_mut()
+                && let Some(Value::Mapping(health_check)) = provider.get_mut("health-check")
+                && secure_mapping_url(health_check, "url")
+            {
+                updated += 1;
+            }
+        }
+    }
+
+    if updated > 0 {
+        logging!(
+            info,
+            Type::Config,
+            "upgraded {updated} known health-check URL(s) from HTTP to HTTPS"
+        );
+    }
+}
+
 pub fn use_sort(mut config: Mapping) -> Mapping {
     // Normalize app-only Karing matcher types and merge built-in groups first,
     // so managed group names can also be captured for built-in-only configs.
@@ -57,6 +124,8 @@ pub fn use_sort(mut config: Mapping) -> Mapping {
     let managed_groups = diversion_managed::capture(&config);
     diversion::apply(&mut config);
     diversion_managed::cleanup(&mut config, managed_groups.as_ref());
+    sanitize_removed_options(&mut config);
+    normalize_known_health_check_urls(&mut config);
 
     let mut sorted = Mapping::new();
     HANDLE_FIELDS.into_iter().for_each(|key| {
@@ -218,5 +287,57 @@ x-karing-diversion:
                 .iter()
                 .any(|rule| rule.as_str() == Some("RULE-SET,remote-rules,DIRECT"))
         );
+    }
+
+    #[test]
+    fn removed_global_client_fingerprint_is_not_emitted() {
+        let sorted = use_sort(mapping("global-client-fingerprint: chrome"));
+        assert!(!sorted.contains_key("global-client-fingerprint"));
+    }
+
+    #[test]
+    fn known_http_health_checks_are_upgraded_to_https() {
+        let sorted = use_sort(mapping(
+            r"
+proxy-groups:
+  - name: Auto
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+  - name: Custom
+    type: url-test
+    url: http://example.com/generate_204
+proxy-providers:
+  provider:
+    type: http
+    url: https://example.com/subscription.yaml
+    health-check:
+      enable: true
+      url: http://cp.cloudflare.com/generate_204
+",
+        ));
+
+        let groups = sorted
+            .get("proxy-groups")
+            .and_then(Value::as_sequence)
+            .expect("groups should exist");
+        assert_eq!(
+            groups[0].get("url").and_then(Value::as_str),
+            Some("https://www.gstatic.com/generate_204")
+        );
+        assert_eq!(
+            groups[1].get("url").and_then(Value::as_str),
+            Some("http://example.com/generate_204")
+        );
+
+        let provider_url = sorted
+            .get("proxy-providers")
+            .and_then(Value::as_mapping)
+            .and_then(|providers| providers.get("provider"))
+            .and_then(Value::as_mapping)
+            .and_then(|provider| provider.get("health-check"))
+            .and_then(Value::as_mapping)
+            .and_then(|health_check| health_check.get("url"))
+            .and_then(Value::as_str);
+        assert_eq!(provider_url, Some("https://cp.cloudflare.com/generate_204"));
     }
 }
