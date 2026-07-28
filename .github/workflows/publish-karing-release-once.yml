@@ -15,7 +15,7 @@ permissions:
 
 env:
   RELEASE_TAG: v2.5.3-karing
-  REVIEWED_RUN_ID: '30195791681'
+  REVIEWED_RUN_ID: '30286428779'
 
 jobs:
   publish:
@@ -58,6 +58,11 @@ jobs:
           build_commit=$(awk -F': ' '$1 == "Commit" { print $2 }' release-assets/BUILD_INFO.txt)
           if ! [[ "$build_commit" =~ ^[0-9a-f]{40}$ ]]; then
             echo "[失败] BUILD_INFO.txt 中的构建提交无效：$build_commit"
+            exit 1
+          fi
+
+          if [ "$build_commit" != 'f43ba7e833befe24ba8f1a8e454cc04bf8079bfd' ]; then
+            echo "[失败] 构建提交不是最终审查通过的代码：$build_commit"
             exit 1
           fi
 
