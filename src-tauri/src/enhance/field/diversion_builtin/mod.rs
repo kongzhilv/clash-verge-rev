@@ -123,10 +123,7 @@ fn is_active_matcher(value: &Value) -> bool {
         .map(str::trim)
         .and_then(|raw| raw.split_once(':'))
         .is_some_and(|(kind, name)| {
-            matches!(
-                kind.trim().to_ascii_lowercase().as_str(),
-                "geosite" | "geoip" | "acl"
-            ) && !name.trim().is_empty()
+            matches!(kind.trim().to_ascii_lowercase().as_str(), "geosite" | "geoip" | "acl") && !name.trim().is_empty()
         })
 }
 
@@ -208,10 +205,7 @@ x-karing-diversion-builtins:
             .get(CONFIG_KEY)
             .and_then(Value::as_mapping)
             .expect("diversion config should be created");
-        assert_eq!(
-            diversion.get("enabled").and_then(Value::as_bool),
-            Some(true)
-        );
+        assert_eq!(diversion.get("enabled").and_then(Value::as_bool), Some(true));
 
         let groups = diversion
             .get("groups")
@@ -224,26 +218,14 @@ x-karing-diversion-builtins:
             .expect("matchers should exist");
 
         let geosite = matchers[0].as_mapping().expect("geosite matcher");
-        assert_eq!(
-            geosite.get("type").and_then(Value::as_str),
-            Some("GEOSITE")
-        );
-        assert_eq!(
-            geosite.get("value").and_then(Value::as_str),
-            Some("cn")
-        );
-        assert_eq!(
-            geosite.get("no-resolve").and_then(Value::as_bool),
-            Some(false)
-        );
+        assert_eq!(geosite.get("type").and_then(Value::as_str), Some("GEOSITE"));
+        assert_eq!(geosite.get("value").and_then(Value::as_str), Some("cn"));
+        assert_eq!(geosite.get("no-resolve").and_then(Value::as_bool), Some(false));
 
         let geoip = matchers[1].as_mapping().expect("geoip matcher");
         assert_eq!(geoip.get("type").and_then(Value::as_str), Some("GEOIP"));
         assert_eq!(geoip.get("value").and_then(Value::as_str), Some("CN"));
-        assert_eq!(
-            geoip.get("no-resolve").and_then(Value::as_bool),
-            Some(true)
-        );
+        assert_eq!(geoip.get("no-resolve").and_then(Value::as_bool), Some(true));
     }
 
     #[test]
@@ -270,15 +252,9 @@ x-karing-diversion-builtins:
             .get(CONFIG_KEY)
             .and_then(Value::as_mapping)
             .expect("diversion config should remain available");
+        assert_eq!(diversion.get("enabled").and_then(Value::as_bool), Some(false));
         assert_eq!(
-            diversion.get("enabled").and_then(Value::as_bool),
-            Some(false)
-        );
-        assert_eq!(
-            diversion
-                .get("groups")
-                .and_then(Value::as_sequence)
-                .map(Sequence::len),
+            diversion.get("groups").and_then(Value::as_sequence).map(Sequence::len),
             Some(1)
         );
     }
