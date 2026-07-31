@@ -12,6 +12,12 @@ on:
 permissions:
   actions: read
   contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: karing-release-v2.5.3
+  cancel-in-progress: true
 
 env:
   RELEASE_TAG: v2.5.3-karing
@@ -147,3 +153,52 @@ jobs:
           echo '[通过] 正式 Release 已创建并包含 14 个资产'
           jq '{url, tagName, targetCommitish, isDraft, isPrerelease, assets: [.assets[].name]}' \
             <<< "$release_json"
+
+  report:
+    name: 将正式发行结果回报到 PR
+    if: ${{ always() }}
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: 写入或更新 PR #1 发行状态
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker='<!-- karing-release-once-status -->'
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+
+          if [ "$PUBLISH_RESULT" = 'success' ]; then
+            status='✅ 正式发行成功'
+            detail="Release: ${release_url}"
+          else
+            status="❌ 正式发行失败（${PUBLISH_RESULT}）"
+            detail='请查看运行日志中的首个失败步骤。'
+          fi
+
+          body=$(cat <<EOF
+          ${marker}
+          ## Karing 正式发行状态
+
+          ${status}
+
+          - 构建提交：`${EXPECTED_BUILD_COMMIT}`
+          - 已审查运行：`${REVIEWED_RUN_ID}`
+          - 发行标签：`${RELEASE_TAG}`
+          - Action：${run_url}
+          - ${detail}
+          EOF
+          )
+
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/issues/1/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | head -n 1)
+
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" \
+              -f body="$body" >/dev/null
+          else
+            gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body "$body"
+          fi
