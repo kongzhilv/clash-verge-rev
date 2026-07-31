@@ -15,65 +15,94 @@ permissions:
 
 env:
   RELEASE_TAG: v2.5.3-karing
-  REVIEWED_RUN_ID: '30286428779'
+  RELEASE_VERSION: 2.5.3
+  REVIEWED_RUN_ID: '30607375051'
+  EXPECTED_BUILD_COMMIT: 5f04c014b439e995da510843fdc59a6458bb2f8c
 
 jobs:
   publish:
-    name: 下载已审查产物并发布正式版本
+    name: 汇总已审查安装包并发布正式版本
     runs-on: ubuntu-latest
     steps:
-      - name: 下载已通过审查的完整发行资产
+      - name: 下载已通过审查的全部平台产物
         uses: actions/download-artifact@v8
         with:
-          name: karing-release-assets
-          path: release-assets
+          pattern: karing-*
+          path: downloaded-assets
+          merge-multiple: true
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ env.REVIEWED_RUN_ID }}
 
-      - name: 复核安装包、校验和与构建信息
+      - name: 汇总并复核 12 个安装文件
         id: verify
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          test -f release-assets/SHA256SUMS.txt
-          test -f release-assets/BUILD_INFO.txt
-          test -f release-assets/release-notes.md
+          mkdir -p release-assets
+          find downloaded-assets -type f \
+            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
+            -exec cp '{}' release-assets/ \;
 
           installer_count=$(find release-assets -maxdepth 1 -type f \
             \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
             | wc -l)
           if [ "$installer_count" -ne 12 ]; then
-            echo "[失败] 应有 12 个安装包，实际为 $installer_count 个"
-            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            echo "[失败] 应有 12 个安装文件，实际为 $installer_count 个"
+            find downloaded-assets -type f -printf '%P\n' | sort
             exit 1
           fi
+
+          gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_BUILD_COMMIT" >/dev/null
 
           (
             cd release-assets
+            sha256sum *.exe *.dmg *.deb *.rpm 2>/dev/null | sort -k2 > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
 
-          build_commit=$(awk -F': ' '$1 == "Commit" { print $2 }' release-assets/BUILD_INFO.txt)
-          if ! [[ "$build_commit" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "[失败] BUILD_INFO.txt 中的构建提交无效：$build_commit"
-            exit 1
-          fi
+          cat > release-assets/BUILD_INFO.txt <<EOF
+          Repository: ${GITHUB_REPOSITORY}
+          Reviewed run: ${REVIEWED_RUN_ID}
+          Commit: ${EXPECTED_BUILD_COMMIT}
+          Version: ${RELEASE_VERSION}
+          Release tag: ${RELEASE_TAG}
+          Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
+          Signing: unsigned fork build; no upstream Apple notarization or updater signature
+          Android: intentionally not included
+          EOF
 
-          if [ "$build_commit" != 'f43ba7e833befe24ba8f1a8e454cc04bf8079bfd' ]; then
-            echo "[失败] 构建提交不是最终审查通过的代码：$build_commit"
-            exit 1
-          fi
+          cat > release-assets/release-notes.md <<EOF
+          # Clash Verge Rev Karing v${RELEASE_VERSION}
 
-          gh api "repos/$GITHUB_REPOSITORY/commits/$build_commit" >/dev/null
-          echo "build_commit=$build_commit" >> "$GITHUB_OUTPUT"
+          本桌面发行版在 Clash Verge Rev / Mihomo 配置链上融合了 Karing 风格分流交互，并完成以下功能：
 
-          echo '[通过] 12 个安装包及 SHA256 校验全部有效'
-          echo "[通过] 构建提交：$build_commit"
+          - 点击规则行弹出出口选择器，可选无、当前选择、自动选择、直连、拦截及现有策略组
+          - 新建规则组时可选空白组、常用模板或复制现有规则组
+          - 添加匹配条件时先选择域名、IP、进程、端口、Rule Set 等类型，再选择常用值
+          - 连接详情可显示域名、IP、端口、进程名和进程路径，并直接向规则组添加或删除条件
+          - 修改规则后复用 Merge 校验、回滚与运行时热加载；活动连接会关闭并在下次连接时重新匹配
+          - 清理已移除的 Mihomo 全局指纹字段，并将常见健康检查地址升级为 HTTPS
+          - 修复核心停止时代理模式保存、全局关闭优先级及旧地区预设重复问题
+
+          ## 安装包
+          - Windows x64 与 ARM64
+          - Windows x64 与 ARM64 固定 WebView2 版本
+          - macOS Apple Silicon 与 Intel
+          - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
+
+          Android 不在本次发行范围内。本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
+
+          Reviewed run: ${REVIEWED_RUN_ID}
+          Commit: ${EXPECTED_BUILD_COMMIT}
+          EOF
+
+          echo "build_commit=$EXPECTED_BUILD_COMMIT" >> "$GITHUB_OUTPUT"
+          echo '[通过] 12 个安装文件及 SHA256 校验全部有效'
           find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: 创建并发布正式 Latest 版本
         shell: bash
@@ -96,17 +125,25 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "$repo" \
             --target "${{ steps.verify.outputs.build_commit }}" \
-            --title 'Clash Verge Rev Karing v2.5.3' \
+            --title "Clash Verge Rev Karing v${RELEASE_VERSION}" \
             --notes-file release-assets/release-notes.md \
             --latest
 
-          asset_count=$(gh release view "$RELEASE_TAG" --repo "$repo" --json assets --jq '.assets | length')
+          release_json=$(gh release view "$RELEASE_TAG" --repo "$repo" \
+            --json url,tagName,isDraft,isPrerelease,assets,targetCommitish)
+          asset_count=$(jq '.assets | length' <<< "$release_json")
           if [ "$asset_count" -ne 14 ]; then
             echo "[失败] Release 应上传 14 个资产，实际为 $asset_count 个"
-            gh release view "$RELEASE_TAG" --repo "$repo" --json assets --jq '.assets[].name'
+            jq -r '.assets[].name' <<< "$release_json"
             exit 1
           fi
 
-          gh release view "$RELEASE_TAG" --repo "$repo" \
-            --json url,tagName,isDraft,isPrerelease,assets \
-            --jq '{url, tagName, isDraft, isPrerelease, assets: [.assets[].name]}'
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$EXPECTED_BUILD_COMMIT" \
+            '.tagName == $tag and .isDraft == false and .isPrerelease == false and .targetCommitish == $commit' \
+            <<< "$release_json" >/dev/null
+
+          echo '[通过] 正式 Release 已创建并包含 14 个资产'
+          jq '{url, tagName, targetCommitish, isDraft, isPrerelease, assets: [.assets[].name]}' \
+            <<< "$release_json"
