@@ -147,9 +147,7 @@ export const SimplePanel = ({
   onOpenAdvanced,
 }: SimplePanelProps) => {
   const hideUnused = config['hide-unused-groups']
-  const region = config['auto-country-rules']
-    ? config['country-or-region']
-    : ''
+  const region = config['auto-country-rules'] ? config['country-or-region'] : ''
   const visibleBuiltins = hideUnused
     ? builtinGroups.filter(
         (group) =>
@@ -158,9 +156,7 @@ export const SimplePanel = ({
       )
     : builtinGroups
   const visibleCustomGroups = hideUnused
-    ? config.groups.filter(
-        (group) => group.enabled && group.action !== 'none',
-      )
+    ? config.groups.filter((group) => group.enabled && group.action !== 'none')
     : config.groups
 
   const updateBuiltin = (id: string, action: Action, policy?: string) => {
