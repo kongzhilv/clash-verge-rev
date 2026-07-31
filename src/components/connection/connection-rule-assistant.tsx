@@ -232,9 +232,8 @@ export const ConnectionRuleAssistant = ({
 
   useEffect(() => {
     if (!open) return
-    setSelectedId(candidates[0]?.id ?? '')
     void loadProfile()
-  }, [candidates, loadProfile, open])
+  }, [loadProfile, open])
 
   const saveConfig = useCallback(
     async (nextConfig: DiversionConfig, groupId: string) => {
