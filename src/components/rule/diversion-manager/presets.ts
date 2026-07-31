@@ -18,7 +18,8 @@ export interface BuiltinGroup {
   name: string
   description?: string
   enabled: boolean
-  action: SimpleAction
+  action: Action
+  policy?: string
   rules: string[]
 }
 
@@ -49,7 +50,7 @@ const PRESETS: BuiltinPreset[] = [
     id: 'builtin-ads-reject',
     presetId: 'ads-reject',
     name: '广告拦截',
-    description: '使用 GeoSite 广告分类直接拦截常见广告请求。',
+    description: '直接拦截常见广告请求。',
     enabled: false,
     action: 'reject',
     rules: ['geosite:category-ads-all'],
@@ -68,12 +69,15 @@ const PRESETS: BuiltinPreset[] = [
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
-const normalizeAction = (value: unknown): SimpleAction => {
+const normalizeAction = (value: unknown): Action => {
   switch (value) {
     case 'none':
+    case 'current':
     case 'auto-select':
     case 'direct':
     case 'reject':
+    case 'reject-drop':
+    case 'policy':
       return value
     default:
       return 'current'
@@ -123,6 +127,8 @@ export const normalizeBuiltinGroups = (value: unknown): BuiltinGroup[] => {
           description: preset?.description,
           enabled: group.enabled !== false,
           action: normalizeAction(group.action),
+          policy:
+            typeof group.policy === 'string' ? group.policy.trim() : undefined,
           rules,
         }
       })
@@ -134,9 +140,9 @@ export const normalizeBuiltinGroups = (value: unknown): BuiltinGroup[] => {
 
   return [
     ...normalized,
-    ...PRESETS.filter(
-      (preset) => !existingPresetIds.has(preset.presetId),
-    ).map(clonePreset),
+    ...PRESETS.filter((preset) => !existingPresetIds.has(preset.presetId)).map(
+      clonePreset,
+    ),
   ]
 }
 
@@ -147,6 +153,9 @@ export const serializeBuiltinGroups = (groups: BuiltinGroup[]) =>
     enabled: group.enabled,
     logic: 'or',
     action: group.action,
+    ...(group.action === 'policy' && group.policy?.trim()
+      ? { policy: group.policy.trim() }
+      : {}),
     matchers: group.rules
       .map((value) => value.trim())
       .filter(Boolean)
@@ -157,16 +166,18 @@ export const serializeBuiltinGroups = (groups: BuiltinGroup[]) =>
       })),
   }))
 
-export const getBuiltinAction = (group: BuiltinGroup): SimpleAction =>
+export const getBuiltinAction = (group: BuiltinGroup): Action =>
   group.enabled ? group.action : 'none'
 
 export const withBuiltinAction = (
   group: BuiltinGroup,
-  action: SimpleAction,
+  action: Action,
+  policy?: string,
 ): BuiltinGroup => ({
   ...group,
   enabled: action !== 'none',
   action,
+  policy: action === 'policy' ? policy : undefined,
 })
 
 export const isSimpleAction = (action: Action): action is SimpleAction =>
