@@ -32,7 +32,6 @@ pub fn init_work_dir_and_logger() -> anyhow::Result<()> {
     AsyncHandler::block_on(async {
         init_work_config().await;
         logging!(info, Type::Setup, "Initializing logger");
-        // #[cfg(not(feature = "tokio-trace"))]
         Logger::global().init().await?;
         Ok(())
     })
@@ -66,8 +65,7 @@ pub fn resolve_setup_async() {
         let core_init = AsyncHandler::spawn(|| async {
             init_service_manager().await;
             init_core_manager().await;
-            init_system_proxy().await;
-            init_system_proxy_guard().await;
+            reset_system_proxy_on_startup().await;
         });
 
         let _ = futures::join!(
@@ -125,7 +123,6 @@ pub(super) async fn init_timer() {
 }
 
 pub(super) async fn init_hotkey() {
-    // if hotkey is not use by global, skip init it
     let skip_register_hotkeys = !Config::verge().await.latest_arc().enable_global_hotkey.unwrap_or(true);
     logging_error!(Type::Setup, Hotkey::global().init(skip_register_hotkeys).await);
 }
@@ -146,16 +143,11 @@ async fn init_silent_updater() {
 
     let app_handle = Handle::app_handle();
 
-    // Check for cached update and attempt install before main app initialization.
-    // If install succeeds:
-    //   - Windows: NSIS takes over and the process exits automatically
-    //   - macOS/Linux: binary is replaced, we restart the app
     if SilentUpdater::global().try_install_on_startup(app_handle).await {
         logging!(info, Type::Setup, "Update installed at startup, restarting...");
         app_handle.restart();
     }
 
-    // No pending install — start background check/download loop
     let app_handle = app_handle.clone();
     tokio::spawn(async move {
         SilentUpdater::global().start_background_check(app_handle).await;
@@ -199,12 +191,13 @@ pub(super) async fn init_core_manager() {
     logging_error!(Type::Setup, CoreManager::global().init().await);
 }
 
-pub(super) async fn init_system_proxy() {
-    logging_error!(Type::Setup, sysopt::Sysopt::global().update_sysproxy().await);
-}
-
-pub(super) async fn init_system_proxy_guard() {
-    sysopt::Sysopt::global().refresh_guard().await;
+pub(super) async fn reset_system_proxy_on_startup() {
+    logging!(
+        info,
+        Type::Setup,
+        "application startup keeps the master proxy switch off and clears active system proxy state"
+    );
+    logging_error!(Type::Setup, sysopt::Sysopt::global().reset_sysproxy().await);
 }
 
 pub(super) async fn refresh_tray_menu() {
