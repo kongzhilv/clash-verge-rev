@@ -28,7 +28,13 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { useNavigate } from 'react-router'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
@@ -72,11 +78,16 @@ const cleanHost = (raw: string) => {
   if (!value) return ''
   try {
     const withScheme = value.includes('://') ? value : `https://${value}`
-    return new URL(withScheme).hostname.replace(/^\[|\]$/g, '').replace(/\.$/, '')
+    return new URL(withScheme).hostname
+      .replace(/^\[|\]$/g, '')
+      .replace(/\.$/, '')
   } catch {
     return value.replace(/^\[|\]$/g, '').replace(/\.$/, '')
   }
 }
+
+const isIpLiteral = (value: string) =>
+  /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) || value.includes(':')
 
 const processNameFrom = (process: string, processPath: string) => {
   const source = process.trim() || processPath.trim()
@@ -102,13 +113,9 @@ const candidateKey = (type: MatcherType, value: string) => {
   return `${type}:${trimmed}`
 }
 
-const matcherMatches = (
-  matcher: DiversionMatcher,
-  candidate: RuleCandidate,
-) =>
-  matcher.enabled &&
+const matcherMatches = (matcher: DiversionMatcher, candidate: RuleCandidate) =>
   candidateKey(matcher.type, matcher.value) ===
-    candidateKey(candidate.type, candidate.value)
+  candidateKey(candidate.type, candidate.value)
 
 const matcherForCandidate = (candidate: RuleCandidate): DiversionMatcher => ({
   id: crypto.randomUUID(),
@@ -130,7 +137,7 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
   const metadata = connection.metadata
   const host = cleanHost(metadata.host ?? '')
   const destinationIP = ipCidr(
-    metadata.destinationIP ?? metadata.remoteDestination ?? '',
+    metadata.destinationIP || metadata.remoteDestination || '',
   )
   const destinationPort = String(metadata.destinationPort ?? '').trim()
   const processPath = String(metadata.processPath ?? '').trim()
@@ -140,7 +147,7 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
   )
 
   const candidates: RuleCandidate[] = []
-  if (host) {
+  if (host && !isIpLiteral(host)) {
     candidates.push({
       id: candidateKey('DOMAIN', host),
       label: '完整域名',
@@ -269,24 +276,28 @@ export const ConnectionRuleAssistant = ({
 
   const addToGroup = async (group: DiversionGroup) => {
     if (!snapshot || !selectedCandidate) return
-    if (group.matchers.some((matcher) => matcherMatches(matcher, selectedCandidate))) {
-      return
-    }
 
-    const groups = snapshot.config.groups.map((item) =>
-      item.id === group.id
-        ? {
-            ...item,
-            enabled: true,
-            action: item.action === 'none' ? ('current' as const) : item.action,
-            matchers: [...item.matchers, matcherForCandidate(selectedCandidate)],
-          }
-        : item,
-    )
-    await saveConfig(
-      { ...snapshot.config, enabled: true, groups },
-      group.id,
-    )
+    const groups = snapshot.config.groups.map((item) => {
+      if (item.id !== group.id) return item
+      const existing = item.matchers.some((matcher) =>
+        matcherMatches(matcher, selectedCandidate),
+      )
+      const matchers = existing
+        ? item.matchers.map((matcher) =>
+            matcherMatches(matcher, selectedCandidate)
+              ? { ...matcher, enabled: true }
+              : matcher,
+          )
+        : [...item.matchers, matcherForCandidate(selectedCandidate)]
+
+      return {
+        ...item,
+        enabled: true,
+        action: item.action === 'none' ? ('current' as const) : item.action,
+        matchers,
+      }
+    })
+    await saveConfig({ ...snapshot.config, enabled: true, groups }, group.id)
   }
 
   const removeFromGroup = async (group: DiversionGroup) => {
@@ -352,13 +363,25 @@ export const ConnectionRuleAssistant = ({
                   connection.metadata.remoteDestination ||
                   '未知目标'}
               </Typography>
-              <Stack direction="row" spacing={0.75} sx={{ mt: 1, flexWrap: 'wrap' }}>
-                {connection.rule && <Chip size="small" label={`规则：${connection.rule}`} />}
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{ mt: 1, flexWrap: 'wrap' }}
+              >
+                {connection.rule && (
+                  <Chip size="small" label={`规则：${connection.rule}`} />
+                )}
                 {connection.rulePayload && (
-                  <Chip size="small" label={`内容：${connection.rulePayload}`} />
+                  <Chip
+                    size="small"
+                    label={`内容：${connection.rulePayload}`}
+                  />
                 )}
                 {connection.chains.length > 0 && (
-                  <Chip size="small" label={`出口：${[...connection.chains].reverse().join(' / ')}`} />
+                  <Chip
+                    size="small"
+                    label={`出口：${[...connection.chains].reverse().join(' / ')}`}
+                  />
                 )}
               </Stack>
             </Box>
@@ -375,7 +398,13 @@ export const ConnectionRuleAssistant = ({
         <Divider />
 
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ minHeight: 360 }}>
-          <Box sx={{ width: { md: 300 }, borderRight: { md: 1 }, borderColor: 'divider' }}>
+          <Box
+            sx={{
+              width: { md: 300 },
+              borderRight: { md: 1 },
+              borderColor: 'divider',
+            }}
+          >
             <Typography variant="subtitle2" sx={{ px: 2, pt: 2 }}>
               选择要作为规则的内容
             </Typography>
@@ -390,7 +419,9 @@ export const ConnectionRuleAssistant = ({
                   <ListItemText
                     primary={candidate.label}
                     secondary={candidate.value}
-                    slotProps={{ secondary: { sx: { wordBreak: 'break-all' } } }}
+                    slotProps={{
+                      secondary: { sx: { wordBreak: 'break-all' } },
+                    }}
                   />
                   <ChevronRightRounded color="disabled" />
                 </ListItemButton>
@@ -428,7 +459,9 @@ export const ConnectionRuleAssistant = ({
                 variant="contained"
                 startIcon={<AddRounded />}
                 onClick={() => void createGroup()}
-                disabled={!selectedCandidate || loading || savingGroupId !== null}
+                disabled={
+                  !selectedCandidate || loading || savingGroupId !== null
+                }
               >
                 新建规则组
               </Button>
@@ -448,8 +481,10 @@ export const ConnectionRuleAssistant = ({
                 {snapshot.config.groups.map((group) => {
                   const included = Boolean(
                     selectedCandidate &&
-                      group.matchers.some((matcher) =>
-                        matcherMatches(matcher, selectedCandidate),
+                      group.matchers.some(
+                        (matcher) =>
+                          matcher.enabled &&
+                          matcherMatches(matcher, selectedCandidate),
                       ),
                   )
                   const busy = savingGroupId === group.id
