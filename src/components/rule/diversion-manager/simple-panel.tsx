@@ -22,7 +22,8 @@ import {
 } from '@mui/material'
 import { useState, type ReactNode } from 'react'
 
-import ActionPicker, { actionLabel } from './action-picker'
+import { actionLabel } from './action-label'
+import ActionPicker from './action-picker'
 import type { Action, DiversionConfig, DiversionGroup } from './model'
 import {
   getBuiltinAction,
