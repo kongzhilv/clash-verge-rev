@@ -95,7 +95,10 @@ export const ConnectionRowItem = memo(
           <div style={primaryStyle}>{row.host}</div>
           <div style={tagsStyle}>
             {row.process && (
-              <span style={programTagStyle} title={row.processPath || row.process}>
+              <span
+                style={programTagStyle}
+                title={row.processPath || row.process}
+              >
                 <AppsRounded sx={{ fontSize: 12 }} />
                 程序：{row.process}
               </span>
