@@ -23,10 +23,10 @@ import { useCallback, useMemo, useState } from 'react'
 import { readProfileFile, saveProfileFile } from '@/services/cmds'
 import { showNotice } from '@/services/notice-service'
 
+import GroupCreateDialog from './group-create-dialog'
 import GroupEditor from './group-editor'
 import {
   defaultConfig,
-  makeGroup,
   type DiversionConfig,
   type DiversionGroup,
   type UnknownRecord,
@@ -46,6 +46,7 @@ export const DiversionManager = () => {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [mergeConfig, setMergeConfig] = useState<UnknownRecord>({})
   const [config, setConfig] = useState<DiversionConfig>(defaultConfig)
   const [builtinGroups, setBuiltinGroups] = useState<BuiltinGroup[]>([])
@@ -123,6 +124,14 @@ export const DiversionManager = () => {
     }))
   }
 
+  const appendGroup = (group: DiversionGroup) => {
+    setConfig((previous) => ({
+      ...previous,
+      enabled: true,
+      groups: [...previous.groups, group],
+    }))
+  }
+
   const save = useCallback(async () => {
     setSaving(true)
     try {
@@ -178,8 +187,8 @@ export const DiversionManager = () => {
                 noWrap
               >
                 {advancedMode
-                  ? '编辑规则内容、顺序、OR/AND 和指定策略组'
-                  : `已启用 ${enabledGroupCount} 个规则组，只需选择流量处理方式`}
+                  ? '编辑规则内容、顺序和出口选择'
+                  : `已启用 ${enabledGroupCount} 个规则组，点击规则即可选择出口`}
               </Typography>
             </Box>
             <Button
@@ -215,7 +224,7 @@ export const DiversionManager = () => {
             <Stack spacing={2}>
               <Alert severity="warning">
                 高级编辑会直接改变最终 Mihomo
-                规则。普通使用只需返回“简单模式”选择当前选择、自动选择、直连或拦截。
+                规则。普通使用只需返回“简单模式”，点击规则选择出口。
               </Alert>
               <SettingsPanel config={config} onChange={updateConfig} />
 
@@ -242,19 +251,18 @@ export const DiversionManager = () => {
                   </Box>
                   <Button
                     startIcon={<AddRounded />}
-                    onClick={() =>
-                      setConfig((previous) => ({
-                        ...previous,
-                        groups: [
-                          ...previous.groups,
-                          makeGroup(previous.groups.length),
-                        ],
-                      }))
-                    }
+                    onClick={() => setCreateDialogOpen(true)}
                   >
                     新建分流组
                   </Button>
                 </Stack>
+
+                <GroupCreateDialog
+                  open={createDialogOpen}
+                  existingGroups={config.groups}
+                  onClose={() => setCreateDialogOpen(false)}
+                  onCreate={appendGroup}
+                />
 
                 {config.groups.length === 0 ? (
                   <Box
@@ -268,7 +276,7 @@ export const DiversionManager = () => {
                     }}
                   >
                     <Typography sx={{ color: 'text.secondary' }}>
-                      还没有自定义分流组
+                      还没有自定义分流组，点击“新建分流组”选择空白组或常用模板。
                     </Typography>
                   </Box>
                 ) : (
