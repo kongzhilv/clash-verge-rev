@@ -113,10 +113,15 @@ jobs:
       - name: 创建并发布正式 Latest 版本
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
+
+          if [ -z "$GH_TOKEN" ]; then
+            echo '[失败] 未读取到仓库 Secret：RELEASE_TOKEN'
+            exit 1
+          fi
 
           if gh release view "$RELEASE_TAG" --repo "$repo" >/dev/null 2>&1; then
             gh release delete "$RELEASE_TAG" --repo "$repo" --yes --cleanup-tag
