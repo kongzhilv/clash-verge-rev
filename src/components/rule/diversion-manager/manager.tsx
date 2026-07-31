@@ -214,7 +214,8 @@ export const DiversionManager = () => {
           ) : advancedMode ? (
             <Stack spacing={2}>
               <Alert severity="warning">
-                高级编辑会直接改变最终 Mihomo 规则。普通使用只需返回“简单模式”选择当前选择、自动选择、直连或拦截。
+                高级编辑会直接改变最终 Mihomo
+                规则。普通使用只需返回“简单模式”选择当前选择、自动选择、直连或拦截。
               </Alert>
               <SettingsPanel config={config} onChange={updateConfig} />
 
