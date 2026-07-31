@@ -169,3 +169,16 @@ export const withBuiltinAction = (
   action,
   policy: action === 'policy' ? policy : undefined,
 })
+
+export const validateBuiltinGroups = (groups: BuiltinGroup[]) => {
+  for (const group of groups) {
+    if (!group.enabled || group.action === 'none') continue
+    if (group.action === 'policy' && !group.policy?.trim()) {
+      return `规则组“${group.name}”还没有选择策略组或节点`
+    }
+    if (!group.rules.some((rule) => rule.trim())) {
+      return `规则组“${group.name}”没有可用规则`
+    }
+  }
+  return null
+}
