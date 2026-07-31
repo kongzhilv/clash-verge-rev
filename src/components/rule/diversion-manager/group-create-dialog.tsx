@@ -20,6 +20,7 @@ import {
   ListItemText,
   ListSubheader,
 } from '@mui/material'
+import type { ReactNode } from 'react'
 
 import { createMatcherForType } from './matcher-catalog'
 import type { Action, DiversionGroup, DiversionMatcher } from './model'
@@ -37,7 +38,7 @@ interface GroupTemplate {
   description: string
   action: Action
   matchers: DiversionMatcher[]
-  icon: React.ReactNode
+  icon: ReactNode
 }
 
 const builtInMatcher = (value: string): DiversionMatcher => ({
