@@ -23,7 +23,13 @@ import {
 } from '@mui/material'
 import { useLockFn } from 'ahooks'
 import dayjs from 'dayjs'
-import { useCallback, useImperativeHandle, useState, type Ref } from 'react'
+import {
+  useCallback,
+  useImperativeHandle,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
@@ -114,7 +120,7 @@ interface InnerProps {
 interface InformationItem {
   label: string
   value: string
-  icon: React.ReactNode
+  icon: ReactNode
 }
 
 const InnerConnectionDetail = ({
@@ -133,7 +139,10 @@ const InnerConnectionDetail = ({
   const host = `${hostAddress}:${metadata.destinationPort}`
   const destination = metadata.destinationIP || metadata.remoteDestination
   const processPath = String(metadata.processPath ?? '').trim()
-  const processName = processNameFrom(String(metadata.process ?? ''), processPath)
+  const processName = processNameFrom(
+    String(metadata.process ?? ''),
+    processPath,
+  )
   const hasProcess = Boolean(processName || processPath)
 
   const information: InformationItem[] = [
@@ -177,7 +186,7 @@ const InnerConnectionDetail = ({
   const onDelete = useLockFn(async () => closeConnection(data.id))
 
   return (
-    <Stack sx={{ minHeight: '100%', color: 'text.primary' }}>
+    <Stack sx={{ minHeight: '100%', color: theme.palette.text.primary }}>
       <Stack
         direction="row"
         spacing={1}
@@ -224,7 +233,11 @@ const InnerConnectionDetail = ({
         </Stack>
 
         <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
+          <Stack
+            direction="row"
+            spacing={1.25}
+            sx={{ alignItems: 'flex-start' }}
+          >
             <Box
               sx={{
                 width: 38,
