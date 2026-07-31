@@ -185,9 +185,9 @@ jobs:
 
           ${status}
 
-          - 构建提交：`${EXPECTED_BUILD_COMMIT}`
-          - 已审查运行：`${REVIEWED_RUN_ID}`
-          - 发行标签：`${RELEASE_TAG}`
+          - 构建提交：${EXPECTED_BUILD_COMMIT}
+          - 已审查运行：${REVIEWED_RUN_ID}
+          - 发行标签：${RELEASE_TAG}
           - Action：${run_url}
           - ${detail}
           EOF
