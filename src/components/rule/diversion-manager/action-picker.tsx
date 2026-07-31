@@ -27,7 +27,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 
 import { useProxiesData } from '@/providers/app-data-context'
 
@@ -98,14 +98,6 @@ const supportedPolicyType = (value: unknown) => {
   ].includes(normalized)
 }
 
-export const actionLabel = (action: Action, policy?: string) => {
-  if (action === 'policy') return policy ? `指定策略：${policy}` : '指定策略组'
-  if (action === 'reject-drop') return '静默拦截'
-  return (
-    BASE_ACTIONS.find((option) => option.action === action)?.label ?? action
-  )
-}
-
 export const ActionPicker = ({
   open,
   title,
@@ -118,13 +110,7 @@ export const ActionPicker = ({
 }: ActionPickerProps) => {
   const { proxies } = useProxiesData()
   const [search, setSearch] = useState('')
-  const [manualPolicy, setManualPolicy] = useState(policy ?? '')
-
-  useEffect(() => {
-    if (!open) return
-    setSearch('')
-    setManualPolicy(policy ?? '')
-  }, [open, policy])
+  const [manualPolicy, setManualPolicy] = useState('')
 
   const policyGroups = useMemo(() => {
     const groups = Array.isArray(proxies?.groups) ? proxies.groups : []
@@ -144,9 +130,15 @@ export const ActionPicker = ({
     return policyGroups.filter((name) => name.toLowerCase().includes(keyword))
   }, [policyGroups, search])
 
+  const resetAndClose = () => {
+    setSearch('')
+    setManualPolicy('')
+    onClose()
+  }
+
   const choose = (nextAction: Action, nextPolicy?: string) => {
     onSelect(nextAction, nextAction === 'policy' ? nextPolicy : undefined)
-    onClose()
+    resetAndClose()
   }
 
   const actions = BASE_ACTIONS.filter(
@@ -154,7 +146,7 @@ export const ActionPicker = ({
   )
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={resetAndClose} fullWidth maxWidth="sm">
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ p: 0 }}>
         <List disablePadding>
@@ -277,6 +269,7 @@ export const ActionPicker = ({
               size="small"
               label="手动输入策略组或节点名称"
               value={manualPolicy}
+              placeholder={policy ?? ''}
               onChange={(event) => setManualPolicy(event.target.value)}
             />
             <Button
@@ -290,7 +283,7 @@ export const ActionPicker = ({
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>取消</Button>
+        <Button onClick={resetAndClose}>取消</Button>
       </DialogActions>
     </Dialog>
   )
