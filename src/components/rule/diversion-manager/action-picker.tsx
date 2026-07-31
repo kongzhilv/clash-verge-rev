@@ -101,7 +101,9 @@ const supportedPolicyType = (value: unknown) => {
 export const actionLabel = (action: Action, policy?: string) => {
   if (action === 'policy') return policy ? `指定策略：${policy}` : '指定策略组'
   if (action === 'reject-drop') return '静默拦截'
-  return BASE_ACTIONS.find((option) => option.action === action)?.label ?? action
+  return (
+    BASE_ACTIONS.find((option) => option.action === action)?.label ?? action
+  )
 }
 
 export const ActionPicker = ({
@@ -198,7 +200,11 @@ export const ActionPicker = ({
         <Divider />
 
         <Box sx={{ p: 2 }}>
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', mb: 1 }}
+          >
             <AccountTreeRounded color="action" />
             <Box>
               <Typography sx={{ fontWeight: 700 }}>现有策略组</Typography>
@@ -261,7 +267,11 @@ export const ActionPicker = ({
             </Typography>
           )}
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1 }}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            sx={{ mt: 1 }}
+          >
             <TextField
               fullWidth
               size="small"
