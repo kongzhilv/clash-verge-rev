@@ -139,7 +139,7 @@ impl CoreManager {
         self.config_update_in_progress.store(false, Ordering::Release);
     }
 
-    pub async fn init(&self) -> Result<()> {
+    pub fn init(&self) -> Result<()> {
         self.set_running_mode(RunningMode::NotRunning);
         logging!(
             info,
