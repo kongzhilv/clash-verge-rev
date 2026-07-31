@@ -36,6 +36,7 @@ import {
   normalizeBuiltinGroups,
   serializeBuiltinGroups,
   type BuiltinGroup,
+  validateBuiltinGroups,
   withBuiltinAction,
 } from './presets'
 import { parseDiversionProfile, serializeDiversionProfile } from './serializer'
@@ -135,6 +136,9 @@ export const DiversionManager = () => {
   const save = useCallback(async () => {
     setSaving(true)
     try {
+      const builtinError = validateBuiltinGroups(builtinGroups)
+      if (builtinError) throw new Error(builtinError)
+
       const mergeWithBuiltins: UnknownRecord = {
         ...mergeConfig,
         [BUILTIN_KEY]: serializeBuiltinGroups(builtinGroups),
