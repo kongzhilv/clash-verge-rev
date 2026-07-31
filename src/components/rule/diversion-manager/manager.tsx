@@ -36,6 +36,7 @@ import {
   normalizeBuiltinGroups,
   serializeBuiltinGroups,
   type BuiltinGroup,
+  withBuiltinAction,
 } from './presets'
 import { parseDiversionProfile, serializeDiversionProfile } from './serializer'
 import SettingsPanel from './settings-panel'
@@ -64,9 +65,23 @@ export const DiversionManager = () => {
     try {
       const content = await readProfileFile('Merge')
       const parsed = parseDiversionProfile(content)
+      const normalizedBuiltins = normalizeBuiltinGroups(
+        parsed.mergeConfig[BUILTIN_KEY],
+      )
+      const region = parsed.config['auto-country-rules']
+        ? parsed.config['country-or-region']
+        : ''
+      const deduplicatedBuiltins = region
+        ? normalizedBuiltins.map((group) =>
+            group.presetId === `${region}-direct`
+              ? withBuiltinAction(group, 'none')
+              : group,
+          )
+        : normalizedBuiltins
+
       setMergeConfig(parsed.mergeConfig)
       setConfig(parsed.config)
-      setBuiltinGroups(normalizeBuiltinGroups(parsed.mergeConfig[BUILTIN_KEY]))
+      setBuiltinGroups(deduplicatedBuiltins)
     } catch (error) {
       showNotice.error(error)
     } finally {
@@ -217,7 +232,10 @@ export const DiversionManager = () => {
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                       自定义分流组
                     </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: 'text.secondary' }}
+                    >
                       列表顺序就是最终 Mihomo 规则顺序，越靠上优先级越高。
                     </Typography>
                   </Box>
