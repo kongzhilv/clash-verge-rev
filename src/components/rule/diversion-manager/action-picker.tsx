@@ -51,6 +51,11 @@ interface ActionOption {
   icon: ReactNode
 }
 
+interface RuntimePolicyGroup {
+  type?: unknown
+  name?: unknown
+}
+
 const BASE_ACTIONS: ActionOption[] = [
   {
     action: 'none',
@@ -98,6 +103,11 @@ const supportedPolicyType = (value: unknown) => {
   ].includes(normalized)
 }
 
+const isRuntimePolicyGroup = (value: unknown): value is RuntimePolicyGroup =>
+  typeof value === 'object' &&
+  value !== null &&
+  supportedPolicyType((value as RuntimePolicyGroup).type)
+
 export const ActionPicker = ({
   open,
   title,
@@ -113,13 +123,15 @@ export const ActionPicker = ({
   const [manualPolicy, setManualPolicy] = useState('')
 
   const policyGroups = useMemo(() => {
-    const groups = Array.isArray(proxies?.groups) ? proxies.groups : []
+    const groups: unknown[] = Array.isArray(proxies?.groups)
+      ? proxies.groups
+      : []
     const names = groups
-      .filter((group: any) => supportedPolicyType(group?.type))
-      .map((group: any) => String(group?.name ?? '').trim())
+      .filter(isRuntimePolicyGroup)
+      .map((group) => String(group.name ?? '').trim())
       .filter(Boolean)
 
-    return [...new Set(names)].sort((left, right) =>
+    return [...new Set<string>(names)].sort((left, right) =>
       left.localeCompare(right, 'zh-CN'),
     )
   }, [proxies?.groups])
