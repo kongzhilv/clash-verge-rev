@@ -188,7 +188,7 @@ pub(super) async fn init_service_manager() {
 }
 
 pub(super) fn init_core_manager() {
-    logging_error!(Type::Setup, CoreManager::global().init());
+    CoreManager::global().init();
 }
 
 pub(super) async fn reset_system_proxy_on_startup() {
