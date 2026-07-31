@@ -1,4 +1,5 @@
-import { Box, Button, Snackbar, useTheme } from '@mui/material'
+import { AddLinkRounded } from '@mui/icons-material'
+import { Box, Button, Snackbar, Stack, useTheme } from '@mui/material'
 import { useLockFn } from 'ahooks'
 import dayjs from 'dayjs'
 import { useCallback, useImperativeHandle, useState, type Ref } from 'react'
@@ -6,6 +7,8 @@ import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
 import parseTraffic from '@/utils/parse-traffic'
+
+import ConnectionRuleAssistant from './connection-rule-assistant'
 
 export interface ConnectionDetailRef {
   open: (detail: IConnectionsItem, closed: boolean) => void
@@ -69,6 +72,7 @@ interface InnerProps {
 
 const InnerConnectionDetail = ({ data, closed, onClose }: InnerProps) => {
   const { t } = useTranslation()
+  const [ruleAssistantOpen, setRuleAssistantOpen] = useState(false)
   const { metadata, rulePayload } = data
   const theme = useTheme()
   const chains = [...data.chains].reverse().join(' / ')
@@ -147,8 +151,20 @@ const InnerConnectionDetail = ({ data, closed, onClose }: InnerProps) => {
         </div>
       ))}
 
-      {!closed && (
-        <Box sx={{ textAlign: 'right' }}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        sx={{ mt: 1.5, justifyContent: 'flex-end' }}
+      >
+        <Button
+          variant="outlined"
+          startIcon={<AddLinkRounded />}
+          onClick={() => setRuleAssistantOpen(true)}
+        >
+          从此连接添加或删除规则
+        </Button>
+
+        {!closed && (
           <Button
             variant="contained"
             title={t('connections.components.actions.closeConnection')}
@@ -159,8 +175,15 @@ const InnerConnectionDetail = ({ data, closed, onClose }: InnerProps) => {
           >
             {t('connections.components.actions.closeConnection')}
           </Button>
-        </Box>
-      )}
+        )}
+      </Stack>
+
+      <ConnectionRuleAssistant
+        open={ruleAssistantOpen}
+        connection={data}
+        closed={closed}
+        onClose={() => setRuleAssistantOpen(false)}
+      />
     </Box>
   )
 }
