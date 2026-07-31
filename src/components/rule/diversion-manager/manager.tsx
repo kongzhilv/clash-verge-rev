@@ -2,9 +2,12 @@ import {
   AddRounded,
   CloseRounded,
   SaveRounded,
+  SettingsRounded,
   TuneRounded,
+  ViewListRounded,
 } from '@mui/icons-material'
 import {
+  Alert,
   AppBar,
   Box,
   Button,
@@ -28,8 +31,15 @@ import {
   type DiversionGroup,
   type UnknownRecord,
 } from './model'
+import {
+  BUILTIN_KEY,
+  normalizeBuiltinGroups,
+  serializeBuiltinGroups,
+  type BuiltinGroup,
+} from './presets'
 import { parseDiversionProfile, serializeDiversionProfile } from './serializer'
 import SettingsPanel from './settings-panel'
+import SimplePanel from './simple-panel'
 
 export const DiversionManager = () => {
   const [open, setOpen] = useState(false)
@@ -37,12 +47,15 @@ export const DiversionManager = () => {
   const [saving, setSaving] = useState(false)
   const [mergeConfig, setMergeConfig] = useState<UnknownRecord>({})
   const [config, setConfig] = useState<DiversionConfig>(defaultConfig)
+  const [builtinGroups, setBuiltinGroups] = useState<BuiltinGroup[]>([])
 
   const enabledGroupCount = useMemo(
     () =>
       config.groups.filter((group) => group.enabled && group.action !== 'none')
+        .length +
+      builtinGroups.filter((group) => group.enabled && group.action !== 'none')
         .length,
-    [config.groups],
+    [builtinGroups, config.groups],
   )
 
   const openManager = useCallback(async () => {
@@ -53,6 +66,7 @@ export const DiversionManager = () => {
       const parsed = parseDiversionProfile(content)
       setMergeConfig(parsed.mergeConfig)
       setConfig(parsed.config)
+      setBuiltinGroups(normalizeBuiltinGroups(parsed.mergeConfig[BUILTIN_KEY]))
     } catch (error) {
       showNotice.error(error)
     } finally {
@@ -60,7 +74,12 @@ export const DiversionManager = () => {
     }
   }, [])
 
+  const updateConfig = (patch: Partial<DiversionConfig>) => {
+    setConfig((previous) => ({ ...previous, ...patch }))
+  }
+
   const updateGroup = (index: number, patch: Partial<DiversionGroup>) => {
+    if (index < 0) return
     setConfig((previous) => ({
       ...previous,
       groups: previous.groups.map((group, currentIndex) =>
@@ -92,30 +111,36 @@ export const DiversionManager = () => {
   const save = useCallback(async () => {
     setSaving(true)
     try {
-      const serialized = serializeDiversionProfile(mergeConfig, config)
+      const mergeWithBuiltins: UnknownRecord = {
+        ...mergeConfig,
+        [BUILTIN_KEY]: serializeBuiltinGroups(builtinGroups),
+      }
+      const serialized = serializeDiversionProfile(mergeWithBuiltins, config)
       const valid = await saveProfileFile('Merge', serialized.content)
       if (!valid) throw new Error('Mihomo 配置校验未通过，原配置已恢复')
 
       setMergeConfig(serialized.mergeConfig)
-      showNotice.success('分流配置已保存并应用')
+      showNotice.success('分流配置已保存并立即应用')
       setOpen(false)
     } catch (error) {
       showNotice.error(error)
     } finally {
       setSaving(false)
     }
-  }, [config, mergeConfig])
+  }, [builtinGroups, config, mergeConfig])
+
+  const advancedMode = config['ui-mode'] === 'advanced'
 
   return (
     <>
-      <Tooltip title="Karing 风格分流管理">
+      <Tooltip title="像 Karing 一样按用途选择分流动作">
         <Button
           size="small"
           variant="outlined"
           startIcon={<TuneRounded />}
           onClick={openManager}
         >
-          分流管理
+          分流设置
         </Button>
       </Tooltip>
       <Dialog fullScreen open={open} onClose={() => !saving && setOpen(false)}>
@@ -128,17 +153,33 @@ export const DiversionManager = () => {
             >
               <CloseRounded />
             </IconButton>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h6">分流管理</Typography>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="h6">
+                {advancedMode ? '高级分流编辑' : '分流规则'}
+              </Typography>
               <Typography
                 variant="caption"
-                sx={{
-                  color: 'text.secondary',
-                }}
+                sx={{ color: 'text.secondary', display: 'block' }}
+                noWrap
               >
-                已启用 {enabledGroupCount} 个自定义分流组
+                {advancedMode
+                  ? '编辑规则内容、顺序、OR/AND 和指定策略组'
+                  : `已启用 ${enabledGroupCount} 个规则组，只需选择流量处理方式`}
               </Typography>
             </Box>
+            <Button
+              startIcon={
+                advancedMode ? <ViewListRounded /> : <SettingsRounded />
+              }
+              onClick={() =>
+                updateConfig({
+                  'ui-mode': advancedMode ? 'simple' : 'advanced',
+                })
+              }
+              disabled={loading || saving}
+            >
+              {advancedMode ? '简单模式' : '高级编辑'}
+            </Button>
             <Button
               variant="contained"
               startIcon={<SaveRounded />}
@@ -152,46 +193,31 @@ export const DiversionManager = () => {
 
         <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', p: 2 }}>
           {loading ? (
-            <Typography
-              sx={{
-                color: 'text.secondary',
-              }}
-            >
+            <Typography sx={{ color: 'text.secondary' }}>
               正在读取全局 Merge 配置…
             </Typography>
-          ) : (
+          ) : advancedMode ? (
             <Stack spacing={2}>
-              <SettingsPanel
-                config={config}
-                onChange={(patch) =>
-                  setConfig((previous) => ({ ...previous, ...patch }))
-                }
-              />
+              <Alert severity="warning">
+                高级编辑会直接改变最终 Mihomo 规则。普通使用只需返回“简单模式”选择当前选择、自动选择、直连或拦截。
+              </Alert>
+              <SettingsPanel config={config} onChange={updateConfig} />
 
               <Box>
                 <Stack
-                  direction="row"
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1}
                   sx={{
-                    alignItems: 'center',
+                    alignItems: { sm: 'center' },
                     justifyContent: 'space-between',
                     mb: 1,
                   }}
                 >
                   <Box>
-                    <Typography
-                      variant="subtitle1"
-                      sx={{
-                        fontWeight: 700,
-                      }}
-                    >
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                       自定义分流组
                     </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: 'text.secondary',
-                      }}
-                    >
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                       列表顺序就是最终 Mihomo 规则顺序，越靠上优先级越高。
                     </Typography>
                   </Box>
@@ -222,11 +248,7 @@ export const DiversionManager = () => {
                       borderRadius: 2,
                     }}
                   >
-                    <Typography
-                      sx={{
-                        color: 'text.secondary',
-                      }}
-                    >
+                    <Typography sx={{ color: 'text.secondary' }}>
                       还没有自定义分流组
                     </Typography>
                   </Box>
@@ -247,6 +269,15 @@ export const DiversionManager = () => {
                 )}
               </Box>
             </Stack>
+          ) : (
+            <SimplePanel
+              config={config}
+              builtinGroups={builtinGroups}
+              onConfigChange={updateConfig}
+              onBuiltinGroupsChange={setBuiltinGroups}
+              onGroupChange={updateGroup}
+              onOpenAdvanced={() => updateConfig({ 'ui-mode': 'advanced' })}
+            />
           )}
         </Box>
       </Dialog>
