@@ -50,9 +50,10 @@ pub(super) fn prepare(config: &mut Mapping) {
         return;
     };
 
-    // Enabling an independent built-in group should make it effective even if
-    // the general diversion editor was previously disabled.
-    if has_active_builtin {
+    // Standalone built-in selections still activate older configs that do not
+    // contain an explicit global switch. An explicit `enabled: false` is always
+    // authoritative, so the simple UI can reliably turn all diversion off.
+    if has_active_builtin && diversion.get("enabled").and_then(Value::as_bool).is_none() {
         diversion.insert(Value::from("enabled"), Value::from(true));
     }
 
@@ -122,7 +123,10 @@ fn is_active_matcher(value: &Value) -> bool {
         .map(str::trim)
         .and_then(|raw| raw.split_once(':'))
         .is_some_and(|(kind, name)| {
-            matches!(kind.trim().to_ascii_lowercase().as_str(), "geosite" | "geoip" | "acl") && !name.trim().is_empty()
+            matches!(
+                kind.trim().to_ascii_lowercase().as_str(),
+                "geosite" | "geoip" | "acl"
+            ) && !name.trim().is_empty()
         })
 }
 
@@ -204,7 +208,10 @@ x-karing-diversion-builtins:
             .get(CONFIG_KEY)
             .and_then(Value::as_mapping)
             .expect("diversion config should be created");
-        assert_eq!(diversion.get("enabled").and_then(Value::as_bool), Some(true));
+        assert_eq!(
+            diversion.get("enabled").and_then(Value::as_bool),
+            Some(true)
+        );
 
         let groups = diversion
             .get("groups")
@@ -217,13 +224,62 @@ x-karing-diversion-builtins:
             .expect("matchers should exist");
 
         let geosite = matchers[0].as_mapping().expect("geosite matcher");
-        assert_eq!(geosite.get("type").and_then(Value::as_str), Some("GEOSITE"));
-        assert_eq!(geosite.get("value").and_then(Value::as_str), Some("cn"));
-        assert_eq!(geosite.get("no-resolve").and_then(Value::as_bool), Some(false));
+        assert_eq!(
+            geosite.get("type").and_then(Value::as_str),
+            Some("GEOSITE")
+        );
+        assert_eq!(
+            geosite.get("value").and_then(Value::as_str),
+            Some("cn")
+        );
+        assert_eq!(
+            geosite.get("no-resolve").and_then(Value::as_bool),
+            Some(false)
+        );
 
         let geoip = matchers[1].as_mapping().expect("geoip matcher");
         assert_eq!(geoip.get("type").and_then(Value::as_str), Some("GEOIP"));
         assert_eq!(geoip.get("value").and_then(Value::as_str), Some("CN"));
-        assert_eq!(geoip.get("no-resolve").and_then(Value::as_bool), Some(true));
+        assert_eq!(
+            geoip.get("no-resolve").and_then(Value::as_bool),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn explicit_global_disable_wins_over_active_builtin() {
+        let mut config = mapping(
+            r"
+x-karing-diversion:
+  enabled: false
+  groups: []
+x-karing-diversion-builtins:
+  - name: 广告拦截
+    enabled: true
+    action: reject
+    matchers:
+      - enabled: true
+        type: RULE-SET-BUILDIN
+        value: geosite:category-ads-all
+",
+        );
+
+        prepare(&mut config);
+
+        let diversion = config
+            .get(CONFIG_KEY)
+            .and_then(Value::as_mapping)
+            .expect("diversion config should remain available");
+        assert_eq!(
+            diversion.get("enabled").and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            diversion
+                .get("groups")
+                .and_then(Value::as_sequence)
+                .map(Sequence::len),
+            Some(1)
+        );
     }
 }
