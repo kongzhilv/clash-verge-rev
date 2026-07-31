@@ -24,7 +24,8 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 
-import ActionPicker, { actionLabel } from './action-picker'
+import { actionLabel } from './action-label'
+import ActionPicker from './action-picker'
 import { createMatcherForType } from './matcher-catalog'
 import MatcherEditor from './matcher-editor'
 import MatcherTypePicker from './matcher-type-picker'
