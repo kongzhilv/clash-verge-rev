@@ -2,7 +2,6 @@ mod config;
 mod lifecycle;
 mod state;
 
-use anyhow::Result;
 use arc_swap::{ArcSwap, ArcSwapOption};
 use clash_verge_logger::AsyncLogger;
 use clash_verge_logging::{Type, logging};
@@ -139,14 +138,13 @@ impl CoreManager {
         self.config_update_in_progress.store(false, Ordering::Release);
     }
 
-    pub fn init(&self) -> Result<()> {
+    pub fn init(&self) {
         self.set_running_mode(RunningMode::NotRunning);
         logging!(
             info,
             Type::Core,
             "application startup keeps the proxy core stopped until the user enables it"
         );
-        Ok(())
     }
 }
 
