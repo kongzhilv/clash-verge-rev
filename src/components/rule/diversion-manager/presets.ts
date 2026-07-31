@@ -2,16 +2,6 @@ import type { Action, UnknownRecord } from './model'
 
 export const BUILTIN_KEY = 'x-karing-diversion-builtins'
 
-export const SIMPLE_ACTIONS = [
-  ['none', '无（不使用）'],
-  ['current', '当前选择'],
-  ['auto-select', '自动选择'],
-  ['direct', '直连'],
-  ['reject', '拦截'],
-] as const
-
-export type SimpleAction = (typeof SIMPLE_ACTIONS)[number][0]
-
 export interface BuiltinGroup {
   id: string
   presetId?: string
@@ -179,6 +169,3 @@ export const withBuiltinAction = (
   action,
   policy: action === 'policy' ? policy : undefined,
 })
-
-export const isSimpleAction = (action: Action): action is SimpleAction =>
-  SIMPLE_ACTIONS.some(([value]) => value === action)
