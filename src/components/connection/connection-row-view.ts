@@ -6,6 +6,7 @@ export interface ConnectionRowView {
   id: string
   host: string
   process: string
+  processPath: string
   network: string
   type: string
   chains: string
@@ -62,9 +63,16 @@ export const getConnectionHost = (connection: IConnectionsItem) => {
   return `${host}:${metadata.destinationPort}`
 }
 
+export const getConnectionProcessPath = (connection: IConnectionsItem) =>
+  String(connection.metadata.processPath ?? '').trim()
+
 export const getConnectionProcess = (connection: IConnectionsItem) => {
-  const { metadata } = connection
-  return metadata.process || metadata.processPath || ''
+  const process = String(connection.metadata.process ?? '').trim()
+  if (process) return process
+
+  const processPath = getConnectionProcessPath(connection)
+  const parts = processPath.split(/[\\/]/).filter(Boolean)
+  return parts.at(-1) ?? processPath
 }
 
 export const getConnectionRule = (connection: IConnectionsItem) => {
@@ -88,11 +96,14 @@ export const getConnectionStartTime = (connection: IConnectionsItem) =>
 const createConnectionRowView = (connection: IConnectionsItem) => {
   const uploadSpeed = connection.curUpload ?? 0
   const downloadSpeed = connection.curDownload ?? 0
+  const process = getConnectionProcess(connection)
+  const processPath = getConnectionProcessPath(connection)
 
   return {
     id: connection.id,
     host: getConnectionHost(connection),
-    process: getConnectionProcess(connection),
+    process,
+    processPath,
     network: connection.metadata.network,
     type: connection.metadata.type,
     chains: formatConnectionChains(connection.chains),
@@ -111,7 +122,7 @@ const createConnectionRowView = (connection: IConnectionsItem) => {
     startTime: getConnectionStartTime(connection),
     searchableHost: connection.metadata.host || '',
     searchableDestinationIP: connection.metadata.destinationIP || '',
-    searchableProcess: connection.metadata.process || '',
+    searchableProcess: `${process} ${processPath}`.trim(),
   } satisfies ConnectionRowView
 }
 
@@ -121,6 +132,7 @@ const sameConnectionRowView = (
 ) =>
   left.host === right.host &&
   left.process === right.process &&
+  left.processPath === right.processPath &&
   left.network === right.network &&
   left.type === right.type &&
   left.chains === right.chains &&
