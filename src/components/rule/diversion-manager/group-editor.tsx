@@ -28,11 +28,7 @@ import ActionPicker, { actionLabel } from './action-picker'
 import { createMatcherForType } from './matcher-catalog'
 import MatcherEditor from './matcher-editor'
 import MatcherTypePicker from './matcher-type-picker'
-import type {
-  DiversionGroup,
-  DiversionMatcher,
-  MatcherType,
-} from './model'
+import type { DiversionGroup, DiversionMatcher, MatcherType } from './model'
 
 interface GroupEditorProps {
   group: DiversionGroup
@@ -101,7 +97,8 @@ export const GroupEditor = ({
             {group.name || '未命名分流组'}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {actionLabel(group.action, group.policy)} · {group.matchers.length} 项
+            {actionLabel(group.action, group.policy)} · {group.matchers.length}{' '}
+            项
           </Typography>
         </Stack>
       </AccordionSummary>
