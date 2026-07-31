@@ -302,19 +302,13 @@ x-karing-diversion:
     #[test]
     fn missing_process_mode_defaults_to_strict() {
         let sorted = use_sort(Mapping::new());
-        assert_eq!(
-            sorted.get("find-process-mode").and_then(Value::as_str),
-            Some("strict")
-        );
+        assert_eq!(sorted.get("find-process-mode").and_then(Value::as_str), Some("strict"));
     }
 
     #[test]
     fn explicit_process_mode_is_preserved() {
         let sorted = use_sort(mapping("find-process-mode: off"));
-        assert_eq!(
-            sorted.get("find-process-mode").and_then(Value::as_str),
-            Some("off")
-        );
+        assert_eq!(sorted.get("find-process-mode").and_then(Value::as_str), Some("off"));
     }
 
     #[test]
