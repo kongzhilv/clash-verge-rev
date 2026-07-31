@@ -2,6 +2,7 @@ import {
   AddRounded,
   ArrowDownwardRounded,
   ArrowUpwardRounded,
+  ChevronRightRounded,
   DeleteOutlineRounded,
   ExpandMoreRounded,
 } from '@mui/icons-material'
@@ -21,14 +22,16 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { useState } from 'react'
 
+import ActionPicker, { actionLabel } from './action-picker'
+import { createMatcherForType } from './matcher-catalog'
 import MatcherEditor from './matcher-editor'
-import {
-  ACTIONS,
-  makeMatcher,
-  type Action,
-  type DiversionGroup,
-  type DiversionMatcher,
+import MatcherTypePicker from './matcher-type-picker'
+import type {
+  DiversionGroup,
+  DiversionMatcher,
+  MatcherType,
 } from './model'
 
 interface GroupEditorProps {
@@ -48,6 +51,9 @@ export const GroupEditor = ({
   onMove,
   onDelete,
 }: GroupEditorProps) => {
+  const [actionPickerOpen, setActionPickerOpen] = useState(false)
+  const [matcherPickerOpen, setMatcherPickerOpen] = useState(false)
+
   const updateMatcher = (
     matcherIndex: number,
     patch: Partial<DiversionMatcher>,
@@ -64,6 +70,12 @@ export const GroupEditor = ({
       matchers: group.matchers.filter(
         (_, currentIndex) => currentIndex !== matcherIndex,
       ),
+    })
+  }
+
+  const addMatcher = (type: MatcherType) => {
+    onChange({
+      matchers: [...group.matchers, createMatcherForType(type)],
     })
   }
 
@@ -88,13 +100,8 @@ export const GroupEditor = ({
           <Typography sx={{ flex: 1, fontWeight: 600 }}>
             {group.name || '未命名分流组'}
           </Typography>
-          <Typography
-            variant="caption"
-            sx={{
-              color: 'text.secondary',
-            }}
-          >
-            {group.logic.toUpperCase()} · {group.matchers.length} 项
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {actionLabel(group.action, group.policy)} · {group.matchers.length} 项
           </Typography>
         </Stack>
       </AccordionSummary>
@@ -109,7 +116,7 @@ export const GroupEditor = ({
               onChange={(event) => onChange({ name: event.target.value })}
             />
 
-            <FormControl size="small" sx={{ minWidth: 150 }}>
+            <FormControl size="small" sx={{ minWidth: 170 }}>
               <InputLabel>条件逻辑</InputLabel>
               <Select
                 label="条件逻辑"
@@ -118,28 +125,36 @@ export const GroupEditor = ({
                   onChange({ logic: event.target.value as 'or' | 'and' })
                 }
               >
-                <MenuItem value="or">OR（满足一项）</MenuItem>
-                <MenuItem value="and">AND（满足全部）</MenuItem>
+                <MenuItem value="or">满足任意条件</MenuItem>
+                <MenuItem value="and">同时满足全部条件</MenuItem>
               </Select>
             </FormControl>
 
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel>匹配动作</InputLabel>
-              <Select
-                label="匹配动作"
-                value={group.action}
-                onChange={(event) =>
-                  onChange({ action: event.target.value as Action })
-                }
-              >
-                {ACTIONS.map(([action, label]) => (
-                  <MenuItem key={action} value={action}>
-                    {label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Button
+              variant="outlined"
+              endIcon={<ChevronRightRounded />}
+              onClick={() => setActionPickerOpen(true)}
+              sx={{ minWidth: 210, justifyContent: 'space-between' }}
+            >
+              {actionLabel(group.action, group.policy)}
+            </Button>
           </Stack>
+
+          <ActionPicker
+            open={actionPickerOpen}
+            title={`${group.name || '未命名分流组'}的处理方式`}
+            action={group.action}
+            policy={group.policy}
+            allowDrop
+            onClose={() => setActionPickerOpen(false)}
+            onSelect={(action, policy) =>
+              onChange({
+                enabled: action !== 'none',
+                action,
+                policy: action === 'policy' ? policy : undefined,
+              })
+            }
+          />
 
           {group.action === 'policy' && (
             <TextField
@@ -153,25 +168,35 @@ export const GroupEditor = ({
           <Divider />
 
           <Stack spacing={1}>
-            {group.matchers.map((matcher, matcherIndex) => (
-              <MatcherEditor
-                key={matcher.id}
-                matcher={matcher}
-                onChange={(patch) => updateMatcher(matcherIndex, patch)}
-                onDelete={() => deleteMatcher(matcherIndex)}
-              />
-            ))}
+            {group.matchers.length === 0 ? (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                还没有匹配条件。点击下面的按钮选择要添加的规则类型。
+              </Typography>
+            ) : (
+              group.matchers.map((matcher, matcherIndex) => (
+                <MatcherEditor
+                  key={matcher.id}
+                  matcher={matcher}
+                  onChange={(patch) => updateMatcher(matcherIndex, patch)}
+                  onDelete={() => deleteMatcher(matcherIndex)}
+                />
+              ))
+            )}
           </Stack>
 
           <Button
             variant="text"
             startIcon={<AddRounded />}
-            onClick={() =>
-              onChange({ matchers: [...group.matchers, makeMatcher()] })
-            }
+            onClick={() => setMatcherPickerOpen(true)}
           >
-            添加匹配项
+            添加匹配条件
           </Button>
+
+          <MatcherTypePicker
+            open={matcherPickerOpen}
+            onClose={() => setMatcherPickerOpen(false)}
+            onSelect={addMatcher}
+          />
 
           <Divider />
 
