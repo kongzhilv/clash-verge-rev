@@ -23,6 +23,7 @@ import {
 } from '@mui/material'
 import type { ReactNode } from 'react'
 
+import type { DiversionConfig, DiversionGroup } from './model'
 import {
   SIMPLE_ACTIONS,
   getBuiltinAction,
@@ -31,7 +32,6 @@ import {
   type SimpleAction,
   withBuiltinAction,
 } from './presets'
-import type { DiversionConfig, DiversionGroup } from './model'
 
 interface SimplePanelProps {
   config: DiversionConfig
@@ -109,7 +109,11 @@ const RuleRow = ({
         </Typography>
       )}
       {rules && rules.length > 0 && (
-        <Stack direction="row" spacing={0.5} sx={{ mt: 0.75, flexWrap: 'wrap' }}>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={{ mt: 0.75, flexWrap: 'wrap' }}
+        >
           {rules.map((rule) => (
             <Chip
               key={rule}
@@ -192,6 +196,22 @@ export const SimplePanel = ({
     )
   }
 
+  const updateRegion = (value: '' | 'cn' | 'ir') => {
+    onConfigChange({
+      'auto-country-rules': value !== '',
+      'country-or-region': value,
+    })
+    if (value) {
+      onBuiltinGroupsChange(
+        builtinGroups.map((group) =>
+          group.presetId === `${value}-direct`
+            ? withBuiltinAction(group, 'none')
+            : group,
+        ),
+      )
+    }
+  }
+
   const enableRecommendedBasics = () => {
     onConfigChange({
       enabled: true,
@@ -272,7 +292,11 @@ export const SimplePanel = ({
               />
             }
             label={
-              <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{ alignItems: 'center' }}
+              >
                 {hideUnused ? <VisibilityOffRounded /> : <VisibilityRounded />}
                 <span>隐藏处理方式为“无”的规则组</span>
               </Stack>
@@ -296,13 +320,9 @@ export const SimplePanel = ({
             <Select
               label="国家与地区"
               value={region}
-              onChange={(event: SelectChangeEvent) => {
-                const value = event.target.value as '' | 'cn' | 'ir'
-                onConfigChange({
-                  'auto-country-rules': value !== '',
-                  'country-or-region': value,
-                })
-              }}
+              onChange={(event: SelectChangeEvent) =>
+                updateRegion(event.target.value as '' | 'cn' | 'ir')
+              }
             >
               <MenuItem value="">不自动添加</MenuItem>
               <MenuItem value="cn">中国大陆（CN）</MenuItem>
