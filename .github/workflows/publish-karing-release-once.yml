@@ -1,5 +1,5 @@
 name: Karing 正式发行（一次性）
-run-name: 发布 v2.5.3-karing 正式版本
+run-name: 发布 v2.5.3-karing.1 正式版本
 
 on:
   push:
@@ -16,14 +16,14 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: karing-release-v2.5.3
+  group: karing-release-v2.5.3-karing.1
   cancel-in-progress: true
 
 env:
-  RELEASE_TAG: v2.5.3-karing
-  RELEASE_VERSION: 2.5.3
-  REVIEWED_RUN_ID: '30607375051'
-  EXPECTED_BUILD_COMMIT: 5f04c014b439e995da510843fdc59a6458bb2f8c
+  RELEASE_TAG: v2.5.3-karing.1
+  RELEASE_VERSION: 2.5.3-karing.1
+  REVIEWED_RUN_ID: '30622446790'
+  EXPECTED_BUILD_COMMIT: 43cdada7829272b4f504674bdce1d676ecb25e24
 
 jobs:
   publish:
@@ -84,15 +84,17 @@ jobs:
           cat > release-assets/release-notes.md <<EOF
           # Clash Verge Rev Karing v${RELEASE_VERSION}
 
-          本桌面发行版在 Clash Verge Rev / Mihomo 配置链上融合了 Karing 风格分流交互，并完成以下功能：
+          本次修正版继续融合 Karing 风格分流交互，并重点修复启动开关和连接页面体验：
 
+          - 软件启动后代理总开关默认保持关闭，不再自动启动 Mihomo 核心
+          - 启动时清理活动系统代理状态，但保留节点、TUN 和分流规则设置
+          - 连接详情由右下角提示窗改为右侧抽屉，进入规则助手时自动收起，避免窗口重叠
+          - 连接列表与详情突出显示程序名称和完整进程路径，并支持按路径搜索
+          - 配置缺少进程匹配模式时默认使用 find-process-mode: strict；用户明确设置 off/always 时不会覆盖
+          - 连接详情继续支持将域名、IP、端口、进程名或进程路径添加到规则组，或从已有规则组移除
           - 点击规则行弹出出口选择器，可选无、当前选择、自动选择、直连、拦截及现有策略组
-          - 新建规则组时可选空白组、常用模板或复制现有规则组
-          - 添加匹配条件时先选择域名、IP、进程、端口、Rule Set 等类型，再选择常用值
-          - 连接详情可显示域名、IP、端口、进程名和进程路径，并直接向规则组添加或删除条件
+          - 新建规则组可选空白组、常用模板或复制现有规则组；添加匹配条件先选择类型和常用值
           - 修改规则后复用 Merge 校验、回滚与运行时热加载；活动连接会关闭并在下次连接时重新匹配
-          - 清理已移除的 Mihomo 全局指纹字段，并将常见健康检查地址升级为 HTTPS
-          - 修复核心停止时代理模式保存、全局关闭优先级及旧地区预设重复问题
 
           ## 安装包
           - Windows x64 与 ARM64
