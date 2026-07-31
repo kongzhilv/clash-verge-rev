@@ -117,9 +117,12 @@ const ConnectionsPage = () => {
     if (!hasSearch) return orderFunc([...selectedConnections])
 
     const matchConns = selectedConnections.filter((conn) => {
-      const { host, destinationIP, process } = conn.metadata
+      const { host, destinationIP, process, processPath } = conn.metadata
       return (
-        match(host || '') || match(destinationIP || '') || match(process || '')
+        match(host || '') ||
+        match(destinationIP || '') ||
+        match(process || '') ||
+        match(processPath || '')
       )
     })
 
@@ -297,7 +300,7 @@ const ConnectionsPage = () => {
         <VirtualList
           key={connectionsType}
           count={displayRows.length}
-          estimateSize={56}
+          estimateSize={64}
           renderItem={(i) => (
             <ConnectionRowItem
               row={displayRows[i]}
