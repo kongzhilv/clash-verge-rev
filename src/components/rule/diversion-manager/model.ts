@@ -29,6 +29,8 @@ export const ACTIONS = [
 export type Action = (typeof ACTIONS)[number][0]
 export type MatcherType = (typeof MATCHER_TYPES)[number][0]
 export type UnknownRecord = Record<string, unknown>
+export type DiversionUiMode = 'simple' | 'advanced'
+export type DiversionRegion = '' | 'cn' | 'ir'
 
 const createUiId = () => crypto.randomUUID()
 
@@ -57,9 +59,13 @@ export interface DiversionGroup {
 
 export interface DiversionConfig {
   enabled: boolean
+  'ui-mode': DiversionUiMode
+  'hide-unused-groups': boolean
   'private-network-direct': boolean
   'disable-isp-rules': boolean
   'isp-rules-position': 'before-custom' | 'after-custom'
+  'auto-country-rules': boolean
+  'country-or-region': DiversionRegion
   'current-group-name': string
   'auto-group-name': string
   'auto-url': string
@@ -91,9 +97,13 @@ export const makeGroup = (index: number): DiversionGroup => ({
 
 export const defaultConfig = (): DiversionConfig => ({
   enabled: false,
+  'ui-mode': 'simple',
+  'hide-unused-groups': false,
   'private-network-direct': true,
   'disable-isp-rules': false,
   'isp-rules-position': 'after-custom',
+  'auto-country-rules': false,
+  'country-or-region': '',
   'current-group-name': 'CVR-当前选择',
   'auto-group-name': 'CVR-自动选择',
   'auto-url': 'https://www.gstatic.com/generate_204',
@@ -159,15 +169,23 @@ export const normalizeConfig = (value: unknown): DiversionConfig => {
   const fallback = ACTIONS.some(([item]) => item === raw.fallback)
     ? (raw.fallback as Action)
     : defaults.fallback
+  const region: DiversionRegion =
+    raw['country-or-region'] === 'cn' || raw['country-or-region'] === 'ir'
+      ? raw['country-or-region']
+      : ''
 
   return {
     enabled: raw.enabled === true,
+    'ui-mode': raw['ui-mode'] === 'advanced' ? 'advanced' : 'simple',
+    'hide-unused-groups': raw['hide-unused-groups'] === true,
     'private-network-direct': raw['private-network-direct'] !== false,
     'disable-isp-rules': raw['disable-isp-rules'] === true,
     'isp-rules-position':
       raw['isp-rules-position'] === 'before-custom'
         ? 'before-custom'
         : 'after-custom',
+    'auto-country-rules': raw['auto-country-rules'] === true,
+    'country-or-region': region,
     'current-group-name':
       typeof raw['current-group-name'] === 'string'
         ? raw['current-group-name']
