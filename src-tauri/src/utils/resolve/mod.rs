@@ -64,7 +64,7 @@ pub fn resolve_setup_async() {
 
         let core_init = AsyncHandler::spawn(|| async {
             init_service_manager().await;
-            init_core_manager().await;
+            init_core_manager();
             reset_system_proxy_on_startup().await;
         });
 
@@ -187,8 +187,8 @@ pub(super) async fn init_service_manager() {
     }
 }
 
-pub(super) async fn init_core_manager() {
-    logging_error!(Type::Setup, CoreManager::global().init().await);
+pub(super) fn init_core_manager() {
+    logging_error!(Type::Setup, CoreManager::global().init());
 }
 
 pub(super) async fn reset_system_proxy_on_startup() {
