@@ -19,7 +19,6 @@ import {
   Stack,
   Switch,
   Typography,
-  type SelectChangeEvent,
 } from '@mui/material'
 import type { ReactNode } from 'react'
 
@@ -133,7 +132,7 @@ const RuleRow = ({
         label="处理方式"
         value={action}
         disabled={disabled}
-        onChange={(event: SelectChangeEvent) =>
+        onChange={(event) =>
           onActionChange(event.target.value as SimpleAction)
         }
       >
@@ -189,6 +188,7 @@ export const SimplePanel = ({
     : config.groups
 
   const updateBuiltin = (id: string, action: SimpleAction) => {
+    if (action !== 'none') onConfigChange({ enabled: true })
     onBuiltinGroupsChange(
       builtinGroups.map((group) =>
         group.id === id ? withBuiltinAction(group, action) : group,
@@ -198,6 +198,7 @@ export const SimplePanel = ({
 
   const updateRegion = (value: '' | 'cn' | 'ir') => {
     onConfigChange({
+      ...(value ? { enabled: true } : {}),
       'auto-country-rules': value !== '',
       'country-or-region': value,
     })
@@ -320,7 +321,7 @@ export const SimplePanel = ({
             <Select
               label="国家与地区"
               value={region}
-              onChange={(event: SelectChangeEvent) =>
+              onChange={(event) =>
                 updateRegion(event.target.value as '' | 'cn' | 'ir')
               }
             >
@@ -393,12 +394,13 @@ export const SimplePanel = ({
                 description={`${group.logic.toUpperCase()} · ${group.matchers.length} 个匹配项`}
                 action={customGroupAction(group)}
                 advancedLabel={advancedActionLabel(group)}
-                onActionChange={(action) =>
+                onActionChange={(action) => {
+                  if (action !== 'none') onConfigChange({ enabled: true })
                   onGroupChange(index, {
                     enabled: action !== 'none',
                     action,
                   })
-                }
+                }}
               />
             )
           })
@@ -422,7 +424,11 @@ export const SimplePanel = ({
           }
           allowNone={false}
           onActionChange={(fallback) =>
-            onConfigChange({ fallback, 'fallback-policy': undefined })
+            onConfigChange({
+              enabled: true,
+              fallback,
+              'fallback-policy': undefined,
+            })
           }
         />
       </Section>
