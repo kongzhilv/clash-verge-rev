@@ -1,8 +1,4 @@
-import type {
-  DiversionMatcher,
-  MatcherType,
-  UnknownRecord,
-} from './model'
+import type { DiversionMatcher, MatcherType, UnknownRecord } from './model'
 
 export interface MatcherTypeOption {
   type: MatcherType
@@ -143,16 +139,12 @@ const COMMON_PORTS: MatcherValueOption[] = [
   { value: '6881-6999', label: '常见 BitTorrent 端口' },
 ]
 
-export const createMatcherForType = (
-  type: MatcherType,
-): DiversionMatcher => ({
+export const createMatcherForType = (type: MatcherType): DiversionMatcher => ({
   id: crypto.randomUUID(),
   enabled: true,
   type,
   value: '',
-  ...(type === 'IP-CIDR' || type === 'GEOIP'
-    ? { 'no-resolve': true }
-    : {}),
+  ...(type === 'IP-CIDR' || type === 'GEOIP' ? { 'no-resolve': true } : {}),
   ...(type === 'RULE-SET'
     ? {
         behavior: 'classical' as const,
@@ -197,6 +189,11 @@ export const matcherValueOptions = (
 }
 
 export const hasMatcherValuePicker = (type: MatcherType) =>
-  ['RULE-SET-BUILDIN', 'GEOSITE', 'GEOIP', 'NETWORK', 'DST-PORT', 'RULE-SET'].includes(
-    type,
-  )
+  [
+    'RULE-SET-BUILDIN',
+    'GEOSITE',
+    'GEOIP',
+    'NETWORK',
+    'DST-PORT',
+    'RULE-SET',
+  ].includes(type)
