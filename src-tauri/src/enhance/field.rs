@@ -51,6 +51,17 @@ pub fn use_lowercase_owned(config: Mapping) -> Mapping {
     lowercased
 }
 
+fn ensure_desktop_process_discovery(config: &mut Mapping) {
+    if !config.contains_key("find-process-mode") {
+        config.insert("find-process-mode".into(), "strict".into());
+        logging!(
+            info,
+            Type::Config,
+            "defaulted find-process-mode to strict for desktop connection metadata"
+        );
+    }
+}
+
 fn sanitize_removed_options(config: &mut Mapping) {
     if config.remove("global-client-fingerprint").is_some() {
         logging!(
@@ -118,12 +129,11 @@ fn normalize_known_health_check_urls(config: &mut Mapping) {
 }
 
 pub fn use_sort(mut config: Mapping) -> Mapping {
-    // Normalize app-only Karing matcher types and merge built-in groups first,
-    // so managed group names can also be captured for built-in-only configs.
     diversion_builtin::prepare(&mut config);
     let managed_groups = diversion_managed::capture(&config);
     diversion::apply(&mut config);
     diversion_managed::cleanup(&mut config, managed_groups.as_ref());
+    ensure_desktop_process_discovery(&mut config);
     sanitize_removed_options(&mut config);
     normalize_known_health_check_urls(&mut config);
 
@@ -286,6 +296,24 @@ x-karing-diversion:
             rules
                 .iter()
                 .any(|rule| rule.as_str() == Some("RULE-SET,remote-rules,DIRECT"))
+        );
+    }
+
+    #[test]
+    fn missing_process_mode_defaults_to_strict() {
+        let sorted = use_sort(Mapping::new());
+        assert_eq!(
+            sorted.get("find-process-mode").and_then(Value::as_str),
+            Some("strict")
+        );
+    }
+
+    #[test]
+    fn explicit_process_mode_is_preserved() {
+        let sorted = use_sort(mapping("find-process-mode: off"));
+        assert_eq!(
+            sorted.get("find-process-mode").and_then(Value::as_str),
+            Some("off")
         );
     }
 
