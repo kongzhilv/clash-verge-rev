@@ -1,5 +1,6 @@
 import {
   AutoAwesomeRounded,
+  ChevronRightRounded,
   EditRounded,
   SettingsRounded,
   VisibilityOffRounded,
@@ -19,15 +20,13 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
-import type { DiversionConfig, DiversionGroup } from './model'
+import ActionPicker, { actionLabel } from './action-picker'
+import type { Action, DiversionConfig, DiversionGroup } from './model'
 import {
-  SIMPLE_ACTIONS,
   getBuiltinAction,
-  isSimpleAction,
   type BuiltinGroup,
-  type SimpleAction,
   withBuiltinAction,
 } from './presets'
 
@@ -74,74 +73,69 @@ const Section = ({ title, description, action, children }: SectionProps) => (
 interface RuleRowProps {
   name: string
   description?: string
-  action: string
-  advancedLabel?: string
+  action: Action
+  policy?: string
   disabled?: boolean
   disabledText?: string
-  onActionChange: (action: SimpleAction) => void
   allowNone?: boolean
+  allowDrop?: boolean
+  onActionChange: (action: Action, policy?: string) => void
 }
 
 const RuleRow = ({
   name,
   description,
   action,
-  advancedLabel,
+  policy,
   disabled = false,
   disabledText,
-  onActionChange,
   allowNone = true,
-}: RuleRowProps) => (
-  <Stack
-    direction={{ xs: 'column', sm: 'row' }}
-    spacing={1.5}
-    sx={{ p: 2, alignItems: { sm: 'center' } }}
-  >
-    <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography sx={{ fontWeight: 600 }}>{name}</Typography>
-      {(description || disabledText) && (
-        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {disabledText || description}
-        </Typography>
-      )}
-    </Box>
+  allowDrop = false,
+  onActionChange,
+}: RuleRowProps) => {
+  const [pickerOpen, setPickerOpen] = useState(false)
 
-    <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 190 } }}>
-      <InputLabel>处理方式</InputLabel>
-      <Select
-        label="处理方式"
-        value={action}
-        disabled={disabled}
-        onChange={(event) =>
-          onActionChange(event.target.value as SimpleAction)
-        }
-      >
-        {advancedLabel && (
-          <MenuItem value="advanced" disabled>
-            {advancedLabel}
-          </MenuItem>
+  return (
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      spacing={1.5}
+      sx={{ p: 2, alignItems: { sm: 'center' } }}
+    >
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography sx={{ fontWeight: 600 }}>{name}</Typography>
+        {(description || disabledText) && (
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {disabledText || description}
+          </Typography>
         )}
-        {SIMPLE_ACTIONS.filter(
-          ([value]) => allowNone || value !== 'none',
-        ).map(([value, label]) => (
-          <MenuItem key={value} value={value}>
-            {label}
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
-  </Stack>
-)
+      </Box>
 
-const customGroupAction = (group: DiversionGroup) => {
-  if (!group.enabled || group.action === 'none') return 'none'
-  return isSimpleAction(group.action) ? group.action : 'advanced'
-}
+      <Button
+        variant="outlined"
+        endIcon={<ChevronRightRounded />}
+        disabled={disabled}
+        onClick={() => setPickerOpen(true)}
+        sx={{
+          minWidth: { xs: '100%', sm: 210 },
+          justifyContent: 'space-between',
+          textTransform: 'none',
+        }}
+      >
+        {actionLabel(action, policy)}
+      </Button>
 
-const advancedActionLabel = (group: DiversionGroup) => {
-  if (group.action === 'policy') return `高级：${group.policy || '指定策略组'}`
-  if (group.action === 'reject-drop') return '高级：静默拦截'
-  return undefined
+      <ActionPicker
+        open={pickerOpen}
+        title={name}
+        action={action}
+        policy={policy}
+        allowNone={allowNone}
+        allowDrop={allowDrop}
+        onClose={() => setPickerOpen(false)}
+        onSelect={onActionChange}
+      />
+    </Stack>
+  )
 }
 
 export const SimplePanel = ({
@@ -164,14 +158,16 @@ export const SimplePanel = ({
       )
     : builtinGroups
   const visibleCustomGroups = hideUnused
-    ? config.groups.filter((group) => customGroupAction(group) !== 'none')
+    ? config.groups.filter(
+        (group) => group.enabled && group.action !== 'none',
+      )
     : config.groups
 
-  const updateBuiltin = (id: string, action: SimpleAction) => {
+  const updateBuiltin = (id: string, action: Action, policy?: string) => {
     if (action !== 'none') onConfigChange({ enabled: true })
     onBuiltinGroupsChange(
       builtinGroups.map((group) =>
-        group.id === id ? withBuiltinAction(group, action) : group,
+        group.id === id ? withBuiltinAction(group, action, policy) : group,
       ),
     )
   }
@@ -206,7 +202,7 @@ export const SimplePanel = ({
   return (
     <Stack spacing={2}>
       <Alert severity="info">
-        只需要为每类流量选择处理方式。复杂规则内容会原样保留，需要时再进入高级编辑。
+        点击每一条规则即可弹出出口选择器；复杂规则内容会原样保留，需要时再进入高级编辑。
       </Alert>
 
       <Stack
@@ -332,13 +328,16 @@ export const SimplePanel = ({
                 name={group.name}
                 description={group.description}
                 action={managedByRegion ? 'direct' : getBuiltinAction(group)}
+                policy={group.policy}
                 disabled={managedByRegion}
                 disabledText={
                   managedByRegion
                     ? '已由上面的“国家与地区自动直连”统一管理。'
                     : undefined
                 }
-                onActionChange={(action) => updateBuiltin(group.id, action)}
+                onActionChange={(action, policy) =>
+                  updateBuiltin(group.id, action, policy)
+                }
               />
             )
           })
@@ -347,7 +346,7 @@ export const SimplePanel = ({
 
       <Section
         title="自定义规则组"
-        description="主页面只选择处理方式，具体匹配内容放在高级编辑中。"
+        description="点击规则组选择出口；具体匹配内容放在高级编辑中。"
         action={
           <Button startIcon={<EditRounded />} onClick={onOpenAdvanced}>
             添加或编辑规则
@@ -364,19 +363,23 @@ export const SimplePanel = ({
           </Box>
         ) : (
           visibleCustomGroups.map((group) => {
-            const index = config.groups.findIndex((item) => item.id === group.id)
+            const index = config.groups.findIndex(
+              (item) => item.id === group.id,
+            )
             return (
               <RuleRow
                 key={group.id}
                 name={group.name || '未命名规则组'}
                 description={`已配置 ${group.matchers.length} 个匹配条件`}
-                action={customGroupAction(group)}
-                advancedLabel={advancedActionLabel(group)}
-                onActionChange={(action) => {
+                action={group.enabled ? group.action : 'none'}
+                policy={group.policy}
+                allowDrop
+                onActionChange={(action, policy) => {
                   if (action !== 'none') onConfigChange({ enabled: true })
                   onGroupChange(index, {
                     enabled: action !== 'none',
                     action,
+                    policy: action === 'policy' ? policy : undefined,
                   })
                 }}
               />
@@ -392,20 +395,15 @@ export const SimplePanel = ({
         <RuleRow
           name="未匹配流量"
           description="建议保持“当前选择”，主界面换节点后无需再改规则。"
-          action={isSimpleAction(config.fallback) ? config.fallback : 'advanced'}
-          advancedLabel={
-            config.fallback === 'policy'
-              ? `高级：${config['fallback-policy'] || '指定策略组'}`
-              : config.fallback === 'reject-drop'
-                ? '高级：静默拦截'
-                : undefined
-          }
+          action={config.fallback}
+          policy={config['fallback-policy']}
           allowNone={false}
-          onActionChange={(fallback) =>
+          allowDrop
+          onActionChange={(fallback, policy) =>
             onConfigChange({
               enabled: true,
               fallback,
-              'fallback-policy': undefined,
+              'fallback-policy': fallback === 'policy' ? policy : undefined,
             })
           }
         />
