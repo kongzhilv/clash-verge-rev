@@ -9,7 +9,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Divider,
   FormControl,
   FormControlLabel,
@@ -75,7 +74,6 @@ const Section = ({ title, description, action, children }: SectionProps) => (
 interface RuleRowProps {
   name: string
   description?: string
-  rules?: string[]
   action: string
   advancedLabel?: string
   disabled?: boolean
@@ -87,7 +85,6 @@ interface RuleRowProps {
 const RuleRow = ({
   name,
   description,
-  rules,
   action,
   advancedLabel,
   disabled = false,
@@ -106,23 +103,6 @@ const RuleRow = ({
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           {disabledText || description}
         </Typography>
-      )}
-      {rules && rules.length > 0 && (
-        <Stack
-          direction="row"
-          spacing={0.5}
-          sx={{ mt: 0.75, flexWrap: 'wrap' }}
-        >
-          {rules.map((rule) => (
-            <Chip
-              key={rule}
-              size="small"
-              variant="outlined"
-              label={rule}
-              sx={{ mb: 0.5 }}
-            />
-          ))}
-        </Stack>
       )}
     </Box>
 
@@ -226,8 +206,7 @@ export const SimplePanel = ({
   return (
     <Stack spacing={2}>
       <Alert severity="info">
-        这里按 Karing 新手模式设计：只需要决定“这类流量走哪里”。域名、IP、Rule
-        Set、OR/AND 等规则内容仍保留在高级编辑中。
+        只需要为每类流量选择处理方式。复杂规则内容会原样保留，需要时再进入高级编辑。
       </Alert>
 
       <Stack
@@ -249,7 +228,7 @@ export const SimplePanel = ({
 
       <Section
         title="基础分流"
-        description="对应 Karing 的私有网络、ISP 规则、国家与地区和隐藏未启用分流组。"
+        description="决定局域网、机场自带规则和未使用规则组的处理方式。"
       >
         <Stack sx={{ p: 2 }} spacing={0.5}>
           <FormControlLabel
@@ -270,7 +249,7 @@ export const SimplePanel = ({
                 }
               />
             }
-            label="私有网络直连"
+            label="局域网和私有地址直连"
           />
           <FormControlLabel
             control={
@@ -313,7 +292,7 @@ export const SimplePanel = ({
           <Box sx={{ flex: 1 }}>
             <Typography sx={{ fontWeight: 600 }}>国家与地区自动直连</Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Karing 目前只会为 CN 和 IR 自动加入 GeoSite + GeoIP 直连规则。
+              自动让所选国家或地区的本地网站和 IP 直接连接。
             </Typography>
           </Box>
           <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 210 } }}>
@@ -335,7 +314,7 @@ export const SimplePanel = ({
 
       <Section
         title="常用规则组"
-        description="首次使用时先给出推荐规则组；选择“无”不会删除规则，以后可以随时重新启用。"
+        description="选择“无”只会停用，不会删除规则，以后可以随时重新开启。"
       >
         {visibleBuiltins.length === 0 ? (
           <Box sx={{ p: 2 }}>
@@ -352,7 +331,6 @@ export const SimplePanel = ({
                 key={group.id}
                 name={group.name}
                 description={group.description}
-                rules={group.rules}
                 action={managedByRegion ? 'direct' : getBuiltinAction(group)}
                 disabled={managedByRegion}
                 disabledText={
@@ -369,7 +347,7 @@ export const SimplePanel = ({
 
       <Section
         title="自定义规则组"
-        description="和 Karing 一样，主页面只选择动作；具体匹配内容放在编辑页。"
+        description="主页面只选择处理方式，具体匹配内容放在高级编辑中。"
         action={
           <Button startIcon={<EditRounded />} onClick={onOpenAdvanced}>
             添加或编辑规则
@@ -391,7 +369,7 @@ export const SimplePanel = ({
               <RuleRow
                 key={group.id}
                 name={group.name || '未命名规则组'}
-                description={`${group.logic.toUpperCase()} · ${group.matchers.length} 个匹配项`}
+                description={`已配置 ${group.matchers.length} 个匹配条件`}
                 action={customGroupAction(group)}
                 advancedLabel={advancedActionLabel(group)}
                 onActionChange={(action) => {
@@ -409,11 +387,11 @@ export const SimplePanel = ({
 
       <Section
         title="最终规则"
-        description="没有命中上面任何规则的流量要怎么处理。Karing 默认使用“当前选择”。"
+        description="没有命中上面任何规则的流量要怎么处理。"
       >
         <RuleRow
           name="未匹配流量"
-          description="建议保持“当前选择”，这样主界面换节点后不需要改规则。"
+          description="建议保持“当前选择”，主界面换节点后无需再改规则。"
           action={isSimpleAction(config.fallback) ? config.fallback : 'advanced'}
           advancedLabel={
             config.fallback === 'policy'
