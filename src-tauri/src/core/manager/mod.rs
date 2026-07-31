@@ -5,6 +5,7 @@ mod state;
 use anyhow::Result;
 use arc_swap::{ArcSwap, ArcSwapOption};
 use clash_verge_logger::AsyncLogger;
+use clash_verge_logging::{Type, logging};
 use once_cell::sync::Lazy;
 use std::{
     fmt,
@@ -139,7 +140,12 @@ impl CoreManager {
     }
 
     pub async fn init(&self) -> Result<()> {
-        self.start_core().await?;
+        self.set_running_mode(RunningMode::NotRunning);
+        logging!(
+            info,
+            Type::Core,
+            "application startup keeps the proxy core stopped until the user enables it"
+        );
         Ok(())
     }
 }
