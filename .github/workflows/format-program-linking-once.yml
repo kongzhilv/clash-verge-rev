@@ -1,0 +1,54 @@
+name: 一次性格式化程序项目联动
+run-name: 使用仓库锁定的 Biome 格式化程序项目联动
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/format-program-linking-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    name: 自动格式化并提交结果
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出功能分支
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+        env:
+          HUSKY: '0'
+
+      - name: 使用 Biome 自动格式化
+        run: pnpm format
+
+      - name: 提交格式化结果
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo '没有需要提交的格式差异'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git commit -m 'style: 使用 Biome 格式化程序项目联动代码'
+          git push origin HEAD:feature/karing-style-diversion
