@@ -33,6 +33,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
+import ConnectionProjectCard from '@/components/routing/connection-project-card'
 import parseTraffic from '@/utils/parse-traffic'
 
 import ConnectionRuleAssistant from './connection-rule-assistant'
@@ -81,7 +82,7 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
         slotProps={{
           paper: {
             sx: {
-              width: { xs: '100%', sm: 520 },
+              width: { xs: '100%', sm: 540 },
               maxWidth: '100vw',
               bgcolor: 'background.default',
             },
@@ -233,11 +234,7 @@ const InnerConnectionDetail = ({
         </Stack>
 
         <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-          <Stack
-            direction="row"
-            spacing={1.25}
-            sx={{ alignItems: 'flex-start' }}
-          >
+          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
             <Box
               sx={{
                 width: 38,
@@ -254,10 +251,10 @@ const InnerConnectionDetail = ({
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="caption" color="text.secondary">
-                程序
+                Mihomo 进程元数据
               </Typography>
               <Typography sx={{ fontWeight: 700, wordBreak: 'break-all' }}>
-                {processName || 'Mihomo 未返回程序信息'}
+                {processName || '未返回程序信息'}
               </Typography>
               {processPath && (
                 <Typography
@@ -270,12 +267,14 @@ const InnerConnectionDetail = ({
               )}
               {!hasProcess && (
                 <Typography variant="caption" color="text.secondary">
-                  仅部分系统和连接模式支持进程识别。
+                  下方仍会尝试用已登记的域名、IP 和端口识别程序或项目。
                 </Typography>
               )}
             </Box>
           </Stack>
         </Paper>
+
+        <ConnectionProjectCard connection={data} />
 
         <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
           <Stack divider={<Divider flexItem />}>
@@ -311,7 +310,7 @@ const InnerConnectionDetail = ({
           <Stack spacing={1}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <HubRounded color="primary" fontSize="small" />
-              <Typography variant="subtitle2">规则与出口</Typography>
+              <Typography variant="subtitle2">实际命中规则与出口</Typography>
             </Stack>
             <Box>
               <Typography variant="caption" color="text.secondary">
@@ -338,7 +337,7 @@ const InnerConnectionDetail = ({
           startIcon={<AddLinkRounded />}
           onClick={onOpenRuleAssistant}
         >
-          用这条连接管理分流规则
+          管理程序项目与分流规则
         </Button>
 
         {!closed && (
