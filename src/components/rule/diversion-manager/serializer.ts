@@ -22,6 +22,41 @@ export interface SerializedDiversionProfile {
   content: string
 }
 
+const sanitizeProjectManagedGroups = (
+  cleanedConfig: UnknownRecord,
+): UnknownRecord => {
+  if (!Array.isArray(cleanedConfig.groups)) return cleanedConfig
+
+  return {
+    ...cleanedConfig,
+    groups: cleanedConfig.groups.map((groupValue) => {
+      if (
+        !isRecord(groupValue) ||
+        typeof groupValue['project-id'] !== 'string' ||
+        !Array.isArray(groupValue.matchers)
+      ) {
+        return groupValue
+      }
+
+      const hasIdentityMatcher = groupValue.matchers.some(
+        (matcherValue) =>
+          isRecord(matcherValue) &&
+          typeof matcherValue.type === 'string' &&
+          matcherValue.type !== 'DST-PORT',
+      )
+      if (!hasIdentityMatcher) return groupValue
+
+      return {
+        ...groupValue,
+        matchers: groupValue.matchers.filter(
+          (matcherValue) =>
+            !isRecord(matcherValue) || matcherValue.type !== 'DST-PORT',
+        ),
+      }
+    }),
+  }
+}
+
 export const parseDiversionProfile = (
   content: string,
 ): ParsedDiversionProfile => {
@@ -44,7 +79,7 @@ export const serializeDiversionProfile = (
 
   const nextMerge: UnknownRecord = {
     ...mergeConfig,
-    [CONFIG_KEY]: cleanConfig(config),
+    [CONFIG_KEY]: sanitizeProjectManagedGroups(cleanConfig(config)),
   }
 
   return {
