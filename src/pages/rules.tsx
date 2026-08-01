@@ -1,6 +1,7 @@
 import { Box } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 
 import {
   BaseEmpty,
@@ -14,11 +15,15 @@ import DiversionDetector from '@/components/rule/diversion-detector'
 import DiversionManager from '@/components/rule/diversion-manager/index'
 import { ProviderButton } from '@/components/rule/provider-button'
 import RuleItem from '@/components/rule/rule-item'
+import RoutingRelationsPanel from '@/components/routing/routing-relations-panel'
 import { useVisibility } from '@/hooks/use-visibility'
 import { useAppRefreshers, useRulesData } from '@/providers/app-data-context'
 
 const RulesPage = () => {
   const { t } = useTranslation()
+  const [searchParams] = useSearchParams()
+  const focusProjectId = searchParams.get('project')
+  const manageProjects = searchParams.get('manage') === 'projects'
   const { rules = [] } = useRulesData()
   const { refreshRules, refreshRuleProviders } = useAppRefreshers()
   const [match, setMatch] = useState(() => (_: string) => true)
@@ -26,7 +31,6 @@ const RulesPage = () => {
   const [showScrollTop, setShowScrollTop] = useState(false)
   const pageVisible = useVisibility()
 
-  // 在组件挂载时和页面获得焦点时刷新规则数据
   useEffect(() => {
     refreshRules()
     refreshRuleProviders()
@@ -40,15 +44,14 @@ const RulesPage = () => {
   const filteredRules = useMemo(() => {
     const rulesWithLineNo = rules.map((item, index) => ({
       ...item,
-      // UI-only derived data; keep app context/SWR data immutable
       lineNo: index + 1,
     }))
 
     return rulesWithLineNo.filter((item) => match(item.payload ?? ''))
   }, [rules, match])
 
-  const handleScroll = useCallback((e: Event) => {
-    setShowScrollTop((e.target as HTMLElement).scrollTop > 100)
+  const handleScroll = useCallback((event: Event) => {
+    setShowScrollTop((event.target as HTMLElement).scrollTop > 100)
   }, [])
 
   const scrollToTop = () => {
@@ -63,7 +66,7 @@ const RulesPage = () => {
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'auto',
+        overflow: 'hidden',
       }}
       header={
         <Box
@@ -74,12 +77,19 @@ const RulesPage = () => {
             flexWrap: 'wrap',
           }}
         >
-          <DiversionManager />
+          <DiversionManager
+            initialOpen={manageProjects || Boolean(focusProjectId)}
+            focusProjectId={focusProjectId}
+          />
           <DiversionDetector />
           <ProviderButton />
         </Box>
       }
     >
+      <Box sx={{ mx: '10px', pt: 1 }}>
+        <RoutingRelationsPanel />
+      </Box>
+
       <Box
         sx={{
           pt: 1,
@@ -90,16 +100,16 @@ const RulesPage = () => {
           alignItems: 'center',
         }}
       >
-        <BaseSearchBox onSearch={(match) => setMatch(() => match)} />
+        <BaseSearchBox onSearch={(nextMatch) => setMatch(() => nextMatch)} />
       </Box>
 
-      {filteredRules && filteredRules.length > 0 ? (
+      {filteredRules.length > 0 ? (
         <>
           <VirtualList
             ref={virtuosoRef}
             count={filteredRules.length}
             estimateSize={40}
-            renderItem={(i) => <RuleItem value={filteredRules[i]} />}
+            renderItem={(index) => <RuleItem value={filteredRules[index]} />}
             style={{ flex: 1 }}
             onScroll={handleScroll}
           />
