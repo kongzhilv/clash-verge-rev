@@ -1,0 +1,120 @@
+name: 一次性收紧程序项目端口规则
+run-name: 防止常见端口扩大程序项目匹配范围
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/tighten-program-port-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  tighten:
+    name: 收紧规则并完成前端静态检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出功能分支
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+        env:
+          HUSKY: '0'
+
+      - name: 收紧程序项目端口规则
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          model = Path('src/components/rule/diversion-manager/model.ts')
+          text = model.read_text(encoding='utf-8')
+          old = """  return [
+            ...project.processNames.map((value, index) =>
+              matcher('PROCESS-NAME', value, index),
+            ),
+            ...project.processPaths.map((value, index) =>
+              matcher('PROCESS-PATH', value, index),
+            ),
+            ...project.domains.map((value, index) =>
+              matcher('DOMAIN-SUFFIX', value, index),
+            ),
+            ...project.ipCidrs.map((value, index) =>
+              matcher('IP-CIDR', value, index, true),
+            ),
+            ...project.destinationPorts.map((value, index) =>
+              matcher('DST-PORT', value, index),
+            ),
+          ]"""
+          new = """  const identityMatchers = [
+            ...project.processNames.map((value, index) =>
+              matcher('PROCESS-NAME', value, index),
+            ),
+            ...project.processPaths.map((value, index) =>
+              matcher('PROCESS-PATH', value, index),
+            ),
+            ...project.domains.map((value, index) =>
+              matcher('DOMAIN-SUFFIX', value, index),
+            ),
+            ...project.ipCidrs.map((value, index) =>
+              matcher('IP-CIDR', value, index, true),
+            ),
+          ]
+          if (identityMatchers.length > 0) return identityMatchers
+
+          return project.destinationPorts.map((value, index) =>
+            matcher('DST-PORT', value, index),
+          )"""
+          if old not in text:
+              raise SystemExit('model.ts 中未找到预期的项目匹配器片段')
+          model.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          readme = Path('README.md')
+          text = readme.read_text(encoding='utf-8')
+          old = """5. 目标端口辅助条件
+
+当运行时没有进程名或路径时"""
+          new = """5. 目标端口辅助条件
+
+为避免 `443` 等常见端口扩大匹配范围，只要档案中存在程序、域名或 IP 条件，端口就只参与界面识别加权，不会被编译成独立 OR 路由规则；仅端口档案才会生成端口规则。
+
+当运行时没有进程名或路径时"""
+          if old not in text:
+              raise SystemExit('README.md 中未找到预期的匹配优先级片段')
+          readme.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: 格式化并验证前端
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm format
+          pnpm lint
+          pnpm typecheck
+          pnpm knip
+
+      - name: 提交审查后的规则收紧
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git commit -m 'fix: 防止常见端口扩大程序项目匹配范围'
+          git push origin HEAD:feature/karing-style-diversion
