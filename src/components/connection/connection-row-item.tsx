@@ -1,4 +1,4 @@
-import { AppsRounded, CloseRounded } from '@mui/icons-material'
+import { AccountTreeRounded, AppsRounded, CloseRounded } from '@mui/icons-material'
 import { IconButton } from '@mui/material'
 import { useLockFn } from 'ahooks'
 import { memo, useCallback } from 'react'
@@ -12,6 +12,9 @@ interface Props {
   row: ConnectionRowView
   closed: boolean
   onShowDetail: (id: string) => void
+  projectName?: string
+  projectPolicy?: string
+  projectInferred?: boolean
 }
 
 const tagStyle = {
@@ -34,6 +37,15 @@ const programTagStyle = {
   gap: 3,
   borderColor: 'rgba(46,125,50,0.4)',
   background: 'rgba(46,125,50,0.08)',
+} as const
+
+const projectTagStyle = {
+  ...tagStyle,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 3,
+  borderColor: 'rgba(25,118,210,0.45)',
+  background: 'rgba(25,118,210,0.1)',
 } as const
 
 const itemStyle = {
@@ -80,7 +92,14 @@ const actionStyle = {
 } as const
 
 export const ConnectionRowItem = memo(
-  function ConnectionRowItem({ row, closed, onShowDetail }: Props) {
+  function ConnectionRowItem({
+    row,
+    closed,
+    onShowDetail,
+    projectName,
+    projectPolicy,
+    projectInferred = false,
+  }: Props) {
     const { t } = useTranslation()
     const onDelete = useLockFn(async () => closeConnection(row.id))
     const handleShowDetail = useCallback(
@@ -94,6 +113,16 @@ export const ConnectionRowItem = memo(
         <div style={contentStyle} onClick={handleShowDetail}>
           <div style={primaryStyle}>{row.host}</div>
           <div style={tagsStyle}>
+            {projectName && (
+              <span
+                style={projectTagStyle}
+                title={`${projectName}${projectPolicy ? ` → ${projectPolicy}` : ''}${projectInferred ? '（依据连接特征推断）' : ''}`}
+              >
+                <AccountTreeRounded sx={{ fontSize: 12 }} />
+                项目：{projectName}
+                {projectInferred ? ' · 推断' : ''}
+              </span>
+            )}
             {row.process && (
               <span
                 style={programTagStyle}
@@ -134,5 +163,8 @@ export const ConnectionRowItem = memo(
   (prev, next) =>
     prev.row === next.row &&
     prev.closed === next.closed &&
-    prev.onShowDetail === next.onShowDetail,
+    prev.onShowDetail === next.onShowDetail &&
+    prev.projectName === next.projectName &&
+    prev.projectPolicy === next.projectPolicy &&
+    prev.projectInferred === next.projectInferred,
 )
