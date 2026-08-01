@@ -17,7 +17,7 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { actionLabel } from './action-label'
@@ -47,29 +47,28 @@ export const ProjectPanel = ({
   onChange,
 }: ProjectPanelProps) => {
   const navigate = useNavigate()
-  const [editorOpen, setEditorOpen] = useState(false)
+  const [manualEditorOpen, setManualEditorOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<DiversionProject | null>(
     null,
   )
-  const focusedOnce = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!focusProjectId || focusedOnce.current === focusProjectId) return
-    const project = config.projects.find((item) => item.id === focusProjectId)
-    if (!project) return
-    focusedOnce.current = focusProjectId
-    setEditingProject(project)
-    setEditorOpen(true)
-  }, [config.projects, focusProjectId])
+  const [dismissedFocusProjectId, setDismissedFocusProjectId] = useState<
+    string | null
+  >(null)
+  const focusedProject =
+    focusProjectId && dismissedFocusProjectId !== focusProjectId
+      ? (config.projects.find((item) => item.id === focusProjectId) ?? null)
+      : null
+  const editorOpen = manualEditorOpen || Boolean(focusedProject)
+  const editorProject = manualEditorOpen ? editingProject : focusedProject
 
   const openCreate = () => {
     setEditingProject(null)
-    setEditorOpen(true)
+    setManualEditorOpen(true)
   }
 
   const openEdit = (project: DiversionProject) => {
     setEditingProject(project)
-    setEditorOpen(true)
+    setManualEditorOpen(true)
   }
 
   const saveProject = (project: DiversionProject) => {
@@ -78,8 +77,9 @@ export const ProjectPanel = ({
       ? config.projects.map((item) => (item.id === project.id ? project : item))
       : [...config.projects, project]
     onChange({ enabled: true, projects })
-    setEditorOpen(false)
+    setManualEditorOpen(false)
     setEditingProject(null)
+    setDismissedFocusProjectId(focusProjectId ?? null)
   }
 
   const deleteProject = (project: DiversionProject) => {
@@ -268,16 +268,19 @@ export const ProjectPanel = ({
         </Stack>
       )}
 
-      <ProjectEditorDialog
-        open={editorOpen}
-        project={editingProject}
-        projectIndex={config.projects.length}
-        onClose={() => {
-          setEditorOpen(false)
-          setEditingProject(null)
-        }}
-        onSave={saveProject}
-      />
+      {editorOpen && (
+        <ProjectEditorDialog
+          open
+          project={editorProject}
+          projectIndex={config.projects.length}
+          onClose={() => {
+            setManualEditorOpen(false)
+            setEditingProject(null)
+            if (focusedProject) setDismissedFocusProjectId(focusedProject.id)
+          }}
+          onSave={saveProject}
+        />
+      )}
     </Box>
   )
 }

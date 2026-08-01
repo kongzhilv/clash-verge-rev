@@ -4,7 +4,6 @@ import {
   FolderOpenRounded,
   WorkspacesRounded,
 } from '@mui/icons-material'
-import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import {
   Alert,
   Box,
@@ -23,7 +22,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useEffect, useState } from 'react'
+import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
+import { useState } from 'react'
 
 import { actionLabel } from './action-label'
 import ActionPicker from './action-picker'
@@ -65,12 +65,6 @@ export const ProjectEditorDialog = ({
     makeProject(projectIndex, project ?? undefined),
   )
   const [actionPickerOpen, setActionPickerOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    setDraft(makeProject(projectIndex, project ?? undefined))
-    setActionPickerOpen(false)
-  }, [open, project, projectIndex])
 
   const patch = (next: Partial<DiversionProject>) =>
     setDraft((previous) => ({ ...previous, ...next }))

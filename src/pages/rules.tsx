@@ -11,11 +11,11 @@ import {
   type VirtualListHandle,
 } from '@/components/base'
 import { ScrollTopButton } from '@/components/layout/scroll-top-button'
+import RoutingRelationsPanel from '@/components/routing/routing-relations-panel'
 import DiversionDetector from '@/components/rule/diversion-detector'
 import DiversionManager from '@/components/rule/diversion-manager/index'
 import { ProviderButton } from '@/components/rule/provider-button'
 import RuleItem from '@/components/rule/rule-item'
-import RoutingRelationsPanel from '@/components/routing/routing-relations-panel'
 import { useVisibility } from '@/hooks/use-visibility'
 import { useAppRefreshers, useRulesData } from '@/providers/app-data-context'
 

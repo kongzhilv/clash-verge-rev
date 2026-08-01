@@ -39,6 +39,7 @@ import {
 import { useNavigate } from 'react-router'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
+import { resolveConnectionProject } from '@/components/routing/connection-project'
 import {
   makeProject,
   type DiversionConfig,
@@ -53,7 +54,6 @@ import {
   parseDiversionProfile,
   serializeDiversionProfile,
 } from '@/components/rule/diversion-manager/serializer'
-import { resolveConnectionProject } from '@/components/routing/connection-project'
 import { notifyDiversionUpdated } from '@/hooks/use-diversion-profile'
 import { readProfileFile, saveProfileFile } from '@/services/cmds'
 import { showNotice } from '@/services/notice-service'
@@ -285,11 +285,7 @@ export const ConnectionRuleAssistant = ({
   }, [])
 
   useEffect(() => {
-    if (!open) return
-    setSelectedId('')
-    setProjectEditorOpen(false)
-    setEditingProject(null)
-    void loadProfile()
+    if (open) void loadProfile()
   }, [loadProfile, open])
 
   const saveConfig = useCallback(
@@ -658,16 +654,18 @@ export const ConnectionRuleAssistant = ({
         </DialogActions>
       </Dialog>
 
-      <ProjectEditorDialog
-        open={projectEditorOpen}
-        project={editingProject}
-        projectIndex={snapshot?.config.projects.length ?? 0}
-        onClose={() => {
-          setProjectEditorOpen(false)
-          setEditingProject(null)
-        }}
-        onSave={(project) => void saveProject(project)}
-      />
+      {projectEditorOpen && (
+        <ProjectEditorDialog
+          open
+          project={editingProject}
+          projectIndex={snapshot?.config.projects.length ?? 0}
+          onClose={() => {
+            setProjectEditorOpen(false)
+            setEditingProject(null)
+          }}
+          onSave={(project) => void saveProject(project)}
+        />
+      )}
     </>
   )
 }

@@ -59,7 +59,7 @@ export const DiversionManager = ({
   const [mergeConfig, setMergeConfig] = useState<UnknownRecord>({})
   const [config, setConfig] = useState<DiversionConfig>(defaultConfig)
   const [builtinGroups, setBuiltinGroups] = useState<BuiltinGroup[]>([])
-  const lastAutoOpenKey = useRef<string | null>(null)
+  const lastAutoOpenKeyRef = useRef<string | null>(null)
 
   const manualGroups = useMemo(
     () => config.groups.filter((group) => !group['project-id']),
@@ -107,8 +107,8 @@ export const DiversionManager = ({
 
   useEffect(() => {
     const autoOpenKey = initialOpen ? (focusProjectId ?? 'projects') : null
-    if (!autoOpenKey || lastAutoOpenKey.current === autoOpenKey) return
-    lastAutoOpenKey.current = autoOpenKey
+    if (!autoOpenKey || lastAutoOpenKeyRef.current === autoOpenKey) return
+    lastAutoOpenKeyRef.current = autoOpenKey
     void openManager()
   }, [focusProjectId, initialOpen, openManager])
 
