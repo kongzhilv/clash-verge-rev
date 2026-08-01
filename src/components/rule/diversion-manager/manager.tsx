@@ -106,7 +106,7 @@ export const DiversionManager = ({
   }, [])
 
   useEffect(() => {
-    const autoOpenKey = initialOpen ? focusProjectId ?? 'projects' : null
+    const autoOpenKey = initialOpen ? (focusProjectId ?? 'projects') : null
     if (!autoOpenKey || lastAutoOpenKey.current === autoOpenKey) return
     lastAutoOpenKey.current = autoOpenKey
     void openManager()
@@ -135,9 +135,15 @@ export const DiversionManager = ({
       if (index < 0 || target < 0 || target >= manual.length) return previous
 
       const reordered = [...manual]
-      ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
+      ;[reordered[index], reordered[target]] = [
+        reordered[target],
+        reordered[index],
+      ]
       const managed = previous.groups.filter((group) => group['project-id'])
-      return syncProjectGroups({ ...previous, groups: [...managed, ...reordered] })
+      return syncProjectGroups({
+        ...previous,
+        groups: [...managed, ...reordered],
+      })
     })
   }
 
@@ -294,7 +300,8 @@ export const DiversionManager = ({
                     }}
                   >
                     <Typography color="text.secondary">
-                      没有额外的手动规则组。可直接使用上方程序项目，或在此创建任意 Mihomo 分流规则。
+                      没有额外的手动规则组。可直接使用上方程序项目，或在此创建任意
+                      Mihomo 分流规则。
                     </Typography>
                   </Box>
                 ) : (

@@ -47,22 +47,26 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
       : []
     return groups.find(
       (item) =>
-        String(item.name ?? '').trim().toLowerCase() ===
-        policy.trim().toLowerCase(),
+        String(item.name ?? '')
+          .trim()
+          .toLowerCase() === policy.trim().toLowerCase(),
     )
   }, [policy, proxies?.groups])
 
   if (!group) {
     return (
       <Alert severity="warning">
-        当前 Mihomo 运行时没有返回代理组“{policy}”。规则仍会保留该名称，待配置中出现后生效。
+        当前 Mihomo 运行时没有返回代理组“{policy}
+        ”。规则仍会保留该名称，待配置中出现后生效。
       </Alert>
     )
   }
 
   const groupName = String(group.name ?? policy)
   const current = String(group.now ?? '')
-  const proxiesInGroup: RuntimeProxy[] = Array.isArray(group.all) ? group.all : []
+  const proxiesInGroup: RuntimeProxy[] = Array.isArray(group.all)
+    ? group.all
+    : []
 
   return (
     <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
@@ -74,8 +78,15 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
         <AccountTreeRounded color="primary" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontWeight: 700 }}>{groupName}</Typography>
-          <Stack direction="row" spacing={0.75} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
-            <Chip size="small" label={`类型：${String(group.type ?? '未知')}`} />
+          <Stack
+            direction="row"
+            spacing={0.75}
+            sx={{ mt: 0.5, flexWrap: 'wrap' }}
+          >
+            <Chip
+              size="small"
+              label={`类型：${String(group.type ?? '未知')}`}
+            />
             <Chip
               size="small"
               color="primary"

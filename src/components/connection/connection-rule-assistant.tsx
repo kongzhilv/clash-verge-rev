@@ -222,7 +222,10 @@ const buildProjectFromConnection = (
   const metadata = connection.metadata
   const host = cleanHost(String(metadata.host ?? ''))
   const processPath = String(metadata.processPath ?? '').trim()
-  const processName = processNameFrom(String(metadata.process ?? ''), processPath)
+  const processName = processNameFrom(
+    String(metadata.process ?? ''),
+    processPath,
+  )
   const destinationIP = ipCidr(
     String(metadata.destinationIP || metadata.remoteDestination || ''),
   )
@@ -232,7 +235,8 @@ const buildProjectFromConnection = (
   return makeProject(index, {
     kind: processName || processPath ? 'program' : 'project',
     name,
-    description: '由连接详情创建，可继续补充同一程序或项目使用的其他域名、IP 和端口。',
+    description:
+      '由连接详情创建，可继续补充同一程序或项目使用的其他域名、IP 和端口。',
     action: 'current',
     processNames: processName ? [processName] : [],
     processPaths: processPath ? [processPath] : [],
@@ -255,13 +259,15 @@ export const ConnectionRuleAssistant = ({
   const [loading, setLoading] = useState(false)
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null)
   const [projectEditorOpen, setProjectEditorOpen] = useState(false)
-  const [editingProject, setEditingProject] =
-    useState<DiversionProject | null>(null)
+  const [editingProject, setEditingProject] = useState<DiversionProject | null>(
+    null,
+  )
 
   const selectedCandidate =
     candidates.find((candidate) => candidate.id === selectedId) ?? candidates[0]
   const linkedProject = useMemo(
-    () => resolveConnectionProject(connection, snapshot?.config)?.project ?? null,
+    () =>
+      resolveConnectionProject(connection, snapshot?.config)?.project ?? null,
     [connection, snapshot?.config],
   )
 
@@ -394,14 +400,19 @@ export const ConnectionRuleAssistant = ({
   const openProjectEditor = () => {
     const project =
       linkedProject ??
-      buildProjectFromConnection(connection, snapshot?.config.projects.length ?? 0)
+      buildProjectFromConnection(
+        connection,
+        snapshot?.config.projects.length ?? 0,
+      )
     setEditingProject(project)
     setProjectEditorOpen(true)
   }
 
   const saveProject = async (project: DiversionProject) => {
     if (!snapshot) return
-    const exists = snapshot.config.projects.some((item) => item.id === project.id)
+    const exists = snapshot.config.projects.some(
+      (item) => item.id === project.id,
+    )
     const projects = exists
       ? snapshot.config.projects.map((item) =>
           item.id === project.id ? project : item,
@@ -493,7 +504,10 @@ export const ConnectionRuleAssistant = ({
                 >
                   {linkedProject ? '编辑关联项目' : '添加为程序或项目'}
                 </Button>
-                <Button startIcon={<OpenInNewRounded />} onClick={openRulesPage}>
+                <Button
+                  startIcon={<OpenInNewRounded />}
+                  onClick={openRulesPage}
+                >
                   打开完整规则页
                 </Button>
               </Stack>
@@ -502,7 +516,10 @@ export const ConnectionRuleAssistant = ({
 
           <Divider />
 
-          <Stack direction={{ xs: 'column', md: 'row' }} sx={{ minHeight: 360 }}>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            sx={{ minHeight: 360 }}
+          >
             <Box
               sx={{
                 width: { md: 300 },
@@ -564,7 +581,9 @@ export const ConnectionRuleAssistant = ({
                   variant="contained"
                   startIcon={<AddRounded />}
                   onClick={() => void createGroup()}
-                  disabled={!selectedCandidate || loading || savingGroupId !== null}
+                  disabled={
+                    !selectedCandidate || loading || savingGroupId !== null
+                  }
                 >
                   新建规则组
                 </Button>

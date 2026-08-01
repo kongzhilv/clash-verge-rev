@@ -37,10 +37,14 @@ export const ConnectionProjectCard = ({
           <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2">未关联程序或项目</Typography>
             <Typography variant="body2" color="text.secondary">
-              可登记程序路径、域名、IP 或端口，让连接、规则和代理组共用同一档案。
+              可登记程序路径、域名、IP
+              或端口，让连接、规则和代理组共用同一档案。
             </Typography>
           </Box>
-          <Button size="small" onClick={() => navigate('/rules?manage=projects')}>
+          <Button
+            size="small"
+            onClick={() => navigate('/rules?manage=projects')}
+          >
             添加档案
           </Button>
         </Stack>

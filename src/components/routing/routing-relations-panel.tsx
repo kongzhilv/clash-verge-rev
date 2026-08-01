@@ -5,7 +5,15 @@ import {
   LanRounded,
   LinkRounded,
 } from '@mui/icons-material'
-import { Alert, Box, Button, Chip, Paper, Stack, Typography } from '@mui/material'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Paper,
+  Stack,
+  Typography,
+} from '@mui/material'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 
@@ -152,7 +160,11 @@ export const RoutingRelationsPanel = ({
                   <Typography sx={{ fontWeight: 700 }} noWrap>
                     {project.name}
                   </Typography>
-                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ flexWrap: 'wrap' }}
+                  >
                     <Chip
                       size="small"
                       icon={<HubRounded />}
@@ -167,8 +179,14 @@ export const RoutingRelationsPanel = ({
                         label={policy}
                       />
                     )}
-                    <Chip size="small" label={`识别连接 ${matchedConnections}`} />
-                    <Chip size="small" label={`出口连接 ${policyConnections}`} />
+                    <Chip
+                      size="small"
+                      label={`识别连接 ${matchedConnections}`}
+                    />
+                    <Chip
+                      size="small"
+                      label={`出口连接 ${policyConnections}`}
+                    />
                   </Stack>
                   <Stack direction="row" spacing={0.5}>
                     <Button
@@ -196,7 +214,9 @@ export const RoutingRelationsPanel = ({
                       <Button
                         size="small"
                         onClick={() =>
-                          navigate(`/proxies?policy=${encodeURIComponent(policy)}`)
+                          navigate(
+                            `/proxies?policy=${encodeURIComponent(policy)}`,
+                          )
                         }
                       >
                         代理组

@@ -234,7 +234,11 @@ const InnerConnectionDetail = ({
         </Stack>
 
         <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-          <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
+          <Stack
+            direction="row"
+            spacing={1.25}
+            sx={{ alignItems: 'flex-start' }}
+          >
             <Box
               sx={{
                 width: 38,

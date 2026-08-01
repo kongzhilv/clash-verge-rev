@@ -1,4 +1,8 @@
-import { AccountTreeRounded, AppsRounded, CloseRounded } from '@mui/icons-material'
+import {
+  AccountTreeRounded,
+  AppsRounded,
+  CloseRounded,
+} from '@mui/icons-material'
 import { IconButton } from '@mui/material'
 import { useLockFn } from 'ahooks'
 import { memo, useCallback } from 'react'

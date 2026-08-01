@@ -51,7 +51,9 @@ const ipMatches = (ip: string, cidr: string) => {
 
   const [network, prefixText] = rule.split('/', 2)
   if (candidate.includes(':') || network.includes(':')) {
-    return prefixText === '128' && candidate.toLowerCase() === network.toLowerCase()
+    return (
+      prefixText === '128' && candidate.toLowerCase() === network.toLowerCase()
+    )
   }
 
   const candidateNumber = ipv4ToNumber(candidate)
@@ -86,7 +88,9 @@ const portMatches = (port: string, rule: string) => {
 const domainMatches = (host: string, domain: string) => {
   const normalized = normalizeHost(domain).replace(/^\*\./, '')
   return Boolean(
-    host && normalized && (host === normalized || host.endsWith(`.${normalized}`)),
+    host &&
+      normalized &&
+      (host === normalized || host.endsWith(`.${normalized}`)),
   )
 }
 
@@ -104,7 +108,9 @@ export const resolveConnectionProject = (
   if (!config) return null
   const metadata = connection.metadata
   const processPath = normalizePath(String(metadata.processPath ?? ''))
-  const processName = String(metadata.process ?? '').trim().toLowerCase()
+  const processName = String(metadata.process ?? '')
+    .trim()
+    .toLowerCase()
   const processBasename = basename(processPath || processName)
   const host = normalizeHost(String(metadata.host ?? ''))
   const destinationIP = String(
@@ -121,7 +127,9 @@ export const resolveConnectionProject = (
 
       if (
         processPath &&
-        project.processPaths.some((value) => normalizePath(value) === processPath)
+        project.processPaths.some(
+          (value) => normalizePath(value) === processPath,
+        )
       ) {
         score += 120
         reasons.push('完整程序路径')
@@ -182,6 +190,8 @@ export const connectionUsesPolicy = (
   const expected = policy.trim().toLowerCase()
   return Boolean(
     expected &&
-      connection.chains.some((chain) => chain.trim().toLowerCase() === expected),
+      connection.chains.some(
+        (chain) => chain.trim().toLowerCase() === expected,
+      ),
   )
 }

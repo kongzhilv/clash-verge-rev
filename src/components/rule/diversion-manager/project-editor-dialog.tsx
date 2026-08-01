@@ -112,7 +112,8 @@ export const ProjectEditorDialog = ({
       <DialogContent dividers>
         <Stack spacing={2}>
           <Alert severity="info">
-            档案会生成一个真实分流规则组。即使 Mihomo 没有返回进程名，也能根据你登记的域名、IP
+            档案会生成一个真实分流规则组。即使 Mihomo
+            没有返回进程名，也能根据你登记的域名、IP
             或端口识别连接并应用同一个出口。
           </Alert>
 
@@ -127,13 +128,21 @@ export const ProjectEditorDialog = ({
                 }
               >
                 <MenuItem value="program">
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center' }}
+                  >
                     <AppsRounded fontSize="small" />
                     <span>程序</span>
                   </Stack>
                 </MenuItem>
                 <MenuItem value="project">
-                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center' }}
+                  >
                     <WorkspacesRounded fontSize="small" />
                     <span>项目</span>
                   </Stack>
@@ -283,7 +292,8 @@ export const ProjectEditorDialog = ({
           </Stack>
 
           <Alert severity={conditionCount > 0 ? 'success' : 'warning'}>
-            当前档案包含 {conditionCount} 个识别条件。至少需要一个条件才能启用并保存。
+            当前档案包含 {conditionCount}{' '}
+            个识别条件。至少需要一个条件才能启用并保存。
           </Alert>
         </Stack>
       </DialogContent>

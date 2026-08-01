@@ -236,7 +236,8 @@ const ConnectionsPage = () => {
       header={
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ mx: 0.5 }}>
-            {t('shared.labels.downloaded')}: {parseTraffic(traffic?.downTotal || 0)}
+            {t('shared.labels.downloaded')}:{' '}
+            {parseTraffic(traffic?.downTotal || 0)}
           </Box>
           <Box sx={{ mx: 0.5 }}>
             {t('shared.labels.uploaded')}: {parseTraffic(traffic?.upTotal || 0)}

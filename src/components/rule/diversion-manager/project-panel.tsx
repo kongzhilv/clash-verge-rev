@@ -48,8 +48,9 @@ export const ProjectPanel = ({
 }: ProjectPanelProps) => {
   const navigate = useNavigate()
   const [editorOpen, setEditorOpen] = useState(false)
-  const [editingProject, setEditingProject] =
-    useState<DiversionProject | null>(null)
+  const [editingProject, setEditingProject] = useState<DiversionProject | null>(
+    null,
+  )
   const focusedOnce = useRef<string | null>(null)
 
   useEffect(() => {
@@ -107,7 +108,8 @@ export const ProjectPanel = ({
             程序与项目档案
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            将程序路径、域名、IP 和端口绑定到同一个规则组与出口；连接、规则和代理组页面会共享这份关系。
+            将程序路径、域名、IP
+            和端口绑定到同一个规则组与出口；连接、规则和代理组页面会共享这份关系。
           </Typography>
         </Box>
         <Button startIcon={<AddRounded />} onClick={openCreate}>
@@ -152,7 +154,9 @@ export const ProjectPanel = ({
                       display: 'grid',
                       placeItems: 'center',
                       borderRadius: 2,
-                      bgcolor: project.enabled ? 'primary.main' : 'action.hover',
+                      bgcolor: project.enabled
+                        ? 'primary.main'
+                        : 'action.hover',
                       color: project.enabled
                         ? 'primary.contrastText'
                         : 'text.secondary',
@@ -214,7 +218,11 @@ export const ProjectPanel = ({
                     inputProps={{ 'aria-label': `启用 ${project.name}` }}
                   />
 
-                  <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ flexWrap: 'wrap' }}
+                  >
                     <Button
                       size="small"
                       onClick={() =>
@@ -229,7 +237,9 @@ export const ProjectPanel = ({
                       <Button
                         size="small"
                         onClick={() =>
-                          navigate(`/proxies?policy=${encodeURIComponent(policy)}`)
+                          navigate(
+                            `/proxies?policy=${encodeURIComponent(policy)}`,
+                          )
                         }
                       >
                         查看代理组
