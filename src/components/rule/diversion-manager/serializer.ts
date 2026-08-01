@@ -5,6 +5,7 @@ import {
   cleanConfig,
   isRecord,
   normalizeConfig,
+  syncProjectGroups,
   validateConfig,
   type DiversionConfig,
   type UnknownRecord,
@@ -17,6 +18,7 @@ export interface ParsedDiversionProfile {
 
 export interface SerializedDiversionProfile {
   mergeConfig: UnknownRecord
+  config: DiversionConfig
   content: string
 }
 
@@ -34,8 +36,9 @@ export const parseDiversionProfile = (
 
 export const serializeDiversionProfile = (
   mergeConfig: UnknownRecord,
-  config: DiversionConfig,
+  input: DiversionConfig,
 ): SerializedDiversionProfile => {
+  const config = syncProjectGroups(input)
   const error = validateConfig(config)
   if (error) throw new Error(error)
 
@@ -46,6 +49,7 @@ export const serializeDiversionProfile = (
 
   return {
     mergeConfig: nextMerge,
+    config,
     content: dump(nextMerge, {
       noRefs: true,
       lineWidth: 120,
