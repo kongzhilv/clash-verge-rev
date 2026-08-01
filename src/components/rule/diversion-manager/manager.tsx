@@ -2,9 +2,7 @@ import {
   AddRounded,
   CloseRounded,
   SaveRounded,
-  SettingsRounded,
   TuneRounded,
-  ViewListRounded,
 } from '@mui/icons-material'
 import {
   Alert,
@@ -18,8 +16,9 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { notifyDiversionUpdated } from '@/hooks/use-diversion-profile'
 import { readProfileFile, saveProfileFile } from '@/services/cmds'
 import { showNotice } from '@/services/notice-service'
 
@@ -27,6 +26,7 @@ import GroupCreateDialog from './group-create-dialog'
 import GroupEditor from './group-editor'
 import {
   defaultConfig,
+  syncProjectGroups,
   type DiversionConfig,
   type DiversionGroup,
   type UnknownRecord,
@@ -39,11 +39,19 @@ import {
   validateBuiltinGroups,
   withBuiltinAction,
 } from './presets'
+import ProjectPanel from './project-panel'
 import { parseDiversionProfile, serializeDiversionProfile } from './serializer'
 import SettingsPanel from './settings-panel'
-import SimplePanel from './simple-panel'
 
-export const DiversionManager = () => {
+interface DiversionManagerProps {
+  initialOpen?: boolean
+  focusProjectId?: string | null
+}
+
+export const DiversionManager = ({
+  initialOpen = false,
+  focusProjectId,
+}: DiversionManagerProps) => {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -51,6 +59,12 @@ export const DiversionManager = () => {
   const [mergeConfig, setMergeConfig] = useState<UnknownRecord>({})
   const [config, setConfig] = useState<DiversionConfig>(defaultConfig)
   const [builtinGroups, setBuiltinGroups] = useState<BuiltinGroup[]>([])
+  const autoOpened = useRef(false)
+
+  const manualGroups = useMemo(
+    () => config.groups.filter((group) => !group['project-id']),
+    [config.groups],
+  )
 
   const enabledGroupCount = useMemo(
     () =>
@@ -91,46 +105,61 @@ export const DiversionManager = () => {
     }
   }, [])
 
+  useEffect(() => {
+    if (!initialOpen || autoOpened.current) return
+    autoOpened.current = true
+    void openManager()
+  }, [initialOpen, openManager])
+
   const updateConfig = (patch: Partial<DiversionConfig>) => {
-    setConfig((previous) => ({ ...previous, ...patch }))
+    setConfig((previous) => syncProjectGroups({ ...previous, ...patch }))
   }
 
-  const updateGroup = (index: number, patch: Partial<DiversionGroup>) => {
-    if (index < 0) return
-    setConfig((previous) => ({
-      ...previous,
-      groups: previous.groups.map((group, currentIndex) =>
-        currentIndex === index ? { ...group, ...patch } : group,
-      ),
-    }))
+  const updateGroup = (groupId: string, patch: Partial<DiversionGroup>) => {
+    setConfig((previous) =>
+      syncProjectGroups({
+        ...previous,
+        groups: previous.groups.map((group) =>
+          group.id === groupId ? { ...group, ...patch } : group,
+        ),
+      }),
+    )
   }
 
-  const moveGroup = (index: number, direction: -1 | 1) => {
+  const moveGroup = (groupId: string, direction: -1 | 1) => {
     setConfig((previous) => {
+      const manual = previous.groups.filter((group) => !group['project-id'])
+      const index = manual.findIndex((group) => group.id === groupId)
       const target = index + direction
-      if (target < 0 || target >= previous.groups.length) return previous
+      if (index < 0 || target < 0 || target >= manual.length) return previous
 
-      const groups = [...previous.groups]
-      ;[groups[index], groups[target]] = [groups[target], groups[index]]
-      return { ...previous, groups }
+      const reordered = [...manual]
+      ;[reordered[index], reordered[target]] = [
+        reordered[target],
+        reordered[index],
+      ]
+      const managed = previous.groups.filter((group) => group['project-id'])
+      return syncProjectGroups({ ...previous, groups: [...managed, ...reordered] })
     })
   }
 
-  const deleteGroup = (index: number) => {
-    setConfig((previous) => ({
-      ...previous,
-      groups: previous.groups.filter(
-        (_, currentIndex) => currentIndex !== index,
-      ),
-    }))
+  const deleteGroup = (groupId: string) => {
+    setConfig((previous) =>
+      syncProjectGroups({
+        ...previous,
+        groups: previous.groups.filter((group) => group.id !== groupId),
+      }),
+    )
   }
 
   const appendGroup = (group: DiversionGroup) => {
-    setConfig((previous) => ({
-      ...previous,
-      enabled: true,
-      groups: [...previous.groups, group],
-    }))
+    setConfig((previous) =>
+      syncProjectGroups({
+        ...previous,
+        enabled: true,
+        groups: [...previous.groups, group],
+      }),
+    )
   }
 
   const save = useCallback(async () => {
@@ -148,7 +177,9 @@ export const DiversionManager = () => {
       if (!valid) throw new Error('Mihomo 配置校验未通过，原配置已恢复')
 
       setMergeConfig(serialized.mergeConfig)
-      showNotice.success('分流配置已保存并立即应用')
+      setConfig(serialized.config)
+      notifyDiversionUpdated(serialized.config)
+      showNotice.success('分流、程序项目与代理组关系已保存并立即应用')
       setOpen(false)
     } catch (error) {
       showNotice.error(error)
@@ -157,16 +188,14 @@ export const DiversionManager = () => {
     }
   }, [builtinGroups, config, mergeConfig])
 
-  const advancedMode = config['ui-mode'] === 'advanced'
-
   return (
     <>
-      <Tooltip title="像 Karing 一样按用途选择分流动作">
+      <Tooltip title="统一管理规则、程序项目、连接识别和出口代理组">
         <Button
           size="small"
           variant="outlined"
           startIcon={<TuneRounded />}
-          onClick={openManager}
+          onClick={() => void openManager()}
         >
           分流设置
         </Button>
@@ -178,40 +207,24 @@ export const DiversionManager = () => {
               edge="start"
               onClick={() => setOpen(false)}
               disabled={saving}
+              aria-label="关闭分流设置"
             >
               <CloseRounded />
             </IconButton>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6">
-                {advancedMode ? '高级分流编辑' : '分流规则'}
-              </Typography>
+              <Typography variant="h6">完整分流管理</Typography>
               <Typography
                 variant="caption"
                 sx={{ color: 'text.secondary', display: 'block' }}
                 noWrap
               >
-                {advancedMode
-                  ? '编辑规则内容、顺序和出口选择'
-                  : `已启用 ${enabledGroupCount} 个规则组，点击规则即可选择出口`}
+                {`程序项目 ${config.projects.length} 个 · 已启用规则组 ${enabledGroupCount} 个`}
               </Typography>
             </Box>
             <Button
-              startIcon={
-                advancedMode ? <ViewListRounded /> : <SettingsRounded />
-              }
-              onClick={() =>
-                updateConfig({
-                  'ui-mode': advancedMode ? 'simple' : 'advanced',
-                })
-              }
-              disabled={loading || saving}
-            >
-              {advancedMode ? '简单模式' : '高级编辑'}
-            </Button>
-            <Button
               variant="contained"
               startIcon={<SaveRounded />}
-              onClick={save}
+              onClick={() => void save()}
               disabled={loading || saving}
             >
               {saving ? '正在校验…' : '保存并应用'}
@@ -219,18 +232,24 @@ export const DiversionManager = () => {
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ maxWidth: 1100, width: '100%', mx: 'auto', p: 2 }}>
+        <Box sx={{ maxWidth: 1180, width: '100%', mx: 'auto', p: 2 }}>
           {loading ? (
             <Typography sx={{ color: 'text.secondary' }}>
               正在读取全局 Merge 配置…
             </Typography>
-          ) : advancedMode ? (
-            <Stack spacing={2}>
-              <Alert severity="warning">
-                高级编辑会直接改变最终 Mihomo
-                规则。普通使用只需返回“简单模式”，点击规则选择出口。
+          ) : (
+            <Stack spacing={2.5}>
+              <Alert severity="info">
+                已取消简单模式。这里直接显示完整规则、程序项目、优先级和出口；程序项目生成的规则组会与连接页和代理组页共享同一关系。
               </Alert>
+
               <SettingsPanel config={config} onChange={updateConfig} />
+
+              <ProjectPanel
+                config={config}
+                focusProjectId={focusProjectId}
+                onChange={updateConfig}
+              />
 
               <Box>
                 <Stack
@@ -244,13 +263,10 @@ export const DiversionManager = () => {
                 >
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                      自定义分流组
+                      手动分流规则组
                     </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: 'text.secondary' }}
-                    >
-                      列表顺序就是最终 Mihomo 规则顺序，越靠上优先级越高。
+                    <Typography variant="caption" color="text.secondary">
+                      程序项目的托管规则组在上方编辑；这里保留其他自定义规则。列表越靠上优先级越高。
                     </Typography>
                   </Box>
                   <Button
@@ -263,12 +279,12 @@ export const DiversionManager = () => {
 
                 <GroupCreateDialog
                   open={createDialogOpen}
-                  existingGroups={config.groups}
+                  existingGroups={manualGroups}
                   onClose={() => setCreateDialogOpen(false)}
                   onCreate={appendGroup}
                 />
 
-                {config.groups.length === 0 ? (
+                {manualGroups.length === 0 ? (
                   <Box
                     sx={{
                       p: 4,
@@ -279,36 +295,27 @@ export const DiversionManager = () => {
                       borderRadius: 2,
                     }}
                   >
-                    <Typography sx={{ color: 'text.secondary' }}>
-                      还没有自定义分流组，点击“新建分流组”选择空白组或常用模板。
+                    <Typography color="text.secondary">
+                      没有额外的手动规则组。可直接使用上方程序项目，或在此创建任意 Mihomo 分流规则。
                     </Typography>
                   </Box>
                 ) : (
                   <Stack spacing={1}>
-                    {config.groups.map((group, index) => (
+                    {manualGroups.map((group, index) => (
                       <GroupEditor
                         key={group.id}
                         group={group}
                         index={index}
-                        total={config.groups.length}
-                        onChange={(patch) => updateGroup(index, patch)}
-                        onMove={(direction) => moveGroup(index, direction)}
-                        onDelete={() => deleteGroup(index)}
+                        total={manualGroups.length}
+                        onChange={(patch) => updateGroup(group.id, patch)}
+                        onMove={(direction) => moveGroup(group.id, direction)}
+                        onDelete={() => deleteGroup(group.id)}
                       />
                     ))}
                   </Stack>
                 )}
               </Box>
             </Stack>
-          ) : (
-            <SimplePanel
-              config={config}
-              builtinGroups={builtinGroups}
-              onConfigChange={updateConfig}
-              onBuiltinGroupsChange={setBuiltinGroups}
-              onGroupChange={updateGroup}
-              onOpenAdvanced={() => updateConfig({ 'ui-mode': 'advanced' })}
-            />
           )}
         </Box>
       </Dialog>
