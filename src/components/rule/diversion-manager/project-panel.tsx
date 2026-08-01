@@ -215,7 +215,9 @@ export const ProjectPanel = ({
                   <Switch
                     checked={project.enabled}
                     onChange={(_, checked) => toggleProject(project, checked)}
-                    inputProps={{ 'aria-label': `启用 ${project.name}` }}
+                    slotProps={{
+                      input: { 'aria-label': `启用 ${project.name}` },
+                    }}
                   />
 
                   <Stack
