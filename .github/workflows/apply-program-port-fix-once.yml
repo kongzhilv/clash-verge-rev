@@ -1,0 +1,107 @@
+name: 一次性应用程序项目端口修复
+run-name: 应用程序项目端口匹配安全修复
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/apply-program-port-fix-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    name: 应用并提交端口匹配修复
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出功能分支
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: 收紧程序项目端口匹配
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          model = Path('src/components/rule/diversion-manager/model.ts')
+          text = model.read_text(encoding='utf-8')
+          old = """  return [
+            ...project.processNames.map((value, index) =>
+              matcher('PROCESS-NAME', value, index),
+            ),
+            ...project.processPaths.map((value, index) =>
+              matcher('PROCESS-PATH', value, index),
+            ),
+            ...project.domains.map((value, index) =>
+              matcher('DOMAIN-SUFFIX', value, index),
+            ),
+            ...project.ipCidrs.map((value, index) =>
+              matcher('IP-CIDR', value, index, true),
+            ),
+            ...project.destinationPorts.map((value, index) =>
+              matcher('DST-PORT', value, index),
+            ),
+          ]"""
+          new = """  const identityMatchers = [
+            ...project.processNames.map((value, index) =>
+              matcher('PROCESS-NAME', value, index),
+            ),
+            ...project.processPaths.map((value, index) =>
+              matcher('PROCESS-PATH', value, index),
+            ),
+            ...project.domains.map((value, index) =>
+              matcher('DOMAIN-SUFFIX', value, index),
+            ),
+            ...project.ipCidrs.map((value, index) =>
+              matcher('IP-CIDR', value, index, true),
+            ),
+          ]
+          if (identityMatchers.length > 0) return identityMatchers
+
+          return project.destinationPorts.map((value, index) =>
+            matcher('DST-PORT', value, index),
+          )"""
+          if old not in text:
+              raise SystemExit('model.ts 中未找到预期项目匹配器；拒绝盲目修改')
+          model.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          readme = Path('README.md')
+          text = readme.read_text(encoding='utf-8')
+          old = """5. 目标端口辅助条件
+
+当运行时没有进程名或路径时"""
+          new = """5. 目标端口辅助条件
+
+为避免 `443` 等常见端口扩大匹配范围，只要档案中存在程序、域名或 IP 条件，端口就只参与界面识别加权，不会被编译成独立 OR 路由规则；仅端口档案才会生成端口规则。
+
+当运行时没有进程名或路径时"""
+          if old not in text:
+              raise SystemExit('README.md 中未找到预期说明；拒绝盲目修改')
+          readme.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: 确认修改范围
+        shell: bash
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only)
+          printf '%s\n' "$changed"
+          test "$changed" = $'README.md\nsrc/components/rule/diversion-manager/model.ts'
+          grep -Fq 'const identityMatchers = [' src/components/rule/diversion-manager/model.ts
+          grep -Fq '仅端口档案才会生成端口规则' README.md
+
+      - name: 提交修复
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md src/components/rule/diversion-manager/model.ts
+          git commit -m 'fix: 防止常见端口扩大程序项目匹配范围'
+          git push origin HEAD:feature/karing-style-diversion
