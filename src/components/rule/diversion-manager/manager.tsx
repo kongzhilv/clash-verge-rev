@@ -59,7 +59,7 @@ export const DiversionManager = ({
   const [mergeConfig, setMergeConfig] = useState<UnknownRecord>({})
   const [config, setConfig] = useState<DiversionConfig>(defaultConfig)
   const [builtinGroups, setBuiltinGroups] = useState<BuiltinGroup[]>([])
-  const autoOpened = useRef(false)
+  const lastAutoOpenKey = useRef<string | null>(null)
 
   const manualGroups = useMemo(
     () => config.groups.filter((group) => !group['project-id']),
@@ -106,10 +106,11 @@ export const DiversionManager = ({
   }, [])
 
   useEffect(() => {
-    if (!initialOpen || autoOpened.current) return
-    autoOpened.current = true
+    const autoOpenKey = initialOpen ? focusProjectId ?? 'projects' : null
+    if (!autoOpenKey || lastAutoOpenKey.current === autoOpenKey) return
+    lastAutoOpenKey.current = autoOpenKey
     void openManager()
-  }, [initialOpen, openManager])
+  }, [focusProjectId, initialOpen, openManager])
 
   const updateConfig = (patch: Partial<DiversionConfig>) => {
     setConfig((previous) => syncProjectGroups({ ...previous, ...patch }))
@@ -134,10 +135,7 @@ export const DiversionManager = ({
       if (index < 0 || target < 0 || target >= manual.length) return previous
 
       const reordered = [...manual]
-      ;[reordered[index], reordered[target]] = [
-        reordered[target],
-        reordered[index],
-      ]
+      ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
       const managed = previous.groups.filter((group) => group['project-id'])
       return syncProjectGroups({ ...previous, groups: [...managed, ...reordered] })
     })
