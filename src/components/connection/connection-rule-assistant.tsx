@@ -431,7 +431,12 @@ export const ConnectionRuleAssistant = ({
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+      <Dialog
+        open={open && !projectEditorOpen}
+        onClose={onClose}
+        fullWidth
+        maxWidth="md"
+      >
         <DialogTitle>连接、程序项目、规则组与出口联动</DialogTitle>
         <DialogContent dividers sx={{ p: 0 }}>
           <Alert severity="info" sx={{ borderRadius: 0 }}>
