@@ -9,6 +9,7 @@ import {
   RefreshRounded,
   RouterRounded,
   SettingsEthernetRounded,
+  WorkspacesRounded,
 } from '@mui/icons-material'
 import {
   Alert,
@@ -38,17 +39,22 @@ import {
 import { useNavigate } from 'react-router'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
-import type {
-  DiversionConfig,
-  DiversionGroup,
-  DiversionMatcher,
-  MatcherType,
-  UnknownRecord,
+import {
+  makeProject,
+  type DiversionConfig,
+  type DiversionGroup,
+  type DiversionMatcher,
+  type DiversionProject,
+  type MatcherType,
+  type UnknownRecord,
 } from '@/components/rule/diversion-manager/model'
+import ProjectEditorDialog from '@/components/rule/diversion-manager/project-editor-dialog'
 import {
   parseDiversionProfile,
   serializeDiversionProfile,
 } from '@/components/rule/diversion-manager/serializer'
+import { resolveConnectionProject } from '@/components/routing/connection-project'
+import { notifyDiversionUpdated } from '@/hooks/use-diversion-profile'
 import { readProfileFile, saveProfileFile } from '@/services/cmds'
 import { showNotice } from '@/services/notice-service'
 
@@ -156,6 +162,14 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
       value: host,
       icon: <DnsRounded />,
     })
+    candidates.push({
+      id: candidateKey('DOMAIN-SUFFIX', host),
+      label: '域名后缀',
+      description: '匹配这个域名及其所有子域名。',
+      type: 'DOMAIN-SUFFIX',
+      value: host,
+      icon: <DnsRounded />,
+    })
   }
   if (destinationIP) {
     candidates.push({
@@ -201,6 +215,33 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
   return [...new Map(candidates.map((item) => [item.id, item])).values()]
 }
 
+const buildProjectFromConnection = (
+  connection: IConnectionsItem,
+  index: number,
+): DiversionProject => {
+  const metadata = connection.metadata
+  const host = cleanHost(String(metadata.host ?? ''))
+  const processPath = String(metadata.processPath ?? '').trim()
+  const processName = processNameFrom(String(metadata.process ?? ''), processPath)
+  const destinationIP = ipCidr(
+    String(metadata.destinationIP || metadata.remoteDestination || ''),
+  )
+  const destinationPort = String(metadata.destinationPort ?? '').trim()
+  const name = processName || host || `连接项目 ${index + 1}`
+
+  return makeProject(index, {
+    kind: processName || processPath ? 'program' : 'project',
+    name,
+    description: '由连接详情创建，可继续补充同一程序或项目使用的其他域名、IP 和端口。',
+    action: 'current',
+    processNames: processName ? [processName] : [],
+    processPaths: processPath ? [processPath] : [],
+    domains: host && !isIpLiteral(host) ? [host] : [],
+    ipCidrs: destinationIP ? [destinationIP] : [],
+    destinationPorts: destinationPort ? [destinationPort] : [],
+  })
+}
+
 export const ConnectionRuleAssistant = ({
   open,
   connection,
@@ -213,9 +254,16 @@ export const ConnectionRuleAssistant = ({
   const [snapshot, setSnapshot] = useState<ProfileSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [savingGroupId, setSavingGroupId] = useState<string | null>(null)
+  const [projectEditorOpen, setProjectEditorOpen] = useState(false)
+  const [editingProject, setEditingProject] =
+    useState<DiversionProject | null>(null)
 
   const selectedCandidate =
     candidates.find((candidate) => candidate.id === selectedId) ?? candidates[0]
+  const linkedProject = useMemo(
+    () => resolveConnectionProject(connection, snapshot?.config)?.project ?? null,
+    [connection, snapshot?.config],
+  )
 
   const loadProfile = useCallback(async () => {
     setLoading(true)
@@ -232,13 +280,16 @@ export const ConnectionRuleAssistant = ({
 
   useEffect(() => {
     if (!open) return
+    setSelectedId('')
+    setProjectEditorOpen(false)
+    setEditingProject(null)
     void loadProfile()
   }, [loadProfile, open])
 
   const saveConfig = useCallback(
-    async (nextConfig: DiversionConfig, groupId: string) => {
-      if (!snapshot) return
-      setSavingGroupId(groupId)
+    async (nextConfig: DiversionConfig, operationId: string) => {
+      if (!snapshot) return false
+      setSavingGroupId(operationId)
       try {
         const serialized = serializeDiversionProfile(
           snapshot.mergeConfig,
@@ -249,8 +300,9 @@ export const ConnectionRuleAssistant = ({
 
         setSnapshot({
           mergeConfig: serialized.mergeConfig,
-          config: nextConfig,
+          config: serialized.config,
         })
+        notifyDiversionUpdated(serialized.config)
 
         if (!closed) {
           try {
@@ -261,11 +313,13 @@ export const ConnectionRuleAssistant = ({
         }
         showNotice.success(
           closed
-            ? '分流规则已保存并立即应用'
-            : '分流规则已保存；当前连接已关闭，下次连接会重新匹配',
+            ? '程序项目与分流规则已保存并立即应用'
+            : '程序项目与分流规则已保存；当前连接已关闭，下次连接会重新匹配',
         )
+        return true
       } catch (error) {
         showNotice.error(error)
+        return false
       } finally {
         setSavingGroupId(null)
       }
@@ -274,7 +328,7 @@ export const ConnectionRuleAssistant = ({
   )
 
   const addToGroup = async (group: DiversionGroup) => {
-    if (!snapshot || !selectedCandidate) return
+    if (!snapshot || !selectedCandidate || group['project-id']) return
 
     const groups = snapshot.config.groups.map((item) => {
       if (item.id !== group.id) return item
@@ -300,7 +354,7 @@ export const ConnectionRuleAssistant = ({
   }
 
   const removeFromGroup = async (group: DiversionGroup) => {
-    if (!snapshot || !selectedCandidate) return
+    if (!snapshot || !selectedCandidate || group['project-id']) return
     const groups = snapshot.config.groups.map((item) => {
       if (item.id !== group.id) return item
       const matchers = item.matchers.filter(
@@ -337,203 +391,260 @@ export const ConnectionRuleAssistant = ({
     )
   }
 
-  const openRulesPage = () => {
-    onClose()
-    navigate('/rules')
+  const openProjectEditor = () => {
+    const project =
+      linkedProject ??
+      buildProjectFromConnection(connection, snapshot?.config.projects.length ?? 0)
+    setEditingProject(project)
+    setProjectEditorOpen(true)
   }
 
+  const saveProject = async (project: DiversionProject) => {
+    if (!snapshot) return
+    const exists = snapshot.config.projects.some((item) => item.id === project.id)
+    const projects = exists
+      ? snapshot.config.projects.map((item) =>
+          item.id === project.id ? project : item,
+        )
+      : [...snapshot.config.projects, project]
+    const saved = await saveConfig(
+      { ...snapshot.config, enabled: true, projects },
+      project.groupId,
+    )
+    if (saved) {
+      setProjectEditorOpen(false)
+      setEditingProject(null)
+    }
+  }
+
+  const openRulesPage = () => {
+    onClose()
+    navigate(
+      linkedProject
+        ? `/rules?project=${encodeURIComponent(linkedProject.id)}`
+        : '/rules?manage=projects',
+    )
+  }
+
+  const manualGroups =
+    snapshot?.config.groups.filter((group) => !group['project-id']) ?? []
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>从连接管理分流规则</DialogTitle>
-      <DialogContent dividers sx={{ p: 0 }}>
-        <Alert severity="info" sx={{ borderRadius: 0 }}>
-          选择连接中的域名、IP、端口或程序，再把它加入已有规则组，或从已包含它的规则组中删除。
-        </Alert>
+    <>
+      <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+        <DialogTitle>连接、程序项目、规则组与出口联动</DialogTitle>
+        <DialogContent dividers sx={{ p: 0 }}>
+          <Alert severity="info" sx={{ borderRadius: 0 }}>
+            可把整条连接保存为程序/项目档案，也可把单个域名、IP、端口或进程条件加入手动规则组。
+          </Alert>
 
-        <Box sx={{ p: 2 }}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                当前连接
-              </Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                {connection.metadata.host ||
-                  connection.metadata.destinationIP ||
-                  connection.metadata.remoteDestination ||
-                  '未知目标'}
-              </Typography>
-              <Stack
-                direction="row"
-                spacing={0.75}
-                sx={{ mt: 1, flexWrap: 'wrap' }}
-              >
-                {connection.rule && (
-                  <Chip size="small" label={`规则：${connection.rule}`} />
-                )}
-                {connection.rulePayload && (
-                  <Chip
-                    size="small"
-                    label={`内容：${connection.rulePayload}`}
-                  />
-                )}
-                {connection.chains.length > 0 && (
-                  <Chip
-                    size="small"
-                    label={`出口：${[...connection.chains].reverse().join(' / ')}`}
-                  />
-                )}
-              </Stack>
-            </Box>
-            <Button
-              startIcon={<OpenInNewRounded />}
-              onClick={openRulesPage}
-              sx={{ alignSelf: { md: 'flex-start' } }}
-            >
-              打开规则页
-            </Button>
-          </Stack>
-        </Box>
-
-        <Divider />
-
-        <Stack direction={{ xs: 'column', md: 'row' }} sx={{ minHeight: 360 }}>
-          <Box
-            sx={{
-              width: { md: 300 },
-              borderRight: { md: 1 },
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="subtitle2" sx={{ px: 2, pt: 2 }}>
-              选择要作为规则的内容
-            </Typography>
-            <List disablePadding>
-              {candidates.map((candidate) => (
-                <ListItemButton
-                  key={candidate.id}
-                  selected={candidate.id === selectedCandidate?.id}
-                  onClick={() => setSelectedId(candidate.id)}
+          <Box sx={{ p: 2 }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  当前连接
+                </Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                  {connection.metadata.host ||
+                    connection.metadata.destinationIP ||
+                    connection.metadata.remoteDestination ||
+                    '未知目标'}
+                </Typography>
+                <Stack
+                  direction="row"
+                  spacing={0.75}
+                  sx={{ mt: 1, flexWrap: 'wrap' }}
                 >
-                  <ListItemIcon>{candidate.icon}</ListItemIcon>
-                  <ListItemText
-                    primary={candidate.label}
-                    secondary={candidate.value}
-                    slotProps={{
-                      secondary: { sx: { wordBreak: 'break-all' } },
-                    }}
-                  />
-                  <ChevronRightRounded color="disabled" />
-                </ListItemButton>
-              ))}
-            </List>
-            {candidates.length === 0 && (
-              <Typography sx={{ p: 2, color: 'text.secondary' }}>
-                这条连接没有可用于创建规则的域名、IP、端口或进程信息。
-              </Typography>
-            )}
-          </Box>
-
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              sx={{ p: 2, alignItems: { sm: 'center' } }}
-            >
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="subtitle2">选择目标规则组</Typography>
-                {selectedCandidate && (
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    {selectedCandidate.description}
-                  </Typography>
-                )}
+                  {connection.rule && (
+                    <Chip size="small" label={`实际规则：${connection.rule}`} />
+                  )}
+                  {connection.rulePayload && (
+                    <Chip
+                      size="small"
+                      label={`规则内容：${connection.rulePayload}`}
+                    />
+                  )}
+                  {connection.chains.length > 0 && (
+                    <Chip
+                      size="small"
+                      label={`实际出口：${[...connection.chains].reverse().join(' / ')}`}
+                    />
+                  )}
+                  {linkedProject && (
+                    <Chip
+                      size="small"
+                      color="primary"
+                      label={`已关联：${linkedProject.name}`}
+                    />
+                  )}
+                </Stack>
               </Box>
-              <Button
-                startIcon={<RefreshRounded />}
-                onClick={() => void loadProfile()}
-                disabled={loading || savingGroupId !== null}
-              >
-                重新读取
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<AddRounded />}
-                onClick={() => void createGroup()}
-                disabled={
-                  !selectedCandidate || loading || savingGroupId !== null
-                }
-              >
-                新建规则组
-              </Button>
-            </Stack>
-
-            <Divider />
-
-            {loading ? (
-              <Stack sx={{ p: 4, alignItems: 'center' }} spacing={1}>
-                <CircularProgress size={28} />
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  正在读取 Merge 分流配置…
-                </Typography>
+              <Stack spacing={0.75} sx={{ alignSelf: { md: 'flex-start' } }}>
+                <Button
+                  variant="contained"
+                  startIcon={<WorkspacesRounded />}
+                  onClick={openProjectEditor}
+                  disabled={loading || savingGroupId !== null}
+                >
+                  {linkedProject ? '编辑关联项目' : '添加为程序或项目'}
+                </Button>
+                <Button startIcon={<OpenInNewRounded />} onClick={openRulesPage}>
+                  打开完整规则页
+                </Button>
               </Stack>
-            ) : snapshot?.config.groups.length ? (
-              <List disablePadding>
-                {snapshot.config.groups.map((group) => {
-                  const included = Boolean(
-                    selectedCandidate &&
-                      group.matchers.some(
-                        (matcher) =>
-                          matcher.enabled &&
-                          matcherMatches(matcher, selectedCandidate),
-                      ),
-                  )
-                  const busy = savingGroupId === group.id
-                  return (
-                    <ListItemButton
-                      key={group.id}
-                      disabled={!selectedCandidate || savingGroupId !== null}
-                      onClick={() =>
-                        void (included
-                          ? removeFromGroup(group)
-                          : addToGroup(group))
-                      }
-                    >
-                      <ListItemIcon>
-                        {busy ? (
-                          <CircularProgress size={22} />
-                        ) : included ? (
-                          <DeleteOutlineRounded color="error" />
-                        ) : (
-                          <AddRounded color="primary" />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={group.name || '未命名规则组'}
-                        secondary={`${group.enabled ? '已启用' : '未启用'} · ${group.matchers.length} 个匹配条件 · ${included ? '点击移除当前条件' : '点击添加当前条件'}`}
-                      />
-                      <Chip
-                        size="small"
-                        color={included ? 'error' : 'primary'}
-                        variant="outlined"
-                        label={included ? '移除' : '添加'}
-                      />
-                    </ListItemButton>
-                  )
-                })}
-              </List>
-            ) : (
-              <Box sx={{ p: 3 }}>
-                <Typography sx={{ color: 'text.secondary' }}>
-                  还没有自定义规则组。点击“新建规则组”，会使用“当前选择”作为默认出口。
-                </Typography>
-              </Box>
-            )}
+            </Stack>
           </Box>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>关闭</Button>
-      </DialogActions>
-    </Dialog>
+
+          <Divider />
+
+          <Stack direction={{ xs: 'column', md: 'row' }} sx={{ minHeight: 360 }}>
+            <Box
+              sx={{
+                width: { md: 300 },
+                borderRight: { md: 1 },
+                borderColor: 'divider',
+              }}
+            >
+              <Typography variant="subtitle2" sx={{ px: 2, pt: 2 }}>
+                单独选择一个规则条件
+              </Typography>
+              <List disablePadding>
+                {candidates.map((candidate) => (
+                  <ListItemButton
+                    key={candidate.id}
+                    selected={candidate.id === selectedCandidate?.id}
+                    onClick={() => setSelectedId(candidate.id)}
+                  >
+                    <ListItemIcon>{candidate.icon}</ListItemIcon>
+                    <ListItemText
+                      primary={candidate.label}
+                      secondary={candidate.value}
+                      slotProps={{
+                        secondary: { sx: { wordBreak: 'break-all' } },
+                      }}
+                    />
+                    <ChevronRightRounded color="disabled" />
+                  </ListItemButton>
+                ))}
+              </List>
+              {candidates.length === 0 && (
+                <Typography sx={{ p: 2, color: 'text.secondary' }}>
+                  没有可单独添加的连接条件，仍可通过上方按钮手动建立程序或项目档案。
+                </Typography>
+              )}
+            </Box>
+
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                sx={{ p: 2, alignItems: { sm: 'center' } }}
+              >
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle2">手动规则组</Typography>
+                  {selectedCandidate && (
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedCandidate.description}
+                    </Typography>
+                  )}
+                </Box>
+                <Button
+                  startIcon={<RefreshRounded />}
+                  onClick={() => void loadProfile()}
+                  disabled={loading || savingGroupId !== null}
+                >
+                  重新读取
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<AddRounded />}
+                  onClick={() => void createGroup()}
+                  disabled={!selectedCandidate || loading || savingGroupId !== null}
+                >
+                  新建规则组
+                </Button>
+              </Stack>
+
+              <Divider />
+
+              {loading ? (
+                <Stack sx={{ p: 4, alignItems: 'center' }} spacing={1}>
+                  <CircularProgress size={28} />
+                  <Typography variant="body2" color="text.secondary">
+                    正在读取 Merge 分流配置…
+                  </Typography>
+                </Stack>
+              ) : manualGroups.length ? (
+                <List disablePadding>
+                  {manualGroups.map((group) => {
+                    const included = Boolean(
+                      selectedCandidate &&
+                        group.matchers.some(
+                          (matcher) =>
+                            matcher.enabled &&
+                            matcherMatches(matcher, selectedCandidate),
+                        ),
+                    )
+                    const busy = savingGroupId === group.id
+                    return (
+                      <ListItemButton
+                        key={group.id}
+                        disabled={!selectedCandidate || savingGroupId !== null}
+                        onClick={() =>
+                          void (included
+                            ? removeFromGroup(group)
+                            : addToGroup(group))
+                        }
+                      >
+                        <ListItemIcon>
+                          {busy ? (
+                            <CircularProgress size={22} />
+                          ) : included ? (
+                            <DeleteOutlineRounded color="error" />
+                          ) : (
+                            <AddRounded color="primary" />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={group.name || '未命名规则组'}
+                          secondary={`${group.enabled ? '已启用' : '未启用'} · ${group.matchers.length} 个匹配条件 · ${included ? '点击移除当前条件' : '点击添加当前条件'}`}
+                        />
+                        <Chip
+                          size="small"
+                          color={included ? 'error' : 'primary'}
+                          variant="outlined"
+                          label={included ? '移除' : '添加'}
+                        />
+                      </ListItemButton>
+                    )
+                  })}
+                </List>
+              ) : (
+                <Box sx={{ p: 3 }}>
+                  <Typography color="text.secondary">
+                    没有额外的手动规则组。优先使用“程序或项目档案”，它会同时维护多项识别条件、规则组和出口。
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>关闭</Button>
+        </DialogActions>
+      </Dialog>
+
+      <ProjectEditorDialog
+        open={projectEditorOpen}
+        project={editingProject}
+        projectIndex={snapshot?.config.projects.length ?? 0}
+        onClose={() => {
+          setProjectEditorOpen(false)
+          setEditingProject(null)
+        }}
+        onSave={(project) => void saveProject(project)}
+      />
+    </>
   )
 }
 
