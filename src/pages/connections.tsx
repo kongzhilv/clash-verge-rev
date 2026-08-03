@@ -179,13 +179,8 @@ const ConnectionsPage = () => {
       }
       if (!hasSearch) return true
 
-      const {
-        host,
-        destinationIP,
-        remoteDestination,
-        process,
-        processPath,
-      } = conn.metadata
+      const { host, destinationIP, remoteDestination, process, processPath } =
+        conn.metadata
       return (
         match(host || '') ||
         match(destinationIP || '') ||
