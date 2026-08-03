@@ -38,7 +38,10 @@ import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
 import ConnectionProjectCard from '@/components/routing/connection-project-card'
-import { useConnectionData } from '@/hooks/use-connection-data'
+import {
+  useConnectionData,
+  useConnectionProcessAttribution,
+} from '@/hooks/use-connection-data'
 import parseTraffic from '@/utils/parse-traffic'
 
 import ConnectionRuleAssistant from './connection-rule-assistant'
@@ -174,10 +177,19 @@ const InnerConnectionDetail = ({
   onOpenRuleAssistant,
 }: InnerProps) => {
   const { t } = useTranslation()
+  const attribution = useConnectionProcessAttribution(data.id)
   const { metadata } = data
   const hostAddress =
     metadata.host || metadata.destinationIP || metadata.remoteDestination
   const destination = metadata.destinationIP || metadata.remoteDestination
+  const processPath = String(metadata.processPath ?? '').trim()
+  const rule = data.rulePayload
+    ? `${data.rule} (${data.rulePayload})`
+    : data.rule || '未返回'
+  const outbound = [...data.chains].reverse().join(' / ') || '未返回'
+  const attributionDetail = attribution
+    ? `${attribution.detail}${attribution.pid === undefined ? '' : ` · PID ${attribution.pid}`}`
+    : '正在识别应用'
   const headerMeta = [
     String(metadata.network || '').toUpperCase(),
     metadata.type,
@@ -196,6 +208,30 @@ const InnerConnectionDetail = ({
     {
       label: t('connections.components.fields.destination'),
       value: `${destination}:${metadata.destinationPort}`,
+      icon: <RouteRounded fontSize="small" />,
+    },
+    {
+      label: '应用识别',
+      value: attributionDetail,
+      icon: <RouteRounded fontSize="small" />,
+    },
+    ...(processPath
+      ? [
+          {
+            label: '程序路径',
+            value: processPath,
+            icon: <RouteRounded fontSize="small" />,
+          },
+        ]
+      : []),
+    {
+      label: '命中规则',
+      value: rule,
+      icon: <RouteRounded fontSize="small" />,
+    },
+    {
+      label: '出口链',
+      value: outbound,
       icon: <RouteRounded fontSize="small" />,
     },
     {
@@ -310,7 +346,7 @@ const InnerConnectionDetail = ({
           }}
         >
           <AccordionSummary expandIcon={<ExpandMoreRounded />}>
-            <Typography variant="subtitle2">连接参数</Typography>
+            <Typography variant="subtitle2">技术详情</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ p: 0 }}>
             <Stack divider={<Divider flexItem />}>
