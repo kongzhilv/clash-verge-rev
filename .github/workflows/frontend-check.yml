@@ -1,4 +1,5 @@
 name: Frontend Check
+run-name: Registered Karing 4 finalizer
 
 on:
   push:
