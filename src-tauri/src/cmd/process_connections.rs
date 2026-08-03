@@ -21,8 +21,7 @@ pub struct ProcessConnectionSnapshot {
     pub errors: Vec<String>,
 }
 
-#[tauri::command]
-pub fn get_process_connections() -> ProcessConnectionSnapshot {
+pub(super) fn get_process_connections() -> ProcessConnectionSnapshot {
     #[cfg(target_os = "windows")]
     {
         windows_impl::collect()
@@ -199,7 +198,7 @@ mod windows_impl {
         }
     }
 
-    fn tcp_state(value: i32) -> String {
+    fn tcp_state(value: u32) -> String {
         match value {
             1 => "CLOSED".to_string(),
             2 => "LISTEN".to_string(),
@@ -277,7 +276,7 @@ mod windows_impl {
                     protocol: "TCP".to_string(),
                     local_address: local.to_string(),
                     remote_address: (remote.port() != 0).then(|| remote.to_string()),
-                    state: Some(tcp_state(row.dwState.0)),
+                    state: Some(tcp_state(row.dwState)),
                 });
             }
         }
@@ -348,7 +347,7 @@ mod windows_impl {
                     protocol: "TCP".to_string(),
                     local_address: local.to_string(),
                     remote_address: (remote.port() != 0).then(|| remote.to_string()),
-                    state: Some(tcp_state(row.dwState.0)),
+                    state: Some(tcp_state(row.dwState)),
                 });
             }
         }
