@@ -1,0 +1,292 @@
+name: Apply application routing maturity once
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/apply-application-routing-maturity-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply terminology and live attribution hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+
+          def read(path: str) -> str:
+              return (root / path).read_text(encoding='utf-8')
+
+          def write(path: str, content: str) -> None:
+              (root / path).write_text(content, encoding='utf-8')
+
+          def require_replace(path: str, old: str, new: str) -> None:
+              content = read(path)
+              if old not in content:
+                  raise SystemExit(f'missing expected text in {path}: {old[:80]!r}')
+              write(path, content.replace(old, new))
+
+          hook_path = 'src/hooks/use-connection-data.ts'
+          hook = read(hook_path)
+          old_import = """import {
+            enrichConnectionsWithProcesses,
+            getSystemProcessConnections,
+            type ProcessConnectionSnapshot,
+          } from '@/services/process-connections'
+          """
+          new_import = """import {
+            enrichConnectionsWithProcesses,
+            getProcessAttributionSnapshot,
+            getSystemProcessConnections,
+            subscribeProcessAttribution,
+            type ProcessConnectionSnapshot,
+          } from '@/services/process-connections'
+          """
+          if old_import not in hook:
+              raise SystemExit('process connection import block not found')
+          hook = hook.replace(old_import, new_import)
+          hook_export = """
+
+          export const useConnectionProcessAttribution = (
+            connectionId?: string | null,
+          ) => {
+            const snapshot = useSyncExternalStore(
+              subscribeProcessAttribution,
+              getProcessAttributionSnapshot,
+              getProcessAttributionSnapshot,
+            )
+            return connectionId ? snapshot.items.get(connectionId) : undefined
+          }
+          """
+          if 'useConnectionProcessAttribution' not in hook:
+              hook = hook.rstrip() + hook_export + '\n'
+          write(hook_path, hook)
+
+          source_paths = [
+              'src/components/rule/diversion-manager/manager.tsx',
+              'src/components/rule/diversion-manager/project-panel.tsx',
+              'src/components/rule/diversion-manager/detected-programs-panel.tsx',
+              'src/components/rule/diversion-manager/model.ts',
+              'src/components/routing/routing-relations-panel.tsx',
+              'src/components/routing/connection-project.ts',
+              'src/components/connection/connection-row-item.tsx',
+              'src/components/connection/connection-rule-assistant.tsx',
+              'src/pages/connections.tsx',
+          ]
+
+          phrase_replacements = [
+              ('程序与项目', '应用分流'),
+              ('程序或项目档案', '应用规则'),
+              ('程序/项目档案', '应用规则'),
+              ('程序或项目', '应用规则'),
+              ('程序/项目', '应用规则'),
+              ('程序项目', '应用规则'),
+              ('项目档案', '应用规则'),
+              ('程序档案', '应用规则'),
+              ('程序发现', '联网应用'),
+              ('Windows 当前联网程序，可直接加入分流', '识别当前联网应用，并为其设置出口策略'),
+              ('项目规则', '应用规则'),
+              ('项目分流', '应用分流'),
+              ('程序分流', '应用分流'),
+              ('项目连接', '规则连接'),
+              ('添加档案', '创建应用规则'),
+              ('保存档案', '保存应用规则'),
+              ('编辑档案', '编辑应用规则'),
+          ]
+
+          cleanup_replacements = [
+              ('应用或应用规则', '应用规则'),
+              ('应用/应用规则', '应用规则'),
+              ('应用规则档案', '应用规则'),
+              ('应用规则应用规则', '应用规则'),
+              ('应用规则规则', '应用规则'),
+              ('应用规则分流', '应用分流'),
+              ('应用规则连接', '规则连接'),
+              ('连接应用规则', '应用规则'),
+              ('应用发现', '联网应用'),
+          ]
+
+          for path in source_paths:
+              content = read(path)
+              if path.endswith('/model.ts'):
+                  content = content.replace(
+                      "`${project.kind === 'program' ? '程序' : '项目'} · ${project.name}`",
+                      "`应用 · ${project.name}`",
+                  )
+              for old, new in phrase_replacements:
+                  content = content.replace(old, new)
+              content = content.replace('程序', '应用').replace('项目', '应用规则')
+              for old, new in cleanup_replacements:
+                  content = content.replace(old, new)
+              write(path, content)
+
+          project_panel_path = 'src/components/rule/diversion-manager/project-panel.tsx'
+          project_panel = read(project_panel_path)
+          project_panel = project_panel.replace('  WorkspacesRounded,\n', '')
+          project_panel = project_panel.replace(
+              '<WorkspacesRounded fontSize="small" />',
+              '<AppsRounded fontSize="small" />',
+          )
+          project_panel = re.sub(
+              r"\{project\.kind === 'program' \? \(\s*<AppsRounded fontSize=\"small\" />\s*\) : \(\s*<AppsRounded fontSize=\"small\" />\s*\)\}",
+              '<AppsRounded fontSize="small" />',
+              project_panel,
+          )
+          project_panel = project_panel.replace(
+              '一条应用规则对应一组识别条件和一个出口。',
+              '按应用、域名、IP 或端口识别流量，并指定出口策略。',
+          )
+          project_panel = project_panel.replace(
+              '从上方选择应用，或新建一个应用规则。',
+              '从上方选择联网应用，或新建一条应用规则。',
+          )
+          write(project_panel_path, project_panel)
+
+          assistant_path = 'src/components/connection/connection-rule-assistant.tsx'
+          assistant = read(assistant_path)
+          assistant = assistant.replace('  WorkspacesRounded,\n', '')
+          assistant = assistant.replace('<WorkspacesRounded />', '<AppsRounded />')
+          assistant = assistant.replace('应用文件名', '应用名称')
+          assistant = assistant.replace('完整应用路径', '应用完整路径')
+          assistant = assistant.replace(
+              '由连接详情创建，可继续补充同一应用规则使用的其他域名、IP 和端口。',
+              '由连接详情创建，可继续补充此应用使用的域名、IP 和端口。',
+          )
+          write(assistant_path, assistant)
+
+          detected_path = 'src/components/rule/diversion-manager/detected-programs-panel.tsx'
+          detected = read(detected_path)
+          detected = detected.replace('系统应用', '联网应用')
+          detected = detected.replace('创建应用规则规则', '创建应用规则')
+          write(detected_path, detected)
+
+          action_picker_path = 'src/components/rule/diversion-manager/action-picker.tsx'
+          action_picker = read(action_picker_path).replace(
+              '对应 Karing 服务器选择页中的测速组和自定义组。',
+              '选择现有代理组，或手动填写一个出口名称。',
+          )
+          write(action_picker_path, action_picker)
+
+          docs_paths = ['README.md', 'THIRD_PARTY_NOTICES.md']
+          docs_replacements = [
+              ('程序/项目档案', '应用规则'),
+              ('程序与项目', '应用分流'),
+              ('程序项目', '应用规则'),
+              ('程序或项目', '应用规则'),
+              ('项目档案', '应用规则'),
+              ('程序档案', '应用规则'),
+              ('保存档案', '保存应用规则'),
+              ('添加档案', '创建应用规则'),
+              ('程序名称', '应用名称'),
+              ('程序完整路径', '应用完整路径'),
+              ('程序路径', '应用路径'),
+              ('程序名', '应用名称'),
+              ('程序发现', '联网应用'),
+              ('项目卡片', '应用规则卡片'),
+              ('项目指定代理组', '应用规则指定出口策略'),
+              ('项目关联', '应用规则关联'),
+              ('对应项目', '对应应用规则'),
+              ('点击项目', '点击应用规则'),
+          ]
+          for path in docs_paths:
+              content = read(path)
+              for old, new in docs_replacements:
+                  content = content.replace(old, new)
+              content = content.replace('程序', '应用')
+              write(path, content)
+
+          ui_audit_paths = source_paths + [
+              'src/components/connection/connection-detail.tsx',
+              'src/components/routing/connection-project-card.tsx',
+              'src/components/rule/diversion-manager/project-editor-dialog.tsx',
+          ]
+          banned_phrases = [
+              '程序项目',
+              '程序与项目',
+              '程序或项目',
+              '程序/项目',
+              '项目档案',
+              '程序档案',
+              '添加档案',
+              '保存档案',
+              '程序发现',
+          ]
+          for path in ui_audit_paths:
+              content = read(path)
+              for phrase in banned_phrases:
+                  if phrase in content:
+                      raise SystemExit(f'forbidden UI phrase {phrase!r} remains in {path}')
+              for match in re.finditer(r"['\"`]([^'\"`\n]*(?:程序|项目)[^'\"`\n]*)['\"`]", content):
+                  raise SystemExit(
+                      f'legacy user-facing term remains in {path}: {match.group(1)!r}'
+                  )
+
+          if 'useConnectionProcessAttribution' not in read(hook_path):
+              raise SystemExit('live attribution hook was not added')
+          print('[ok] application routing terminology and live attribution hook applied')
+          PY
+
+      - name: Format changed frontend files
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec biome check --write \
+            src/hooks/use-connection-data.ts \
+            src/services/process-connections.ts \
+            src/components/connection/connection-detail.tsx \
+            src/components/connection/connection-rule-assistant.tsx \
+            src/components/connection/connection-row-item.tsx \
+            src/components/routing/connection-project-card.tsx \
+            src/components/routing/connection-project.ts \
+            src/components/routing/routing-relations-panel.tsx \
+            src/components/rule/diversion-manager/manager.tsx \
+            src/components/rule/diversion-manager/project-panel.tsx \
+            src/components/rule/diversion-manager/detected-programs-panel.tsx \
+            src/components/rule/diversion-manager/project-editor-dialog.tsx \
+            src/components/rule/diversion-manager/action-picker.tsx \
+            src/components/rule/diversion-manager/model.ts \
+            src/pages/connections.tsx
+
+      - name: Commit feature changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src README.md THIRD_PARTY_NOTICES.md
+          git diff --cached --check
+          git commit -m "refactor: mature application routing and live attribution"
+          git push origin HEAD:feature/karing-style-diversion
+
+      - name: Remove one-time workflow
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin dev
+          git checkout -B dev origin/dev
+          rm -f .github/workflows/apply-application-routing-maturity-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/apply-application-routing-maturity-once.yml
+          git commit -m "chore: remove application routing patch workflow"
+          git push origin dev
