@@ -1,5 +1,12 @@
 import { LanOutlined, LanRounded, WarningRounded } from '@mui/icons-material'
-import { Box, Button, ButtonGroup, Stack } from '@mui/material'
+import {
+  Box,
+  Button,
+  ButtonGroup,
+  IconButton,
+  Stack,
+  Tooltip,
+} from '@mui/material'
 import { useLockFn } from 'ahooks'
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -153,7 +160,7 @@ const ProxyPage = () => {
         )
       }
       header={
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
           <ProviderButton />
 
           <ButtonGroup size="small">
@@ -162,33 +169,31 @@ const ProxyPage = () => {
                 key={mode}
                 variant={mode === curMode ? 'contained' : 'outlined'}
                 onClick={() => void onChangeMode(mode)}
-                sx={{ textTransform: 'capitalize' }}
+                sx={{ minWidth: 58, textTransform: 'none' }}
               >
                 {t(`proxies.page.modes.${mode}`)}
               </Button>
             ))}
           </ButtonGroup>
 
-          <Button
-            size="small"
-            variant={isChainMode ? 'contained' : 'outlined'}
-            onClick={() => void onToggleChainMode()}
-            sx={{ ml: 1 }}
-            startIcon={
-              isChainMode ? (
+          <Tooltip title={t('proxies.page.actions.toggleChain')}>
+            <IconButton
+              size="small"
+              color={isChainMode ? 'primary' : 'default'}
+              onClick={() => void onToggleChainMode()}
+            >
+              {isChainMode ? (
                 <LanRounded fontSize="small" />
               ) : (
                 <LanOutlined fontSize="small" />
-              )
-            }
-          >
-            {t('proxies.page.actions.toggleChain')}
-          </Button>
-        </Box>
+              )}
+            </IconButton>
+          </Tooltip>
+        </Stack>
       }
     >
       <Stack sx={{ height: '100%', minHeight: 0 }} spacing={1}>
-        <Box sx={{ px: 1, pt: 1 }}>
+        <Box sx={{ px: 1.25, pt: 1.25 }}>
           <Stack spacing={1}>
             {policyFilter && <FocusedPolicyPanel policy={policyFilter} />}
             <RoutingRelationsPanel policyFilter={policyFilter} compact />
