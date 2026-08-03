@@ -180,7 +180,8 @@ export const ProjectEditorDialog = ({
               <Box>
                 <Typography variant="subtitle2">识别条件</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  应用名称和路径优先；域名或 IP 用于核心未返回应用信息时补充识别。
+                  应用名称和路径优先；域名或 IP
+                  用于核心未返回应用信息时补充识别。
                 </Typography>
               </Box>
             </AccordionSummary>
@@ -245,9 +246,13 @@ export const ProjectEditorDialog = ({
             </Alert>
           )}
 
-          {draft.enabled && draft.action !== 'none' && conditionCount === 0 &&
+          {draft.enabled &&
+            draft.action !== 'none' &&
+            conditionCount === 0 &&
             legacyPortCount === 0 && (
-              <Alert severity="warning">至少选择一个应用或补充识别条件。</Alert>
+              <Alert severity="warning">
+                至少选择一个应用或补充识别条件。
+              </Alert>
             )}
         </Stack>
       </DialogContent>
