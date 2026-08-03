@@ -9,27 +9,14 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import {
+  getSystemProcessConnections,
+  type ProcessConnectionSnapshot,
+} from '@/services/process-connections'
+
 import type { DiversionProject } from './model'
-
-interface ProcessConnectionInfo {
-  pid: number
-  processName: string
-  processPath: string
-  protocol: string
-  localAddress: string
-  remoteAddress?: string | null
-  state?: string | null
-}
-
-interface ProcessConnectionSnapshot {
-  supported: boolean
-  source: string
-  connections: ProcessConnectionInfo[]
-  errors: string[]
-}
 
 export interface DetectedProgram {
   key: string
@@ -46,11 +33,6 @@ interface DetectedProgramsPanelProps {
   onImport: (program: DetectedProgram) => void
 }
 
-const getProcessConnections = () =>
-  invoke<ProcessConnectionSnapshot>('get_network_interfaces_info', {
-    kind: 'process-connections',
-  })
-
 export const DetectedProgramsPanel = ({
   projects,
   onImport,
@@ -63,7 +45,7 @@ export const DetectedProgramsPanel = ({
     setLoading(true)
     setError('')
     try {
-      const nextSnapshot = await getProcessConnections()
+      const nextSnapshot = await getSystemProcessConnections()
       setSnapshot(nextSnapshot)
       if (nextSnapshot.errors.length > 0) {
         setError(nextSnapshot.errors.join('；'))
@@ -152,13 +134,15 @@ export const DetectedProgramsPanel = ({
             正在联网的程序
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            从 Windows 系统 TCP/UDP
-            连接表读取 PID、进程名称和完整 exe 路径；导入后会进入同一套程序档案、规则组和出口策略链。
+            从 Windows 系统 TCP/UDP 连接表读取 PID、进程名称和完整 exe
+            路径；导入后会进入同一套程序档案、规则组和出口策略链。
           </Typography>
         </Box>
         <Button
           size="small"
-          startIcon={loading ? <CircularProgress size={16} /> : <RefreshRounded />}
+          startIcon={
+            loading ? <CircularProgress size={16} /> : <RefreshRounded />
+          }
           onClick={() => void refresh()}
           disabled={loading}
         >
@@ -219,7 +203,10 @@ export const DetectedProgramsPanel = ({
                       spacing={0.75}
                       sx={{ mt: 0.75, flexWrap: 'wrap' }}
                     >
-                      <Chip size="small" label={`PID ${program.pids.join(', ')}`} />
+                      <Chip
+                        size="small"
+                        label={`PID ${program.pids.join(', ')}`}
+                      />
                       <Chip
                         size="small"
                         label={`${program.connectionCount} 条系统连接`}
