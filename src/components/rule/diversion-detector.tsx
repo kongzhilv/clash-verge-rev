@@ -291,7 +291,9 @@ export const DiversionDetector = () => {
                           <Chip
                             size="small"
                             color={index === 0 ? 'primary' : 'default'}
-                            label={index === 0 ? '首个命中' : `候选 ${index + 1}`}
+                            label={
+                              index === 0 ? '首个命中' : `候选 ${index + 1}`
+                            }
                           />
                           <Typography sx={{ fontWeight: 650 }}>
                             {hit.group}
