@@ -21,6 +21,7 @@ import {
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 
+import { OverflowReveal, softScrollAreaSx } from '@/components/base'
 import {
   resolveActionPolicy,
   type DiversionConfig,
@@ -146,7 +147,12 @@ export const RoutingRelationsPanel = ({
       <Divider />
       <Stack
         divider={<Divider flexItem />}
-        sx={{ maxHeight: compact ? 220 : 320, overflowY: 'auto' }}
+        aria-label="应用规则与出口关系"
+        sx={{
+          maxHeight: compact ? 240 : 360,
+          overflowY: 'auto',
+          ...softScrollAreaSx,
+        }}
       >
         {projects.map((project) => {
           const policy = resolveActionPolicy(
@@ -168,45 +174,79 @@ export const RoutingRelationsPanel = ({
           return (
             <Stack
               key={project.id}
-              direction="row"
+              direction={{ xs: 'column', sm: 'row' }}
               spacing={1}
-              sx={{ px: 1.25, py: 0.9, alignItems: 'center', minWidth: 0 }}
+              sx={{
+                px: 1.25,
+                py: 0.9,
+                alignItems: { xs: 'stretch', sm: 'center' },
+                minWidth: 0,
+              }}
             >
-              <AppsRounded
-                color={project.enabled ? 'primary' : 'disabled'}
-                fontSize="small"
-              />
-              <Typography
-                sx={{ width: compact ? 150 : 180, fontWeight: 650 }}
-                noWrap
-                title={project.name}
+              <Stack
+                direction="row"
+                spacing={0.8}
+                sx={{ flex: 1, minWidth: 0, alignItems: 'center' }}
               >
-                {project.name}
-              </Typography>
+                <AppsRounded
+                  color={project.enabled ? 'primary' : 'disabled'}
+                  fontSize="small"
+                  sx={{ flex: '0 0 auto' }}
+                />
+                <Box sx={{ minWidth: 0, width: compact ? 150 : 190 }}>
+                  <OverflowReveal
+                    value={project.name}
+                    variant="body2"
+                    fontWeight={650}
+                  />
+                </Box>
+                <ArrowForwardRounded
+                  fontSize="inherit"
+                  color="disabled"
+                  sx={{ flex: '0 0 auto' }}
+                />
+                <Box
+                  sx={{
+                    display: 'inline-flex',
+                    minWidth: 0,
+                    maxWidth: compact ? 190 : 260,
+                    flex: 1,
+                    alignItems: 'center',
+                    gap: 0.45,
+                    px: 0.85,
+                    py: 0.15,
+                    border: 1,
+                    borderColor: policy ? 'primary.main' : 'divider',
+                    borderRadius: 999,
+                    color: policy ? 'primary.main' : 'text.secondary',
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  <LanRounded sx={{ fontSize: 16, flex: '0 0 auto' }} />
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <OverflowReveal
+                      value={policy || '无出口'}
+                      variant="caption"
+                      fontWeight={600}
+                    />
+                  </Box>
+                </Box>
+              </Stack>
 
               <Stack
                 direction="row"
-                spacing={0.5}
-                sx={{ flex: 1, minWidth: 0, alignItems: 'center' }}
+                spacing={0.15}
+                sx={{
+                  flex: '0 0 auto',
+                  alignItems: 'center',
+                  justifyContent: { xs: 'flex-end', sm: 'initial' },
+                }}
               >
-                <ArrowForwardRounded fontSize="inherit" color="disabled" />
-                <Chip
-                  size="small"
-                  icon={<LanRounded />}
-                  label={policy || '无出口'}
-                  color={policy ? 'primary' : 'default'}
-                  variant="outlined"
-                  sx={{ maxWidth: compact ? 170 : 220 }}
-                />
-              </Stack>
-
-              <Tooltip
-                title={`应用命中 ${matchedConnections} 条连接 · 此出口共 ${policyConnections} 条`}
-              >
-                <Chip size="small" label={matchedConnections} />
-              </Tooltip>
-
-              <Stack direction="row" spacing={0.1}>
+                <Tooltip
+                  title={`应用命中 ${matchedConnections} 条连接 · 此出口共 ${policyConnections} 条`}
+                >
+                  <Chip size="small" label={matchedConnections} />
+                </Tooltip>
                 <Tooltip title="连接">
                   <IconButton
                     size="small"
