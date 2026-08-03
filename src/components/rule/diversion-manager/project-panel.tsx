@@ -22,6 +22,8 @@ import {
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
+import { OverflowReveal } from '@/components/base'
+
 import { actionLabel } from './action-label'
 import DetectedProgramsPanel, {
   type DetectedProgram,
@@ -159,6 +161,8 @@ export const ProjectPanel = ({
                 project.action,
                 project.policy,
               )
+              const policyLabel =
+                policy || actionLabel(project.action, project.policy)
               const focused = project.id === focusProjectId
               return (
                 <Paper
@@ -175,84 +179,114 @@ export const ProjectPanel = ({
                   }}
                 >
                   <Stack
-                    direction="row"
+                    direction={{ xs: 'column', sm: 'row' }}
                     spacing={1.25}
-                    sx={{ alignItems: 'center', minWidth: 0 }}
+                    sx={{ alignItems: { xs: 'stretch', sm: 'center' }, minWidth: 0 }}
                   >
-                    <Avatar
-                      variant="rounded"
-                      sx={{
-                        width: 38,
-                        height: 38,
-                        bgcolor: project.enabled
-                          ? 'primary.main'
-                          : 'action.hover',
-                        color: project.enabled
-                          ? 'primary.contrastText'
-                          : 'text.secondary',
-                      }}
+                    <Stack
+                      direction="row"
+                      spacing={1.25}
+                      sx={{ flex: 1, minWidth: 0, alignItems: 'center' }}
                     >
-                      <AppsRounded fontSize="small" />
-                    </Avatar>
-
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Stack
-                        direction="row"
-                        spacing={0.75}
-                        sx={{ alignItems: 'center', minWidth: 0 }}
+                      <Avatar
+                        variant="rounded"
+                        sx={{
+                          width: 38,
+                          height: 38,
+                          flex: '0 0 auto',
+                          bgcolor: project.enabled
+                            ? 'primary.main'
+                            : 'action.hover',
+                          color: project.enabled
+                            ? 'primary.contrastText'
+                            : 'text.secondary',
+                        }}
                       >
-                        <Typography sx={{ fontWeight: 700 }} noWrap>
-                          {project.name}
-                        </Typography>
-                        {!project.enabled && (
+                        <AppsRounded fontSize="small" />
+                      </Avatar>
+
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          sx={{ alignItems: 'center', minWidth: 0 }}
+                        >
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <OverflowReveal
+                              value={project.name}
+                              fontWeight={700}
+                            />
+                          </Box>
+                          {!project.enabled && (
+                            <Chip
+                              size="small"
+                              label="已停用"
+                              variant="outlined"
+                            />
+                          )}
+                        </Stack>
+                        <OverflowReveal
+                          value={project.description || '应用规则'}
+                          variant="caption"
+                          color="text.secondary"
+                        />
+                        <Stack
+                          direction="row"
+                          spacing={0.5}
+                          sx={{ mt: 0.65, flexWrap: 'wrap' }}
+                        >
                           <Chip
                             size="small"
-                            label="已停用"
-                            variant="outlined"
+                            label={`${conditionCount(project)} 项匹配`}
                           />
-                        )}
-                      </Stack>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        noWrap
-                        title={project.description || project.name}
-                        sx={{ display: 'block' }}
-                      >
-                        {project.description || '应用规则'}
-                      </Typography>
-                      <Stack
-                        direction="row"
-                        spacing={0.5}
-                        sx={{ mt: 0.65, flexWrap: 'wrap' }}
-                      >
-                        <Chip
-                          size="small"
-                          label={`${conditionCount(project)} 项匹配`}
-                        />
-                        <Chip
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                          icon={<LanRounded />}
-                          label={
-                            policy ||
-                            actionLabel(project.action, project.policy)
-                          }
-                        />
-                      </Stack>
-                    </Box>
+                          <Box
+                            sx={{
+                              display: 'inline-flex',
+                              minWidth: 0,
+                              maxWidth: { xs: '100%', sm: 320 },
+                              alignItems: 'center',
+                              gap: 0.45,
+                              px: 0.85,
+                              py: 0.15,
+                              border: 1,
+                              borderColor: 'primary.main',
+                              borderRadius: 999,
+                              color: 'primary.main',
+                              bgcolor: 'background.paper',
+                            }}
+                          >
+                            <LanRounded sx={{ fontSize: 16, flex: '0 0 auto' }} />
+                            <Box sx={{ minWidth: 0, flex: 1 }}>
+                              <OverflowReveal
+                                value={policyLabel}
+                                variant="caption"
+                                fontWeight={650}
+                              />
+                            </Box>
+                          </Box>
+                        </Stack>
+                      </Box>
+                    </Stack>
 
-                    <Switch
-                      size="small"
-                      checked={project.enabled}
-                      onChange={(_, checked) => toggleProject(project, checked)}
-                      slotProps={{
-                        input: { 'aria-label': `启用 ${project.name}` },
+                    <Stack
+                      direction="row"
+                      spacing={0.25}
+                      sx={{
+                        flex: '0 0 auto',
+                        alignItems: 'center',
+                        justifyContent: { xs: 'flex-end', sm: 'initial' },
                       }}
-                    />
-
-                    <Stack direction="row" spacing={0.25}>
+                    >
+                      <Switch
+                        size="small"
+                        checked={project.enabled}
+                        onChange={(_, checked) =>
+                          toggleProject(project, checked)
+                        }
+                        slotProps={{
+                          input: { 'aria-label': `启用 ${project.name}` },
+                        }}
+                      />
                       <Tooltip title="查看连接">
                         <IconButton
                           size="small"
