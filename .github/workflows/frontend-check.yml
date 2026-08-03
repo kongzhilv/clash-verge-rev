@@ -1,5 +1,5 @@
 name: Frontend Check
-run-name: Audit Karing 4 candidate (trigger)
+run-name: Audit Karing 4 candidate with report
 
 on:
   push:
@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 env:
   HUSKY: 0
@@ -45,33 +47,123 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: pnpm format:check
-
-      - name: Audit mature routing UI
+        id: format
+        continue-on-error: true
         shell: bash
         run: |
-          set -euo pipefail
-          test -f src/components/base/overflow-reveal.tsx
-          grep -q "overflowX: 'auto'" src/components/base/overflow-reveal.tsx
-          grep -q 'ResizeObserver' src/components/base/overflow-reveal.tsx
-          grep -q 'softScrollAreaSx' src/components/rule/diversion-manager/detected-programs-panel.tsx
-          grep -q 'OverflowReveal' src/components/rule/diversion-manager/project-panel.tsx
-          grep -q 'OverflowReveal' src/components/rule/diversion-manager/action-picker.tsx
-          grep -q 'OverflowReveal' src/components/routing/routing-relations-panel.tsx
-          grep -q 'OverflowReveal' src/components/routing/focused-policy-panel.tsx
-          grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
-          grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
-          grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
-          echo '[pass] routing UI and overflow reveal audit'
+          set -o pipefail
+          pnpm format:check 2>&1 | tee /tmp/format.log
+
+      - name: Audit mature routing UI
+        id: ui
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            set -euo pipefail
+            test -f src/components/base/overflow-reveal.tsx
+            grep -q "overflowX: 'auto'" src/components/base/overflow-reveal.tsx
+            grep -q 'ResizeObserver' src/components/base/overflow-reveal.tsx
+            grep -q 'softScrollAreaSx' src/components/rule/diversion-manager/detected-programs-panel.tsx
+            grep -q 'OverflowReveal' src/components/rule/diversion-manager/project-panel.tsx
+            grep -q 'OverflowReveal' src/components/rule/diversion-manager/action-picker.tsx
+            grep -q 'OverflowReveal' src/components/routing/routing-relations-panel.tsx
+            grep -q 'OverflowReveal' src/components/routing/focused-policy-panel.tsx
+            grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
+            grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
+            grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
+            echo '[pass] routing UI and overflow reveal audit'
+          } 2>&1 | tee /tmp/ui.log
 
       - name: Run ESLint
-        run: pnpm lint
+        id: lint
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm lint 2>&1 | tee /tmp/lint.log
 
       - name: Run TypeScript check
-        run: pnpm typecheck
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm typecheck 2>&1 | tee /tmp/typecheck.log
 
       - name: Run Knip report
-        run: pnpm knip:report
+        id: knip
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm knip:report 2>&1 | tee /tmp/knip.log
 
       - name: Build web application
-        run: pnpm run web:build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run web:build 2>&1 | tee /tmp/build.log
+
+      - name: Publish audit report to PR
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORMAT: ${{ steps.format.outcome }}
+          UI: ${{ steps.ui.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          KNIP: ${{ steps.knip.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+          candidate=$(git rev-parse HEAD)
+          report=/tmp/audit-report.md
+          {
+            echo '<!-- karing4-frontend-audit -->'
+            echo '## Karing 4 前端审查报告'
+            echo
+            echo "候选提交：\`$candidate\`"
+            echo
+            echo '| 检查 | 结果 |'
+            echo '| --- | --- |'
+            echo "| Biome | $FORMAT |"
+            echo "| 成熟化 UI 审查 | $UI |"
+            echo "| ESLint | $LINT |"
+            echo "| TypeScript | $TYPECHECK |"
+            echo "| Knip | $KNIP |"
+            echo "| Web 构建 | $BUILD |"
+            for item in format ui lint typecheck knip build; do
+              value=$(printenv "$(echo "$item" | tr '[:lower:]' '[:upper:]')")
+              if [ "$value" != success ]; then
+                echo
+                echo "<details><summary>$item 错误日志尾部</summary>"
+                echo
+                echo '```text'
+                tail -n 60 "/tmp/$item.log" 2>/dev/null || true
+                echo '```'
+                echo '</details>'
+              fi
+            done
+          } > "$report"
+          gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body-file "$report"
+
+      - name: Enforce audit result
+        if: always()
+        shell: bash
+        env:
+          FORMAT: ${{ steps.format.outcome }}
+          UI: ${{ steps.ui.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          KNIP: ${{ steps.knip.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+          for value in "$FORMAT" "$UI" "$LINT" "$TYPECHECK" "$KNIP" "$BUILD"; do
+            test "$value" = success
+          done
