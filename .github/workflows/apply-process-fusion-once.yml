@@ -1,0 +1,1166 @@
+name: 应用原生进程连接融合补丁
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/apply-process-fusion-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-process-fusion-once
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: 写入并提交进程连接融合实现
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出功能分支
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: 应用源码补丁
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'patch anchor missing: {path}: {old!r}')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          process_connections = r'''use serde::Serialize;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessConnection {
+    pub pid: u32,
+    pub process_name: String,
+    pub process_path: String,
+    pub protocol: String,
+    pub local_address: String,
+    pub remote_address: Option<String>,
+    pub state: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProcessConnectionSnapshot {
+    pub supported: bool,
+    pub source: String,
+    pub connections: Vec<ProcessConnection>,
+    pub errors: Vec<String>,
+}
+
+#[tauri::command]
+pub fn get_process_connections() -> ProcessConnectionSnapshot {
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::collect()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        ProcessConnectionSnapshot {
+            supported: false,
+            source: "当前平台暂未接入系统连接归因".to_string(),
+            connections: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows_impl {
+    use super::{ProcessConnection, ProcessConnectionSnapshot};
+    use anyhow::{Result, anyhow};
+    use std::collections::HashMap;
+    use std::ffi::OsString;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
+    use std::os::windows::ffi::OsStringExt as _;
+    use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER, WIN32_ERROR};
+    use windows::Win32::NetworkManagement::IpHelper::{
+        GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6ROW_OWNER_PID,
+        MIB_TCP6TABLE_OWNER_PID, MIB_TCPROW_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
+        MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPROW_OWNER_PID,
+        MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
+    };
+    use windows::Win32::Networking::WinSock::{AF_INET, AF_INET6};
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+        QueryFullProcessImageNameW,
+    };
+
+    const MAX_TABLE_BYTES: u32 = 100_000_000;
+
+    #[derive(Clone)]
+    struct ProcessIdentity {
+        name: String,
+        path: String,
+    }
+
+    pub(super) fn collect() -> ProcessConnectionSnapshot {
+        let mut connections = Vec::new();
+        let mut identities = HashMap::new();
+        let mut errors = Vec::new();
+
+        collect_result(
+            "TCP IPv4",
+            collect_tcp_v4(&mut connections, &mut identities),
+            &mut errors,
+        );
+        collect_result(
+            "TCP IPv6",
+            collect_tcp_v6(&mut connections, &mut identities),
+            &mut errors,
+        );
+        collect_result(
+            "UDP IPv4",
+            collect_udp_v4(&mut connections, &mut identities),
+            &mut errors,
+        );
+        collect_result(
+            "UDP IPv6",
+            collect_udp_v6(&mut connections, &mut identities),
+            &mut errors,
+        );
+
+        connections.sort_by(|left, right| {
+            left.process_path
+                .to_lowercase()
+                .cmp(&right.process_path.to_lowercase())
+                .then_with(|| left.process_name.cmp(&right.process_name))
+                .then_with(|| left.pid.cmp(&right.pid))
+                .then_with(|| left.protocol.cmp(&right.protocol))
+                .then_with(|| left.local_address.cmp(&right.local_address))
+                .then_with(|| left.remote_address.cmp(&right.remote_address))
+        });
+        connections.dedup_by(|left, right| {
+            left.pid == right.pid
+                && left.protocol == right.protocol
+                && left.local_address == right.local_address
+                && left.remote_address == right.remote_address
+        });
+
+        ProcessConnectionSnapshot {
+            supported: true,
+            source: "RustNet Windows 归因链（IP Helper API）".to_string(),
+            connections,
+            errors,
+        }
+    }
+
+    fn collect_result(label: &str, result: Result<()>, errors: &mut Vec<String>) {
+        if let Err(error) = result {
+            errors.push(format!("{label}: {error}"));
+        }
+    }
+
+    fn allocate_table_buffer(size: u32) -> Result<Vec<u32>> {
+        if size == 0 || size > MAX_TABLE_BYTES {
+            return Err(anyhow!("系统返回了异常缓冲区大小：{size}"));
+        }
+        Ok(vec![
+            0;
+            (size as usize).div_ceil(std::mem::size_of::<u32>())
+        ])
+    }
+
+    fn table_buffer_len(table: &[u32]) -> usize {
+        std::mem::size_of_val(table)
+    }
+
+    fn process_identity(
+        pid: u32,
+        identities: &mut HashMap<u32, ProcessIdentity>,
+    ) -> Option<ProcessIdentity> {
+        if pid == 0 {
+            return None;
+        }
+
+        Some(
+            identities
+                .entry(pid)
+                .or_insert_with(|| query_process_identity(pid))
+                .clone(),
+        )
+    }
+
+    fn query_process_identity(pid: u32) -> ProcessIdentity {
+        unsafe {
+            let handle = match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+                Ok(handle) => handle,
+                Err(_) => return fallback_identity(pid),
+            };
+
+            let mut size = 32_768_u32;
+            let mut buffer = vec![0_u16; size as usize];
+            let result = QueryFullProcessImageNameW(
+                handle,
+                PROCESS_NAME_WIN32,
+                windows::core::PWSTR(buffer.as_mut_ptr()),
+                &mut size,
+            );
+            let _ = CloseHandle(handle);
+
+            if result.is_err() || size == 0 {
+                return fallback_identity(pid);
+            }
+
+            let path = OsString::from_wide(&buffer[..size as usize])
+                .to_string_lossy()
+                .to_string();
+            let name = path
+                .rsplit(['\\', '/'])
+                .next()
+                .filter(|value| !value.is_empty())
+                .map_or_else(|| format!("PID {pid}"), ToString::to_string);
+
+            ProcessIdentity { name, path }
+        }
+    }
+
+    fn fallback_identity(pid: u32) -> ProcessIdentity {
+        ProcessIdentity {
+            name: if pid == 4 {
+                "System".to_string()
+            } else {
+                format!("PID {pid}")
+            },
+            path: String::new(),
+        }
+    }
+
+    const fn tcp_state(value: u32) -> &'static str {
+        match value {
+            1 => "CLOSED",
+            2 => "LISTEN",
+            3 => "SYN-SENT",
+            4 => "SYN-RECEIVED",
+            5 => "ESTABLISHED",
+            6 => "FIN-WAIT-1",
+            7 => "FIN-WAIT-2",
+            8 => "CLOSE-WAIT",
+            9 => "CLOSING",
+            10 => "LAST-ACK",
+            11 => "TIME-WAIT",
+            12 => "DELETE-TCB",
+            _ => "UNKNOWN",
+        }
+    }
+
+    fn collect_tcp_v4(
+        connections: &mut Vec<ProcessConnection>,
+        identities: &mut HashMap<u32, ProcessIdentity>,
+    ) -> Result<()> {
+        unsafe {
+            let mut size = 0_u32;
+            let first = GetExtendedTcpTable(
+                None,
+                &mut size,
+                false,
+                AF_INET.0 as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            );
+            if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
+                return Err(anyhow!("首次读取返回代码 {first}"));
+            }
+
+            let mut table = allocate_table_buffer(size)?;
+            let second = GetExtendedTcpTable(
+                Some(table.as_mut_ptr().cast()),
+                &mut size,
+                false,
+                AF_INET.0 as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            );
+            if second != 0 {
+                return Err(anyhow!("读取连接表返回代码 {second}"));
+            }
+
+            let tcp_table = &*table.as_ptr().cast::<MIB_TCPTABLE_OWNER_PID>();
+            let count = tcp_table.dwNumEntries as usize;
+            let required = std::mem::size_of::<u32>()
+                + count * std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
+            if table_buffer_len(&table) < required {
+                return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
+            }
+
+            let rows = &tcp_table.table[0] as *const MIB_TCPROW_OWNER_PID;
+            for index in 0..count {
+                let row = &*rows.add(index);
+                let Some(identity) = process_identity(row.dwOwningPid, identities) else {
+                    continue;
+                };
+                let local = SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::from(row.dwLocalAddr.to_ne_bytes())),
+                    u16::from_be(row.dwLocalPort as u16),
+                );
+                let remote = SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::from(row.dwRemoteAddr.to_ne_bytes())),
+                    u16::from_be(row.dwRemotePort as u16),
+                );
+                connections.push(ProcessConnection {
+                    pid: row.dwOwningPid,
+                    process_name: identity.name,
+                    process_path: identity.path,
+                    protocol: "TCP".to_string(),
+                    local_address: local.to_string(),
+                    remote_address: (remote.port() != 0).then(|| remote.to_string()),
+                    state: Some(tcp_state(row.dwState).to_string()),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn collect_tcp_v6(
+        connections: &mut Vec<ProcessConnection>,
+        identities: &mut HashMap<u32, ProcessIdentity>,
+    ) -> Result<()> {
+        unsafe {
+            let mut size = 0_u32;
+            let first = GetExtendedTcpTable(
+                None,
+                &mut size,
+                false,
+                AF_INET6.0 as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            );
+            if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
+                return Err(anyhow!("首次读取返回代码 {first}"));
+            }
+
+            let mut table = allocate_table_buffer(size)?;
+            let second = GetExtendedTcpTable(
+                Some(table.as_mut_ptr().cast()),
+                &mut size,
+                false,
+                AF_INET6.0 as u32,
+                TCP_TABLE_OWNER_PID_ALL,
+                0,
+            );
+            if second != 0 {
+                return Err(anyhow!("读取连接表返回代码 {second}"));
+            }
+
+            let tcp_table = &*table.as_ptr().cast::<MIB_TCP6TABLE_OWNER_PID>();
+            let count = tcp_table.dwNumEntries as usize;
+            let required = std::mem::size_of::<u32>()
+                + count * std::mem::size_of::<MIB_TCP6ROW_OWNER_PID>();
+            if table_buffer_len(&table) < required {
+                return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
+            }
+
+            let rows = &tcp_table.table[0] as *const MIB_TCP6ROW_OWNER_PID;
+            for index in 0..count {
+                let row = &*rows.add(index);
+                let Some(identity) = process_identity(row.dwOwningPid, identities) else {
+                    continue;
+                };
+                let local = SocketAddr::V6(SocketAddrV6::new(
+                    Ipv6Addr::from(row.ucLocalAddr),
+                    u16::from_be(row.dwLocalPort as u16),
+                    0,
+                    row.dwLocalScopeId,
+                ));
+                let remote = SocketAddr::V6(SocketAddrV6::new(
+                    Ipv6Addr::from(row.ucRemoteAddr),
+                    u16::from_be(row.dwRemotePort as u16),
+                    0,
+                    row.dwRemoteScopeId,
+                ));
+                connections.push(ProcessConnection {
+                    pid: row.dwOwningPid,
+                    process_name: identity.name,
+                    process_path: identity.path,
+                    protocol: "TCP".to_string(),
+                    local_address: local.to_string(),
+                    remote_address: (remote.port() != 0).then(|| remote.to_string()),
+                    state: Some(tcp_state(row.dwState).to_string()),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn collect_udp_v4(
+        connections: &mut Vec<ProcessConnection>,
+        identities: &mut HashMap<u32, ProcessIdentity>,
+    ) -> Result<()> {
+        unsafe {
+            let mut size = 0_u32;
+            let first = GetExtendedUdpTable(
+                None,
+                &mut size,
+                false,
+                AF_INET.0 as u32,
+                UDP_TABLE_OWNER_PID,
+                0,
+            );
+            if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
+                return Err(anyhow!("首次读取返回代码 {first}"));
+            }
+
+            let mut table = allocate_table_buffer(size)?;
+            let second = GetExtendedUdpTable(
+                Some(table.as_mut_ptr().cast()),
+                &mut size,
+                false,
+                AF_INET.0 as u32,
+                UDP_TABLE_OWNER_PID,
+                0,
+            );
+            if second != 0 {
+                return Err(anyhow!("读取连接表返回代码 {second}"));
+            }
+
+            let udp_table = &*table.as_ptr().cast::<MIB_UDPTABLE_OWNER_PID>();
+            let count = udp_table.dwNumEntries as usize;
+            let required = std::mem::size_of::<u32>()
+                + count * std::mem::size_of::<MIB_UDPROW_OWNER_PID>();
+            if table_buffer_len(&table) < required {
+                return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
+            }
+
+            let rows = &udp_table.table[0] as *const MIB_UDPROW_OWNER_PID;
+            for index in 0..count {
+                let row = &*rows.add(index);
+                let Some(identity) = process_identity(row.dwOwningPid, identities) else {
+                    continue;
+                };
+                let local = SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::from(row.dwLocalAddr.to_ne_bytes())),
+                    u16::from_be(row.dwLocalPort as u16),
+                );
+                connections.push(ProcessConnection {
+                    pid: row.dwOwningPid,
+                    process_name: identity.name,
+                    process_path: identity.path,
+                    protocol: "UDP".to_string(),
+                    local_address: local.to_string(),
+                    remote_address: None,
+                    state: None,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn collect_udp_v6(
+        connections: &mut Vec<ProcessConnection>,
+        identities: &mut HashMap<u32, ProcessIdentity>,
+    ) -> Result<()> {
+        unsafe {
+            let mut size = 0_u32;
+            let first = GetExtendedUdpTable(
+                None,
+                &mut size,
+                false,
+                AF_INET6.0 as u32,
+                UDP_TABLE_OWNER_PID,
+                0,
+            );
+            if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
+                return Err(anyhow!("首次读取返回代码 {first}"));
+            }
+
+            let mut table = allocate_table_buffer(size)?;
+            let second = GetExtendedUdpTable(
+                Some(table.as_mut_ptr().cast()),
+                &mut size,
+                false,
+                AF_INET6.0 as u32,
+                UDP_TABLE_OWNER_PID,
+                0,
+            );
+            if second != 0 {
+                return Err(anyhow!("读取连接表返回代码 {second}"));
+            }
+
+            let udp_table = &*table.as_ptr().cast::<MIB_UDP6TABLE_OWNER_PID>();
+            let count = udp_table.dwNumEntries as usize;
+            let required = std::mem::size_of::<u32>()
+                + count * std::mem::size_of::<MIB_UDP6ROW_OWNER_PID>();
+            if table_buffer_len(&table) < required {
+                return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
+            }
+
+            let rows = &udp_table.table[0] as *const MIB_UDP6ROW_OWNER_PID;
+            for index in 0..count {
+                let row = &*rows.add(index);
+                let Some(identity) = process_identity(row.dwOwningPid, identities) else {
+                    continue;
+                };
+                let local = SocketAddr::V6(SocketAddrV6::new(
+                    Ipv6Addr::from(row.ucLocalAddr),
+                    u16::from_be(row.dwLocalPort as u16),
+                    0,
+                    row.dwLocalScopeId,
+                ));
+                connections.push(ProcessConnection {
+                    pid: row.dwOwningPid,
+                    process_name: identity.name,
+                    process_path: identity.path,
+                    protocol: "UDP".to_string(),
+                    local_address: local.to_string(),
+                    remote_address: None,
+                    state: None,
+                });
+            }
+        }
+        Ok(())
+    }
+}
+'''
+
+          project_panel = r'''import {
+  AddRounded,
+  AppsRounded,
+  DeleteOutlineRounded,
+  EditRounded,
+  HubRounded,
+  LanRounded,
+  RefreshRounded,
+  WorkspacesRounded,
+} from '@mui/icons-material'
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Paper,
+  Stack,
+  Switch,
+  Typography,
+} from '@mui/material'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router'
+
+import { getProcessConnections } from '@/services/cmds'
+
+import { actionLabel } from './action-label'
+import {
+  makeProject,
+  resolveActionPolicy,
+  type DiversionConfig,
+  type DiversionProject,
+} from './model'
+import ProjectEditorDialog from './project-editor-dialog'
+
+interface ProjectPanelProps {
+  config: DiversionConfig
+  focusProjectId?: string | null
+  onChange: (patch: Partial<DiversionConfig>) => void
+}
+
+interface DiscoveredProgram {
+  key: string
+  name: string
+  path: string
+  pids: number[]
+  connectionCount: number
+  protocols: string[]
+  remoteAddresses: string[]
+}
+
+const conditionCount = (project: DiversionProject) =>
+  project.processNames.length +
+  project.processPaths.length +
+  project.domains.length +
+  project.ipCidrs.length +
+  project.destinationPorts.length
+
+export const ProjectPanel = ({
+  config,
+  focusProjectId,
+  onChange,
+}: ProjectPanelProps) => {
+  const navigate = useNavigate()
+  const [manualEditorOpen, setManualEditorOpen] = useState(false)
+  const [editingProject, setEditingProject] = useState<DiversionProject | null>(
+    null,
+  )
+  const [processSnapshot, setProcessSnapshot] = useState<
+    Awaited<ReturnType<typeof getProcessConnections>> | undefined
+  >()
+  const [processLoading, setProcessLoading] = useState(false)
+  const [processError, setProcessError] = useState('')
+  const [dismissedFocusProjectId, setDismissedFocusProjectId] = useState<
+    string | null
+  >(null)
+  const focusedProject =
+    focusProjectId && dismissedFocusProjectId !== focusProjectId
+      ? (config.projects.find((item) => item.id === focusProjectId) ?? null)
+      : null
+  const editorOpen = manualEditorOpen || Boolean(focusedProject)
+  const editorProject = manualEditorOpen ? editingProject : focusedProject
+
+  const loadProcessConnections = useCallback(async () => {
+    setProcessLoading(true)
+    setProcessError('')
+    try {
+      const snapshot = await getProcessConnections()
+      setProcessSnapshot(snapshot)
+      if (snapshot.errors.length > 0) {
+        setProcessError(snapshot.errors.join('；'))
+      }
+    } catch (error) {
+      setProcessError(String(error))
+    } finally {
+      setProcessLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadProcessConnections()
+  }, [loadProcessConnections])
+
+  const discoveredPrograms = useMemo(() => {
+    const programs = new Map<string, DiscoveredProgram>()
+
+    for (const connection of processSnapshot?.connections ?? []) {
+      const pathKey = connection.processPath.trim().toLowerCase()
+      const nameKey = connection.processName.trim().toLowerCase()
+      const key = pathKey || nameKey || `pid:${connection.pid}`
+      const current = programs.get(key) ?? {
+        key,
+        name: connection.processName || `PID ${connection.pid}`,
+        path: connection.processPath,
+        pids: [],
+        connectionCount: 0,
+        protocols: [],
+        remoteAddresses: [],
+      }
+
+      current.connectionCount += 1
+      if (!current.pids.includes(connection.pid)) current.pids.push(connection.pid)
+      if (!current.protocols.includes(connection.protocol)) {
+        current.protocols.push(connection.protocol)
+      }
+      if (
+        connection.remoteAddress &&
+        !current.remoteAddresses.includes(connection.remoteAddress)
+      ) {
+        current.remoteAddresses.push(connection.remoteAddress)
+      }
+      programs.set(key, current)
+    }
+
+    return [...programs.values()]
+      .sort(
+        (left, right) =>
+          right.connectionCount - left.connectionCount ||
+          left.name.localeCompare(right.name),
+      )
+      .slice(0, 40)
+  }, [processSnapshot])
+
+  const registeredPaths = useMemo(
+    () =>
+      new Set(
+        config.projects.flatMap((project) =>
+          project.processPaths.map((path) => path.trim().toLowerCase()),
+        ),
+      ),
+    [config.projects],
+  )
+  const registeredNames = useMemo(
+    () =>
+      new Set(
+        config.projects.flatMap((project) =>
+          project.processNames.map((name) => name.trim().toLowerCase()),
+        ),
+      ),
+    [config.projects],
+  )
+
+  const openCreate = () => {
+    setEditingProject(null)
+    setManualEditorOpen(true)
+  }
+
+  const openEdit = (project: DiversionProject) => {
+    setEditingProject(project)
+    setManualEditorOpen(true)
+  }
+
+  const importDetectedProgram = (program: DiscoveredProgram) => {
+    const processName = program.name.trim()
+    const processPath = program.path.trim()
+    const project = makeProject(config.projects.length, {
+      kind: 'program',
+      name: processName.replace(/\.exe$/i, '') || processName,
+      description: `由系统连接发现；PID：${program.pids.join(', ')}；当前连接：${program.connectionCount}`,
+      processNames: processName ? [processName] : [],
+      processPaths: processPath ? [processPath] : [],
+    })
+    setEditingProject(project)
+    setManualEditorOpen(true)
+  }
+
+  const saveProject = (project: DiversionProject) => {
+    const exists = config.projects.some((item) => item.id === project.id)
+    const projects = exists
+      ? config.projects.map((item) => (item.id === project.id ? project : item))
+      : [...config.projects, project]
+    onChange({ enabled: true, projects })
+    setManualEditorOpen(false)
+    setEditingProject(null)
+    setDismissedFocusProjectId(focusProjectId ?? null)
+  }
+
+  const deleteProject = (project: DiversionProject) => {
+    onChange({
+      projects: config.projects.filter((item) => item.id !== project.id),
+    })
+  }
+
+  const toggleProject = (project: DiversionProject, enabled: boolean) => {
+    onChange({
+      projects: config.projects.map((item) =>
+        item.id === project.id ? { ...item, enabled } : item,
+      ),
+    })
+  }
+
+  return (
+    <Box>
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 2 }}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1}
+          sx={{ alignItems: { sm: 'center' } }}
+        >
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              正在联网的程序
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              直接从 Windows 系统连接表读取 PID、进程名称与完整 exe
+              路径；选中后会进入同一套程序档案、规则组和出口策略链。
+            </Typography>
+          </Box>
+          <Button
+            size="small"
+            startIcon={
+              processLoading ? <CircularProgress size={16} /> : <RefreshRounded />
+            }
+            onClick={() => void loadProcessConnections()}
+            disabled={processLoading}
+          >
+            刷新连接
+          </Button>
+        </Stack>
+
+        {processSnapshot && !processSnapshot.supported && (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            {processSnapshot.source}
+          </Alert>
+        )}
+        {processError && (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            已取得可用结果，但部分连接表读取失败：{processError}
+          </Alert>
+        )}
+        {processLoading && !processSnapshot ? (
+          <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : processSnapshot?.supported && discoveredPrograms.length === 0 ? (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            当前没有发现可归因的系统连接。启动目标程序后点击“刷新连接”。
+          </Alert>
+        ) : (
+          <Stack spacing={1} sx={{ mt: discoveredPrograms.length ? 1.5 : 0 }}>
+            {discoveredPrograms.map((program) => {
+              const registered = program.path
+                ? registeredPaths.has(program.path.toLowerCase())
+                : registeredNames.has(program.name.toLowerCase())
+              return (
+                <Paper
+                  key={program.key}
+                  variant="outlined"
+                  sx={{ p: 1.25, borderRadius: 2 }}
+                >
+                  <Stack
+                    direction={{ xs: 'column', md: 'row' }}
+                    spacing={1}
+                    sx={{ alignItems: { md: 'center' } }}
+                  >
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontWeight: 700 }}>
+                        {program.name}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', wordBreak: 'break-all' }}
+                      >
+                        {program.path || '系统进程路径受保护，仍可按进程名称建立规则'}
+                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={0.75}
+                        sx={{ mt: 0.75, flexWrap: 'wrap' }}
+                      >
+                        <Chip size="small" label={`PID ${program.pids.join(', ')}`} />
+                        <Chip
+                          size="small"
+                          label={`${program.connectionCount} 条系统连接`}
+                        />
+                        {program.protocols.map((protocol) => (
+                          <Chip key={protocol} size="small" label={protocol} />
+                        ))}
+                        {program.remoteAddresses.slice(0, 3).map((address) => (
+                          <Chip
+                            key={address}
+                            size="small"
+                            variant="outlined"
+                            label={address}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+                    <Button
+                      size="small"
+                      variant={registered ? 'text' : 'outlined'}
+                      disabled={registered}
+                      onClick={() => importDetectedProgram(program)}
+                    >
+                      {registered ? '已加入档案' : '加入分流档案'}
+                    </Button>
+                  </Stack>
+                </Paper>
+              )
+            })}
+          </Stack>
+        )}
+      </Paper>
+
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        sx={{ mb: 1, alignItems: { sm: 'center' } }}
+      >
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            程序与项目档案
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            将程序路径、域名、IP
+            和端口绑定到同一个规则组与出口；连接、规则和代理组页面会共享这份关系。
+          </Typography>
+        </Box>
+        <Button startIcon={<AddRounded />} onClick={openCreate}>
+          添加程序或项目
+        </Button>
+      </Stack>
+
+      {config.projects.length === 0 ? (
+        <Alert severity="info">
+          还没有程序或项目档案。可从上方系统连接直接导入，也可手工添加域名、IP
+          或端口特征。
+        </Alert>
+      ) : (
+        <Stack spacing={1}>
+          {config.projects.map((project) => {
+            const policy = resolveActionPolicy(
+              config,
+              project.action,
+              project.policy,
+            )
+            const focused = project.id === focusProjectId
+            return (
+              <Paper
+                key={project.id}
+                variant="outlined"
+                sx={{
+                  p: 1.5,
+                  borderRadius: 2,
+                  borderColor: focused ? 'primary.main' : 'divider',
+                  bgcolor: focused ? 'action.selected' : undefined,
+                }}
+              >
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={1.5}
+                  sx={{ alignItems: { md: 'center' } }}
+                >
+                  <Box
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      display: 'grid',
+                      placeItems: 'center',
+                      borderRadius: 2,
+                      bgcolor: project.enabled
+                        ? 'primary.main'
+                        : 'action.hover',
+                      color: project.enabled
+                        ? 'primary.contrastText'
+                        : 'text.secondary',
+                    }}
+                  >
+                    {project.kind === 'program' ? (
+                      <AppsRounded />
+                    ) : (
+                      <WorkspacesRounded />
+                    )}
+                  </Box>
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700 }}>
+                      {project.name}
+                    </Typography>
+                    {project.description && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ wordBreak: 'break-word' }}
+                      >
+                        {project.description}
+                      </Typography>
+                    )}
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      sx={{ mt: 0.75, flexWrap: 'wrap' }}
+                    >
+                      <Chip
+                        size="small"
+                        label={`${conditionCount(project)} 个识别条件`}
+                      />
+                      <Chip
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        label={actionLabel(project.action, project.policy)}
+                      />
+                      <Chip
+                        size="small"
+                        icon={<HubRounded />}
+                        label={`规则组：${project.groupId}`}
+                      />
+                      {policy && (
+                        <Chip
+                          size="small"
+                          icon={<LanRounded />}
+                          label={`出口：${policy}`}
+                        />
+                      )}
+                    </Stack>
+                  </Box>
+
+                  <Switch
+                    checked={project.enabled}
+                    onChange={(_, checked) => toggleProject(project, checked)}
+                    slotProps={{
+                      input: { 'aria-label': `启用 ${project.name}` },
+                    }}
+                  />
+
+                  <Stack
+                    direction="row"
+                    spacing={0.5}
+                    sx={{ flexWrap: 'wrap' }}
+                  >
+                    <Button
+                      size="small"
+                      onClick={() =>
+                        navigate(
+                          `/connections?project=${encodeURIComponent(project.id)}`,
+                        )
+                      }
+                    >
+                      查看连接
+                    </Button>
+                    {policy && (
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          navigate(
+                            `/proxies?policy=${encodeURIComponent(policy)}`,
+                          )
+                        }
+                      >
+                        查看代理组
+                      </Button>
+                    )}
+                    <Button
+                      size="small"
+                      startIcon={<EditRounded />}
+                      onClick={() => openEdit(project)}
+                    >
+                      编辑
+                    </Button>
+                    <Button
+                      size="small"
+                      color="error"
+                      startIcon={<DeleteOutlineRounded />}
+                      onClick={() => deleteProject(project)}
+                    >
+                      删除
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            )
+          })}
+        </Stack>
+      )}
+
+      {editorOpen && (
+        <ProjectEditorDialog
+          open
+          project={editorProject}
+          projectIndex={config.projects.length}
+          onClose={() => {
+            setManualEditorOpen(false)
+            setEditingProject(null)
+            if (focusedProject) setDismissedFocusProjectId(focusedProject.id)
+          }}
+          onSave={saveProject}
+        />
+      )}
+    </Box>
+  )
+}
+
+export default ProjectPanel
+'''
+
+          third_party_notice = r'''# Third-party notices
+
+## RustNet Windows process attribution
+
+The Windows system-connection attribution implementation in
+`src-tauri/src/cmd/process_connections.rs` is adapted from the architecture and
+IP Helper API handling used by [RustNet](https://github.com/domcyrus/rustnet),
+Copyright its contributors, licensed under the Apache License, Version 2.0.
+
+The adapted implementation was modified for Clash Verge Rev to expose a Tauri
+command, return full executable paths, aggregate TCP/UDP IPv4/IPv6 endpoints,
+and feed the existing program/project diversion model. The repository remains
+distributed under GPL-3.0-only; the Apache-2.0 attribution and notices for the
+adapted portion are retained here.
+
+Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0
+'''
+
+          Path('src-tauri/src/cmd/process_connections.rs').write_text(
+              process_connections,
+              encoding='utf-8',
+          )
+          Path('src/components/rule/diversion-manager/project-panel.tsx').write_text(
+              project_panel,
+              encoding='utf-8',
+          )
+          Path('THIRD_PARTY_NOTICES.md').write_text(third_party_notice, encoding='utf-8')
+
+          replace_once(
+              'src-tauri/src/cmd/mod.rs',
+              'pub mod network;\n',
+              'pub mod network;\npub mod process_connections;\n',
+          )
+          replace_once(
+              'src-tauri/src/cmd/mod.rs',
+              'pub use network::*;\n',
+              'pub use network::*;\npub use process_connections::*;\n',
+          )
+          replace_once(
+              'src-tauri/src/lib.rs',
+              '            cmd::get_network_interfaces_info,\n',
+              '            cmd::get_network_interfaces_info,\n            cmd::get_process_connections,\n',
+          )
+          replace_once(
+              'src-tauri/Cargo.toml',
+              'windows = { version = "0.62.2", features = ["Win32_Globalization"] }',
+              '''windows = { version = "0.62.2", features = [
+  "Win32_Globalization",
+  "Win32_Foundation",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_System_Threading",
+] }''',
+          )
+
+          command_types = r'''
+export interface ProcessConnectionInfo {
+  pid: number
+  processName: string
+  processPath: string
+  protocol: string
+  localAddress: string
+  remoteAddress?: string | null
+  state?: string | null
+}
+
+export interface ProcessConnectionSnapshot {
+  supported: boolean
+  source: string
+  connections: ProcessConnectionInfo[]
+  errors: string[]
+}
+
+export async function getProcessConnections() {
+  return invoke<ProcessConnectionSnapshot>('get_process_connections')
+}
+'''
+          replace_once(
+              'src/services/cmds.ts',
+              '''export async function getNetworkInterfacesInfo() {
+  return invoke<INetworkInterface[]>('get_network_interfaces_info')
+}
+''',
+              '''export async function getNetworkInterfacesInfo() {
+  return invoke<INetworkInterface[]>('get_network_interfaces_info')
+}
+''' + command_types,
+          )
+
+          replace_once(
+              '.github/workflows/karing-diagnostics-once.yml',
+              '  RELEASE_TAG: v2.5.3-karing\n',
+              '  RELEASE_TAG: v2.5.3-karing.2\n',
+          )
+          replace_once(
+              '.github/workflows/karing-diagnostics-once.yml',
+              "          check_contains src-tauri/src/cmd/save_profile.rs 'Global Merge and Script are always collected' '全局 Merge 与 Script 保存后会刷新运行时'\n",
+              "          check_contains src-tauri/src/cmd/save_profile.rs 'Global Merge and Script are always collected' '全局 Merge 与 Script 保存后会刷新运行时'\n          check_contains src-tauri/src/cmd/process_connections.rs 'GetExtendedTcpTable' 'Windows TCP 连接已接入系统 PID 归因'\n          check_contains src-tauri/src/cmd/process_connections.rs 'QueryFullProcessImageNameW' '已读取完整 exe 路径'\n          check_contains src/components/rule/diversion-manager/project-panel.tsx '正在联网的程序' '规则页已接入程序发现面板'\n          check_contains src/services/cmds.ts \"invoke<ProcessConnectionSnapshot>('get_process_connections')\" '前端已连接原生归因命令'\n",
+          )
+          replace_once(
+              '.github/workflows/karing-diagnostics-once.yml',
+              '          本桌面发行版加入 Karing 风格分流管理、全局 Merge/Script 保存后即时应用，以及经过审查的主代理开关链路。\n',
+              '          本桌面发行版加入 Windows 原生程序连接发现：从系统 TCP/UDP 连接表归因 PID、进程名称和完整 exe 路径，并可一键生成程序档案，沿现有规则组与出口策略链即时生效。\n',
+          )
+
+          workflow = Path('.github/workflows/apply-process-fusion-once.yml')
+          workflow.unlink()
+          PY
+
+          git diff --check
+
+      - name: 提交功能实现
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: fuse native process connections into diversion projects'
+          git push origin HEAD:feature/karing-style-diversion
