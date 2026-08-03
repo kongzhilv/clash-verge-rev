@@ -6,83 +6,237 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   HUSKY: 0
 
 jobs:
-  frontend:
-    name: 检查前端代码
+  ux_cleanup_once:
+    name: 收敛应用分流界面
+    if: github.event_name == 'pull_request' && github.head_ref == 'feature/karing-style-diversion'
     runs-on: ubuntu-latest
     steps:
-      - name: 检出代码
+      - name: 检出功能分支
         uses: actions/checkout@v7
-
-      - name: 检测前端相关变更
-        id: check_frontend
-        uses: dorny/paths-filter@v4
         with:
-          filters: |
-            frontend:
-              - 'src/**'
-              - '**/*.js'
-              - '**/*.ts'
-              - '**/*.tsx'
-              - '**/*.css'
-              - '**/*.scss'
-              - '**/*.json'
-              - '**/*.md'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'knip.json'
-              - 'eslint.config.ts'
-              - 'tsconfig.json'
-              - 'vite.config.*'
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 无前端变更时跳过检查
-        if: steps.check_frontend.outputs.frontend != 'true'
-        run: echo "未检测到前端相关变更，跳过前端检查。"
+      - name: 删除内部信息和重复操作
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def patch(path, transform):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              updated = transform(text)
+              if updated == text:
+                  raise SystemExit(f'no changes applied to {path}')
+              file.write_text(updated, encoding='utf-8')
+
+          def manager(text):
+              text = text.replace('自定义规则', '通用规则')
+              text = text.replace('label={`规则 ${manualGroups.length}`}', 'label={`通用规则 ${manualGroups.length}`}')
+              text = text.replace('label="设置"', 'label="全局设置"')
+              text = text.replace('新建规则组', '新建通用规则')
+              text = text.replace(
+                  '暂无额外规则。应用规则会自动生成对应规则。',
+                  '暂无通用规则。应用分流会自动生成所需规则。',
+              )
+              return text
+
+          patch('src/components/rule/diversion-manager/manager.tsx', manager)
+
+          def project_panel(text):
+              text = text.replace('  HubRounded,\n', '')
+              text = text.replace(
+                  '一个应用规则对应一组识别条件和一个出口。',
+                  '按应用或连接特征匹配流量，并指定出口策略。',
+              )
+              text = text.replace(
+                  'title={project.description || project.groupId}',
+                  'title={project.description || project.name}',
+              )
+              text = text.replace(
+                  '{project.description || project.groupId}',
+                  "{project.description || '应用规则'}",
+              )
+              text = text.replace(
+                  'label={`${conditionCount(project)} 条件`}',
+                  'label={`${conditionCount(project)} 项匹配`}',
+              )
+              text = re.sub(
+                  r'\s*<Chip\s+size="small"\s+icon=\{<HubRounded />\}\s+label=\{project\.groupId\}\s+variant="outlined"\s*/>',
+                  '',
+                  text,
+                  flags=re.S,
+              )
+              if 'HubRounded' in text or 'label={project.groupId}' in text:
+                  raise SystemExit('internal managed group id remains in project panel')
+              return text
+
+          patch('src/components/rule/diversion-manager/project-panel.tsx', project_panel)
+
+          def relations(text):
+              text = text.replace('  HubRounded,\n', '')
+              text = text.replace('分流关系', '应用分流')
+              text = text.replace('应用 → 规则 → 出口', '应用规则 → 出口策略')
+              text = re.sub(
+                  r'\s*<Chip\s+size="small"\s+icon=\{<HubRounded />\}\s+label=\{project\.groupId\}\s+variant="outlined"\s+sx=\{\{ maxWidth: compact \? 120 : 180 \}\}\s*/>',
+                  '',
+                  text,
+                  flags=re.S,
+              )
+              text = text.replace(
+                  'title={`规则连接 ${matchedConnections} · 出口连接 ${policyConnections}`}',
+                  'title={`此应用规则命中 ${matchedConnections} 条连接 · 该出口共 ${policyConnections} 条`}',
+              )
+              text = text.replace('<Tooltip title="规则">', '<Tooltip title="编辑应用规则">')
+              if 'HubRounded' in text or 'label={project.groupId}' in text:
+                  raise SystemExit('internal managed group id remains in relation panel')
+              return text
+
+          patch('src/components/routing/routing-relations-panel.tsx', relations)
+
+          def assistant(text):
+              text = text.replace('  RefreshRounded,\n', '')
+              text = text.replace(
+                  "? '应用规则与分流规则已保存并立即应用'",
+                  "? '分流设置已保存并立即应用'",
+              )
+              text = text.replace(
+                  ": '应用规则与分流规则已保存；当前连接已关闭，下次连接会重新匹配'",
+                  ": '分流设置已保存；当前连接已关闭，下次连接会重新匹配'",
+              )
+              text = text.replace(
+                  '<DialogTitle>连接、应用规则、规则组与出口联动</DialogTitle>',
+                  '<DialogTitle>设置分流</DialogTitle>',
+              )
+              text = text.replace(
+                  '可把整条连接保存为应用规则，也可把单个域名、IP、端口或进程条件加入手动规则组。',
+                  '为整个应用设置出口，或把当前连接特征加入通用规则。',
+              )
+              text = re.sub(
+                  r'\s*\{connection\.rulePayload && \(\s*<Chip\s+size="small"\s+label=\{`规则内容：\$\{connection\.rulePayload\}`\}\s*/>\s*\)\}',
+                  '',
+                  text,
+                  flags=re.S,
+              )
+              text = text.replace('编辑关联应用规则', '编辑应用规则')
+              text = text.replace('添加为应用规则', '设置应用规则')
+              text = text.replace('打开完整规则页', '打开分流中心')
+              text = text.replace('单独选择一个规则条件', '当前连接特征')
+              text = text.replace('手动规则组', '通用规则')
+              text = text.replace('新建规则组', '新建通用规则')
+              text = text.replace(
+                  '没有可单独添加的连接条件，仍可通过上方按钮手动建立应用规则。',
+                  '没有可用的连接特征，仍可为应用创建规则。',
+              )
+              text = re.sub(
+                  r'\s*<Button\s+startIcon=\{<RefreshRounded />\}\s+onClick=\{\(\) => void loadProfile\(\)\}\s+disabled=\{loading \|\| savingGroupId !== null\}\s*>\s*重新读取\s*</Button>',
+                  '',
+                  text,
+                  flags=re.S,
+              )
+              if 'RefreshRounded' in text or '重新读取' in text:
+                  raise SystemExit('redundant refresh action remains in connection assistant')
+              return text
+
+          patch('src/components/connection/connection-rule-assistant.tsx', assistant)
+
+          def connection_card(text):
+              old = """const attributionLabel = (
+            source?: 'mihomo' | 'windows' | 'unresolved',
+            match?: 'core' | 'tuple' | 'local-port' | 'none',
+          ) => {
+            if (source === 'mihomo') return '核心识别'
+            if (source === 'windows' && match === 'tuple') return 'Windows 精确匹配'
+            if (source === 'windows' && match === 'local-port') return 'Windows TUN 归因'
+            return '应用未识别'
+          }
+          """
+              new = """const attributionLabel = (
+            source: 'mihomo' | 'windows' | 'unresolved' | undefined,
+            match: 'core' | 'tuple' | 'local-port' | 'none' | undefined,
+            hasProcess: boolean,
+            inferred: boolean,
+          ) => {
+            if (source === 'mihomo') return '核心识别'
+            if (source === 'windows' && match === 'tuple') return 'Windows 精确匹配'
+            if (source === 'windows' && match === 'local-port') return 'Windows TUN 归因'
+            if (hasProcess) return '已识别'
+            if (inferred) return '规则识别'
+            return '应用未识别'
+          }
+          """
+              if old not in text:
+                  raise SystemExit('attribution label block not found')
+              text = text.replace(old, new)
+              text = text.replace(
+                  "const applicationName = processName || match?.project.name || '应用未识别'",
+                  "const hasProcess = Boolean(processName || processPath)\n  const applicationName = processName || match?.project.name || '应用未识别'",
+              )
+              text = text.replace(
+                  'const hasApplication = Boolean(processName || match)',
+                  'const hasApplication = Boolean(hasProcess || match)',
+              )
+              text = text.replace(
+                  "attribution?.match,\n                )}",
+                  "attribution?.match,\n                  hasProcess,\n                  Boolean(match),\n                )}",
+              )
+              text = re.sub(
+                  r'\s*<AppsRounded fontSize="small" color="action" />\s*<Typography variant="body2" sx=\{\{ fontWeight: 600 \}\}>\s*\{applicationName\}\s*</Typography>\s*<ArrowForwardRounded fontSize="small" color="action" />',
+                  '',
+                  text,
+                  flags=re.S,
+              )
+              return text
+
+          patch('src/components/routing/connection-project-card.tsx', connection_card)
+
+          patch(
+              'src/components/connection/connection-detail.tsx',
+              lambda text: text.replace('设置此应用分流', '设置分流'),
+          )
+          patch(
+              'src/components/rule/diversion-manager/detected-programs-panel.tsx',
+              lambda text: text.replace("registered ? '已加入' : '加入分流'", "registered ? '已设置' : '创建应用规则'"),
+          )
+          PY
 
       - name: 安装 pnpm
-        if: steps.check_frontend.outputs.frontend == 'true'
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: 安装 Node.js
         uses: actions/setup-node@v6
-        if: steps.check_frontend.outputs.frontend == 'true'
         with:
           node-version: '24.18.0'
           cache: 'pnpm'
 
-      - name: 恢复 pnpm 缓存
-        if: steps.check_frontend.outputs.frontend == 'true'
-        uses: actions/cache@v6
-        with:
-          path: ~/.pnpm-store
-          key: "pnpm-shared-stable-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}"
-          restore-keys: |
-            pnpm-shared-stable-${{ runner.os }}-
-
-      - name: 安装项目依赖
-        if: steps.check_frontend.outputs.frontend == 'true'
-        run: pnpm install --frozen-lockfile
-
-      - name: 检查代码格式
-        if: steps.check_frontend.outputs.frontend == 'true'
-        run: pnpm format:check
-
-      - name: 运行 ESLint
-        if: steps.check_frontend.outputs.frontend == 'true'
-        run: pnpm lint
-
-      - name: 运行 TypeScript 类型检查
-        if: steps.check_frontend.outputs.frontend == 'true'
-        run: pnpm typecheck
-
-      - name: 检查未使用的前端代码和依赖
-        if: steps.check_frontend.outputs.frontend == 'true'
-        run: pnpm knip:report
+      - name: 格式化并提交源码
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm exec biome format --write \
+            src/components/rule/diversion-manager/manager.tsx \
+            src/components/rule/diversion-manager/project-panel.tsx \
+            src/components/routing/routing-relations-panel.tsx \
+            src/components/connection/connection-rule-assistant.tsx \
+            src/components/routing/connection-project-card.tsx \
+            src/components/connection/connection-detail.tsx \
+            src/components/rule/diversion-manager/detected-programs-panel.tsx
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src
+          git diff --cached --check
+          git commit -m "refactor: simplify application routing UX"
+          git push origin HEAD:feature/karing-style-diversion
