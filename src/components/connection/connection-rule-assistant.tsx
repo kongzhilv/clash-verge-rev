@@ -93,6 +93,18 @@ const cleanHost = (raw: string) => {
 const isIpLiteral = (value: string) =>
   /^\d{1,3}(?:\.\d{1,3}){3}$/.test(value) || value.includes(':')
 
+const isMihomoFakeIp = (value: string) => {
+  const normalized = value
+    .trim()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\/.+$/, '')
+    .toLowerCase()
+  return (
+    normalized.startsWith('198.18.') ||
+    normalized.startsWith('fdfe:dcba:9876:')
+  )
+}
+
 const processNameFrom = (process: string, processPath: string) => {
   const source = process.trim() || processPath.trim()
   const parts = source.split(/[\\/]/).filter(Boolean)
@@ -169,11 +181,11 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
       icon: <DnsRounded />,
     })
   }
-  if (destinationIP) {
+  if (destinationIP && !isMihomoFakeIp(destinationIP)) {
     candidates.push({
       id: candidateKey('IP-CIDR', destinationIP),
       label: '目标 IP',
-      description: '按当前目标 IP 添加精确网段规则。',
+      description: '按当前真实目标 IP 添加精确网段规则。',
       type: 'IP-CIDR',
       value: destinationIP,
       icon: <LanRounded />,
@@ -192,7 +204,7 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
   if (processName) {
     candidates.push({
       id: candidateKey('PROCESS-NAME', processName),
-      label: '进程名称',
+      label: '应用名称',
       description: '按应用名称匹配，适合同一应用路径可能变化的情况。',
       type: 'PROCESS-NAME',
       value: processName,
@@ -202,7 +214,7 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
   if (processPath) {
     candidates.push({
       id: candidateKey('PROCESS-PATH', processPath),
-      label: '进程路径',
+      label: '应用路径',
       description: '只匹配这个应用完整路径。',
       type: 'PROCESS-PATH',
       value: processPath,
@@ -227,19 +239,19 @@ const buildProjectFromConnection = (
   const destinationIP = ipCidr(
     String(metadata.destinationIP || metadata.remoteDestination || ''),
   )
-  const destinationPort = String(metadata.destinationPort ?? '').trim()
-  const name = processName || host || `应用规则 ${index + 1}`
+  const name = processName || host || `应用分流 ${index + 1}`
 
   return makeProject(index, {
     kind: processName || processPath ? 'program' : 'project',
     name,
-    description: '由连接详情创建，可继续补充此应用使用的域名、IP 和端口。',
+    description: '由连接详情创建',
     action: 'current',
     processNames: processName ? [processName] : [],
     processPaths: processPath ? [processPath] : [],
     domains: host && !isIpLiteral(host) ? [host] : [],
-    ipCidrs: destinationIP ? [destinationIP] : [],
-    destinationPorts: destinationPort ? [destinationPort] : [],
+    ipCidrs:
+      destinationIP && !isMihomoFakeIp(destinationIP) ? [destinationIP] : [],
+    destinationPorts: [],
   })
 }
 
@@ -443,14 +455,10 @@ export const ConnectionRuleAssistant = ({
       >
         <DialogTitle>设置分流</DialogTitle>
         <DialogContent dividers sx={{ p: 0 }}>
-          <Alert severity="info" sx={{ borderRadius: 0 }}>
-            为整个应用设置出口，或把当前连接特征加入通用规则。
-          </Alert>
-
           <Box sx={{ p: 2 }}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
                   当前连接
                 </Typography>
                 <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
@@ -465,19 +473,19 @@ export const ConnectionRuleAssistant = ({
                   sx={{ mt: 1, flexWrap: 'wrap' }}
                 >
                   {connection.rule && (
-                    <Chip size="small" label={`实际规则：${connection.rule}`} />
+                    <Chip size="small" label={`规则：${connection.rule}`} />
                   )}
                   {connection.chains.length > 0 && (
                     <Chip
                       size="small"
-                      label={`实际出口：${[...connection.chains].reverse().join(' / ')}`}
+                      label={`出口：${[...connection.chains].reverse().join(' / ')}`}
                     />
                   )}
                   {linkedProject && (
                     <Chip
                       size="small"
                       color="primary"
-                      label={`已关联：${linkedProject.name}`}
+                      label={linkedProject.name}
                     />
                   )}
                 </Stack>
@@ -489,7 +497,7 @@ export const ConnectionRuleAssistant = ({
                   onClick={openProjectEditor}
                   disabled={loading || savingGroupId !== null}
                 >
-                  {linkedProject ? '编辑应用规则' : '设置应用规则'}
+                  {linkedProject ? '编辑应用分流' : '设置应用分流'}
                 </Button>
                 <Button
                   startIcon={<OpenInNewRounded />}
@@ -538,7 +546,7 @@ export const ConnectionRuleAssistant = ({
               </List>
               {candidates.length === 0 && (
                 <Typography sx={{ p: 2, color: 'text.secondary' }}>
-                  没有可用的连接特征，仍可为应用创建规则。
+                  没有可用的连接特征，仍可为应用设置分流。
                 </Typography>
               )}
             </Box>
@@ -575,7 +583,7 @@ export const ConnectionRuleAssistant = ({
                 <Stack sx={{ p: 4, alignItems: 'center' }} spacing={1}>
                   <CircularProgress size={28} />
                   <Typography variant="body2" color="text.secondary">
-                    正在读取 Merge 分流配置…
+                    正在读取分流配置…
                   </Typography>
                 </Stack>
               ) : manualGroups.length ? (
@@ -611,7 +619,7 @@ export const ConnectionRuleAssistant = ({
                         </ListItemIcon>
                         <ListItemText
                           primary={group.name || '未命名规则组'}
-                          secondary={`${group.enabled ? '已启用' : '未启用'} · ${group.matchers.length} 个匹配条件 · ${included ? '点击移除当前条件' : '点击添加当前条件'}`}
+                          secondary={`${group.enabled ? '已启用' : '未启用'} · ${group.matchers.length} 个条件`}
                         />
                         <Chip
                           size="small"
@@ -626,7 +634,7 @@ export const ConnectionRuleAssistant = ({
               ) : (
                 <Box sx={{ p: 3 }}>
                   <Typography color="text.secondary">
-                    没有额外的通用规则。优先使用“应用规则”，它会同时维护多项识别条件、规则组和出口。
+                    暂无通用规则。应用分流适合按整个应用设置出口。
                   </Typography>
                 </Box>
               )}
