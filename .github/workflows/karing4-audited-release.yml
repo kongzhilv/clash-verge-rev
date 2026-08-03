@@ -1,0 +1,678 @@
+name: Karing 4 Audited Release
+run-name: Build and release v2.5.3-karing.4
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/karing4-audited-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: 0
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+  NODE_OPTIONS: --max_old_space_size=4096
+  RELEASE_TAG: v2.5.3-karing.4
+  CANDIDATE_SHA: 09a7351fd220318dfb9222e4d6e487a364cf1b6b
+
+concurrency:
+  group: karing4-audited-release
+  cancel-in-progress: false
+
+jobs:
+  review:
+    name: Review pinned source
+    runs-on: ubuntu-22.04
+    outputs:
+      commit: ${{ steps.meta.outputs.commit }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout pinned candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxslt1.1 \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Record release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit=$(git rev-parse HEAD)
+          version=$(jq -r .version package.json)
+          test "$commit" = "$CANDIDATE_SHA"
+          test "$version" = '2.5.3'
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Run frontend quality gates
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm knip:report
+          pnpm run web:build
+
+      - name: Run Rust Clippy
+        run: cargo clippy --workspace --all-targets --features clippy -- -D warnings
+
+      - name: Audit application routing and overflow UX
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f src/components/base/overflow-reveal.tsx
+          test -f src/components/base/scroll-area.ts
+          grep -q "overflowX: 'auto'" src/components/base/overflow-reveal.tsx
+          grep -q 'ResizeObserver' src/components/base/overflow-reveal.tsx
+          grep -q 'requestAnimationFrame' src/components/base/overflow-reveal.tsx
+          grep -q 'softScrollAreaSx' src/components/rule/diversion-manager/detected-programs-panel.tsx
+          grep -q 'OverflowReveal' src/components/rule/diversion-manager/project-panel.tsx
+          grep -q 'OverflowReveal' src/components/rule/diversion-manager/action-picker.tsx
+          grep -q 'OverflowReveal' src/components/routing/routing-relations-panel.tsx
+          grep -q 'OverflowReveal' src/components/routing/focused-policy-panel.tsx
+          grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
+          grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
+          grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
+          grep -q 'GetExtendedTcpTable' src-tauri/src/cmd/process_connections.rs
+          grep -q 'GetExtendedUdpTable' src-tauri/src/cmd/process_connections.rs
+          grep -q 'QueryFullProcessImageNameW' src-tauri/src/cmd/process_connections.rs
+          grep -q 'cmd::get_process_connections' src-tauri/src/lib.rs
+          echo '[pass] source and product audit completed'
+
+  native-builds:
+    name: Build ${{ matrix.name }}
+    needs: review
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+          - id: windows-arm64
+            name: Windows ARM64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            platform: windows
+          - id: macos-arm64
+            name: macOS Apple Silicon
+            os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macos
+          - id: macos-x64
+            name: macOS Intel
+            os: macos-latest
+            target: x86_64-apple-darwin
+            platform: macos
+          - id: linux-x64
+            name: Linux x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout pinned candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing4-native-v1
+          key: ${{ matrix.os }}-${{ matrix.target }}
+          workspaces: |
+            . -> target
+            .ci/service-ipc-source-${{ matrix.target }} -> target
+          cache-all-crates: true
+          cache-workspace-crates: true
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxslt1.1 \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build matching service
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: Prepare Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
+
+      - name: Disable updater artifacts
+        shell: bash
+        run: |
+          mkdir -p .ci
+          printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
+
+      - name: Build desktop installer
+        run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
+
+      - name: Upload Windows installer
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing4-${{ matrix.id }}
+          path: target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload macOS image
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing4-${{ matrix.id }}
+          path: target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Linux packages
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing4-${{ matrix.id }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  linux-arm-builds:
+    name: Build Linux ${{ matrix.name }}
+    needs: review
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            name: ARM64
+            arch: arm64
+            deb_arch: arm64
+          - target: armv7-unknown-linux-gnueabihf
+            name: ARMv7
+            arch: armhf
+            deb_arch: armhf
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout pinned candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing4-linux-arm-v1
+          key: ${{ matrix.target }}
+          workspaces: |
+            . -> target
+            .ci/service-ipc-source-${{ matrix.target }} -> target
+          cache-all-crates: true
+          cache-workspace-crates: true
+
+      - name: Configure Ubuntu multiarch sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/sources.list <<'EOF'
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy main multiverse universe restricted
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-security main multiverse universe restricted
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-updates main multiverse universe restricted
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-backports main multiverse universe restricted
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy main multiverse universe restricted
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main multiverse universe restricted
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main multiverse universe restricted
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy-backports main multiverse universe restricted
+          EOF
+          if [ -f /etc/apt/sources.list ]; then
+            sudo mv /etc/apt/sources.list /etc/apt/sources.list.default
+          fi
+          sudo mv /tmp/sources.list /etc/apt/sources.list
+          sudo dpkg --add-architecture ${{ matrix.deb_arch }}
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxslt1.1:${{ matrix.deb_arch }} \
+            libwebkit2gtk-4.1-dev:${{ matrix.deb_arch }} \
+            libayatana-appindicator3-dev:${{ matrix.deb_arch }} \
+            libssl-dev:${{ matrix.deb_arch }} \
+            librsvg2-dev:${{ matrix.deb_arch }} \
+            patchelf
+
+      - name: Install cross compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-gnu' ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+            echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"
+            echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"
+            echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/' >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"
+            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"
+            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/' >> "$GITHUB_ENV"
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/' >> "$GITHUB_ENV"
+          fi
+          echo 'PKG_CONFIG_ALLOW_CROSS=1' >> "$GITHUB_ENV"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build matching service
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: Prepare Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
+
+      - name: Disable updater artifacts
+        shell: bash
+        run: |
+          mkdir -p .ci
+          printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
+
+      - name: Cross-build Linux packages
+        run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
+
+      - name: Upload Linux ARM packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing4-linux-${{ matrix.arch }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  fixed-webview2-builds:
+    name: Build fixed WebView2 ${{ matrix.name }}
+    needs: review
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            name: x64
+            arch: x64
+          - target: aarch64-pc-windows-msvc
+            name: ARM64
+            arch: arm64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout pinned candidate
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing4-fixed-webview2-v1
+          key: ${{ matrix.target }}
+          workspaces: |
+            . -> target
+            .ci/service-ipc-source-${{ matrix.target }} -> target
+          cache-all-crates: true
+          cache-workspace-crates: true
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build matching service
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: Prepare Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
+
+      - name: Download fixed WebView2 runtime
+        shell: pwsh
+        run: |
+          $version = '133.0.3065.92'
+          $cab = "Microsoft.WebView2.FixedVersionRuntime.$version.${{ matrix.arch }}.cab"
+          Invoke-WebRequest -Uri "https://github.com/westinyang/WebView2RuntimeArchive/releases/download/$version/$cab" -OutFile $cab
+          Expand.exe $cab -F:* ./src-tauri
+          Remove-Item ./src-tauri/tauri.windows.conf.json
+          Rename-Item ./src-tauri/webview2.${{ matrix.arch }}.json tauri.windows.conf.json
+
+      - name: Disable updater artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .ci | Out-Null
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding utf8 .ci/tauri-release.conf.json
+
+      - name: Build fixed WebView2 installer
+        shell: pwsh
+        run: |
+          pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
+          $files = Get-ChildItem "target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe"
+          if (-not $files) { throw 'No fixed WebView2 installer was produced' }
+          foreach ($file in $files) {
+            $newName = $file.Name -replace '-setup\.exe$', '_fixed_webview2-setup.exe'
+            Rename-Item $file.FullName $newName
+          }
+
+      - name: Upload fixed WebView2 installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing4-fixed-webview2-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/bundle/nsis/*_fixed_webview2-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  package-release:
+    name: Package and verify 12 installers
+    needs:
+      - review
+      - native-builds
+      - linux-arm-builds
+      - fixed-webview2-builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: karing4-*
+          path: downloaded-assets
+          merge-multiple: true
+
+      - name: Verify and package release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find downloaded-assets -type f \
+            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
+            -exec cp '{}' release-assets/ \;
+
+          installer_count=$(find release-assets -maxdepth 1 -type f \
+            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
+            | wc -l)
+          if [ "$installer_count" -ne 12 ]; then
+            echo "[fail] expected 12 installers, found $installer_count"
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
+
+          (
+            cd release-assets
+            sha256sum *.exe *.dmg *.deb *.rpm > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
+          )
+
+          cat > release-assets/BUILD_INFO.txt <<EOF
+          Repository: ${GITHUB_REPOSITORY}
+          Commit: ${{ needs.review.outputs.commit }}
+          Version: ${{ needs.review.outputs.version }}
+          Release tag: ${RELEASE_TAG}
+          Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
+          Installers: 12
+          Signing: unsigned fork build; no upstream Apple notarization or updater signature
+          Android: intentionally not included
+          EOF
+
+          cat > release-assets/release-notes.md <<EOF
+          # Clash Verge Rev Karing v2.5.3-karing.4
+
+          本版本完成应用分流、Windows 进程归因、TUN/Fake-IP 识别和连接工作区的成熟化迭代。
+
+          ## 主要变化
+          - 当前联网应用可直接创建应用分流并选择出口
+          - Windows 原生枚举 TCP/UDP IPv4/IPv6、PID、应用名称与完整 exe 路径
+          - TUN/Fake-IP 场景仅在源端口归属唯一时回退关联，避免跨应用误判
+          - 连接详情实时更新应用归因、命中规则、预期出口与实际出口
+          - 支持按应用、命中规则和实际出口组合筛选连接
+          - 常用分流预设可直接启用并选择出口
+          - 长应用名、完整路径、规则名、策略组和节点名支持触控/滚轮/键盘滑动、悬停完整提示和柔和滚动提示
+          - 小窗口与高 DPI 下卡片自动重排，正文与操作区不再互相挤压
+
+          ## 安装包
+          - Windows x64 与 ARM64
+          - Windows x64 与 ARM64 固定 WebView2 版本
+          - macOS Apple Silicon 与 Intel
+          - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
+
+          本分支安装包没有上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 校验下载文件。
+
+          Commit: `${{ needs.review.outputs.commit }}`
+          EOF
+
+          echo '[pass] packaged release assets:'
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: Upload audited release assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing4-release-assets
+          path: release-assets
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  publish-release:
+    name: Publish and verify v2.5.3-karing.4
+    needs:
+      - review
+      - package-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download audited assets
+        uses: actions/download-artifact@v8
+        with:
+          name: karing4-release-assets
+          path: release-assets
+
+      - name: Publish and verify GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_commit='${{ needs.review.outputs.commit }}'
+
+          installer_count=$(find release-assets -maxdepth 1 -type f \
+            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
+            | wc -l)
+          test "$installer_count" -eq 12
+          test -f release-assets/SHA256SUMS.txt
+          test -f release-assets/BUILD_INFO.txt
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            release-assets/*.exe \
+            release-assets/*.dmg \
+            release-assets/*.deb \
+            release-assets/*.rpm \
+            release-assets/SHA256SUMS.txt \
+            release-assets/BUILD_INFO.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$expected_commit" \
+            --title 'Clash Verge Rev Karing v2.5.3-karing.4' \
+            --notes-file release-assets/release-notes.md \
+            --latest
+
+          release_json=$(gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json url,tagName,isDraft,isPrerelease,targetCommitish,assets)
+          asset_count=$(jq '.assets | length' <<< "$release_json")
+          installer_assets=$(jq '[.assets[].name | select(test("\\.(exe|dmg|deb|rpm)$"; "i"))] | length' <<< "$release_json")
+          metadata_assets=$(jq '[.assets[].name | select(. == "SHA256SUMS.txt" or . == "BUILD_INFO.txt")] | length' <<< "$release_json")
+          test "$asset_count" -eq 14
+          test "$installer_assets" -eq 12
+          test "$metadata_assets" -eq 2
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$expected_commit" \
+            '.tagName == $tag and .isDraft == false and .isPrerelease == false and .targetCommitish == $commit' \
+            <<< "$release_json" >/dev/null
+
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
+          test "$tag_sha" = "$expected_commit"
+          echo '[pass] release tag, commit and 14 assets verified'
+          jq '{url, tagName, targetCommitish, assets: [.assets[].name]}' <<< "$release_json"
+
+  report:
+    name: Report audited release status
+    if: always()
+    needs:
+      - review
+      - native-builds
+      - linux-arm-builds
+      - fixed-webview2-builds
+      - package-release
+      - publish-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Post status to PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW: ${{ needs.review.result }}
+          NATIVE: ${{ needs.native-builds.result }}
+          LINUX_ARM: ${{ needs.linux-arm-builds.result }}
+          FIXED_WEBVIEW: ${{ needs.fixed-webview2-builds.result }}
+          PACKAGE: ${{ needs.package-release.result }}
+          RELEASE: ${{ needs.publish-release.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status='❌ 发行未完成'
+          if [ "$REVIEW" = success ] && \
+             [ "$NATIVE" = success ] && \
+             [ "$LINUX_ARM" = success ] && \
+             [ "$FIXED_WEBVIEW" = success ] && \
+             [ "$PACKAGE" = success ] && \
+             [ "$RELEASE" = success ]; then
+            status='✅ v2.5.3-karing.4 正式发行成功'
+          fi
+
+          cat > /tmp/release-status.md <<EOF
+          <!-- karing4-audited-release-status -->
+          ## Karing 4 审查与发行状态
+
+          ${status}
+
+          - 候选提交：`${CANDIDATE_SHA}`
+          - Action：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          - 源码审查：${REVIEW}
+          - Windows/macOS/Linux x64：${NATIVE}
+          - Linux ARM64/ARMv7：${LINUX_ARM}
+          - 固定 WebView2：${FIXED_WEBVIEW}
+          - 12 包汇总与 SHA：${PACKAGE}
+          - Release 与 14 资产验证：${RELEASE}
+          - Release：https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}
+          EOF
+          gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/release-status.md
