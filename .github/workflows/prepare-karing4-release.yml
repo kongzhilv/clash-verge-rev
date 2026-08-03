@@ -1,0 +1,187 @@
+name: Prepare Karing 4 Release
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/prepare-karing4-release.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-karing4-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format mature routing changes
+        run: |
+          pnpm exec biome format --write \
+            src/components/connection/connection-filter-menu.tsx \
+            src/components/connection/connection-row-item.tsx \
+            src/components/connection/connection-detail.tsx \
+            src/components/connection/connection-rule-assistant.tsx \
+            src/components/routing/connection-project-card.tsx \
+            src/components/routing/routing-relations-panel.tsx \
+            src/components/rule/diversion-manager/manager.tsx \
+            src/components/rule/diversion-manager/project-editor-dialog.tsx \
+            src/components/rule/diversion-manager/settings-panel.tsx \
+            src/pages/connections.tsx \
+            src/pages/proxies.tsx \
+            src/pages/rules.tsx \
+            src/services/process-connections.ts
+
+      - name: Harden the Karing 4 release workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              '  RELEASE_TAG: v2.5.3-karing\n',
+              '  RELEASE_TAG: v2.5.3-karing.4\n',
+          )
+          text = text.replace(
+              '--title "Clash Verge Rev Karing v${{ needs.review.outputs.version }}"',
+              '--title "Clash Verge Rev Karing v2.5.3-karing.4"',
+          )
+
+          notes = '''          cat > release-assets/release-notes.md <<EOF
+          # Clash Verge Rev Karing v2.5.3-karing.4
+
+          本版本继续收敛应用分流与连接工作区，并修复 Windows TUN/Fake-IP 场景的应用归因和实时详情。
+
+          ## 主要变化
+          - 连接页支持按应用、命中规则和实际出口组合筛选
+          - 连接列表去除标签堆叠，详情合并应用、规则与出口关系
+          - 详情持续订阅连接与 Windows 归因结果，不再显示点开时的旧快照
+          - TUN 场景仅在源端口归属唯一时回退识别，避免跨应用误判
+          - Fake-IP/Fake-IPv6 不再被保存为应用 IP 规则
+          - 常用分流预设可以直接开关并选择出口
+          - 应用分流编辑器不再暴露会被编译链忽略的端口条件
+          - 规则页和代理页删除重复的全局关系面板
+
+          ## 安装包
+          - Windows x64 与 ARM64
+          - Windows x64 与 ARM64 固定 WebView2 版本
+          - macOS Apple Silicon 与 Intel
+          - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
+
+          本分支安装包没有上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 校验下载文件。
+
+          Commit: `${{ needs.review.outputs.commit }}`
+          EOF'''
+          text, count = re.subn(
+              r'          cat > release-assets/release-notes\.md <<EOF\n.*?\n          EOF',
+              notes,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit('release notes block not found')
+
+          marker = '''          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
+          fi'''
+          validation = '''          installer_count=$(find release-assets -maxdepth 1 -type f \\
+            \\( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \\) \\
+            | wc -l)
+          if [ "$installer_count" -ne 12 ]; then
+            echo "[失败] 发布前应有 12 个安装文件，实际为 $installer_count"
+            exit 1
+          fi
+          test -f release-assets/SHA256SUMS.txt
+          test -f release-assets/BUILD_INFO.txt
+          (cd release-assets && sha256sum --check SHA256SUMS.txt)
+
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
+          fi'''
+          if marker not in text:
+              raise SystemExit('release preflight marker not found')
+          text = text.replace(marker, validation, 1)
+
+          old_final = '''          gh release view "${RELEASE_TAG}" --json url,assets --jq '{url: .url, assets: [.assets[].name]}' '''.rstrip()
+          new_final = '''          release_json=$(gh release view "${RELEASE_TAG}" \\
+            --json url,tagName,isDraft,isPrerelease,targetCommitish,assets)
+          asset_count=$(jq '.assets | length' <<< "$release_json")
+          installer_assets=$(jq '[.assets[].name | select(test("\\\\.(exe|dmg|deb|rpm)$"; "i"))] | length' <<< "$release_json")
+          metadata_assets=$(jq '[.assets[].name | select(. == "SHA256SUMS.txt" or . == "BUILD_INFO.txt")] | length' <<< "$release_json")
+          if [ "$asset_count" -ne 14 ] || [ "$installer_assets" -ne 12 ] || [ "$metadata_assets" -ne 2 ]; then
+            echo "[失败] Release 资产不完整：总数=$asset_count 安装包=$installer_assets 元数据=$metadata_assets"
+            exit 1
+          fi
+          expected_commit='${{ needs.review.outputs.commit }}'
+          jq -e \\
+            --arg tag "$RELEASE_TAG" \\
+            --arg commit "$expected_commit" \\
+            '.tagName == $tag and .isDraft == false and .isPrerelease == false and .targetCommitish == $commit' \\
+            <<< "$release_json" >/dev/null
+          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
+          if [ "$tag_sha" != "$expected_commit" ]; then
+            echo "[失败] 标签实际指向 $tag_sha，预期 $expected_commit"
+            exit 1
+          fi
+          echo '[通过] Release 标签、提交与 14 个资产全部一致'
+          jq '{url, tagName, targetCommitish, assets: [.assets[].name]}' <<< "$release_json"'''
+          if old_final not in text:
+              raise SystemExit('release final verification marker not found')
+          text = text.replace(old_final, new_final, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit final candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src README.md .github/workflows/frontend-check.yml .github/workflows/karing-diagnostics-once.yml
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No final changes to commit'
+          else
+            git commit -m 'release: prepare audited Karing 4 candidate'
+            git push origin HEAD:feature/karing-style-diversion
+          fi
+
+      - name: Remove one-time workflow from dev
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin dev
+          git checkout -B dev origin/dev
+          if [ -f .github/workflows/prepare-karing4-release.yml ]; then
+            git rm .github/workflows/prepare-karing4-release.yml
+            git commit -m 'chore: remove Karing 4 preparation workflow'
+            git push origin dev
+          fi
