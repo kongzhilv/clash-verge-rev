@@ -109,6 +109,13 @@ jobs:
           grep -q 'builtinGroups={builtinGroups}' src/components/rule/diversion-manager/manager.tsx
           grep -q '常用分流' src/components/rule/diversion-manager/settings-panel.tsx
           grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
+          test -f src/components/base/overflow-reveal.tsx
+          grep -q "overflowX: 'auto'" src/components/base/overflow-reveal.tsx
+          grep -q 'softScrollAreaSx' src/components/rule/diversion-manager/detected-programs-panel.tsx
+          grep -q 'OverflowReveal' src/components/rule/diversion-manager/project-panel.tsx
+          grep -q 'OverflowReveal' src/components/rule/diversion-manager/action-picker.tsx
+          grep -q 'OverflowReveal' src/components/routing/routing-relations-panel.tsx
+          grep -q 'OverflowReveal' src/components/routing/focused-policy-panel.tsx
           if grep -q 'label="目标端口"' src/components/rule/diversion-manager/project-editor-dialog.tsx; then
             echo '[失败] 应用分流编辑器仍暴露端口条件'
             exit 1
@@ -118,7 +125,7 @@ jobs:
             exit 1
           fi
           grep -q '{policyFilter && (' src/pages/proxies.tsx
-          echo '[通过] 连接筛选、实时归因、常用预设和页面职责检查完成'
+          echo '[通过] 连接筛选、实时归因、滚动展示、常用预设和页面职责检查完成'
 
       - name: 运行 ESLint
         if: steps.check_frontend.outputs.frontend == 'true'
