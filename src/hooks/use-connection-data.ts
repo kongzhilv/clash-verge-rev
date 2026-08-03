@@ -261,10 +261,7 @@ const clearProcessConnectionTimer = () => {
 const scheduleProcessConnectionRefresh = (
   delay = PROCESS_CONNECTION_REFRESH_MS,
 ) => {
-  if (
-    connectionListeners.size === 0 ||
-    processConnectionSupported === false
-  ) {
+  if (connectionListeners.size === 0 || processConnectionSupported === false) {
     return
   }
 
@@ -275,11 +272,14 @@ const scheduleProcessConnectionRefresh = (
   }
 
   processConnectionTimerDueAt = dueAt
-  processConnectionTimer = window.setTimeout(() => {
-    processConnectionTimer = null
-    processConnectionTimerDueAt = 0
-    void refreshProcessConnections()
-  }, Math.max(0, delay))
+  processConnectionTimer = window.setTimeout(
+    () => {
+      processConnectionTimer = null
+      processConnectionTimerDueAt = 0
+      void refreshProcessConnections()
+    },
+    Math.max(0, delay),
+  )
 }
 
 const requestFastProcessConnectionRefresh = () => {
@@ -288,10 +288,7 @@ const requestFastProcessConnectionRefresh = () => {
 }
 
 async function refreshProcessConnections() {
-  if (
-    connectionListeners.size === 0 ||
-    processConnectionSupported === false
-  ) {
+  if (connectionListeners.size === 0 || processConnectionSupported === false) {
     return
   }
   if (processConnectionRefreshing) {
@@ -346,8 +343,10 @@ const hasNewUnresolvedConnection = (
   return (payload.connections ?? []).some((connection) => {
     if (previousIds.has(connection.id)) return false
     const metadata = connection.metadata
-    return !String(metadata.process ?? '').trim() &&
+    return (
+      !String(metadata.process ?? '').trim() &&
       !String(metadata.processPath ?? '').trim()
+    )
   })
 }
 
