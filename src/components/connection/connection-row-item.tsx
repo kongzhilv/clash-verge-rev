@@ -96,7 +96,9 @@ export const ConnectionRowItem = memo(
     )
     const application = row.process || projectName || '未识别应用'
     const route = row.chains || projectPolicy || ''
-    const type = [row.network.toUpperCase(), row.type].filter(Boolean).join(' · ')
+    const type = [row.network.toUpperCase(), row.type]
+      .filter(Boolean)
+      .join(' · ')
     const showTraffic = row.uploadSpeed >= 100 || row.downloadSpeed >= 100
 
     return (
@@ -115,7 +117,10 @@ export const ConnectionRowItem = memo(
             {type && <span style={secondaryItemStyle}>{type}</span>}
             {route && <span>·</span>}
             {route && (
-              <span style={{ ...secondaryItemStyle, maxWidth: '34%' }} title={route}>
+              <span
+                style={{ ...secondaryItemStyle, maxWidth: '34%' }}
+                title={route}
+              >
                 {route}
               </span>
             )}
