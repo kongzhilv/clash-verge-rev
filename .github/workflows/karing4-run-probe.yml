@@ -1,105 +1,16 @@
-name: Karing 4 Candidate Repair
-run-name: Format and retarget final Karing 4 candidate
+name: Karing 4 Run Probe
+run-name: Karing 4 run probe (manual only)
 
 on:
-  push:
-    branches:
-      - dev
-    paths:
-      - '.github/workflows/karing4-run-probe.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  actions: read
+  contents: read
 
 jobs:
-  repair:
-    name: Format candidate and retarget audit
+  info:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout feature candidate
-        uses: actions/checkout@v7
-        with:
-          ref: feature/karing-style-diversion
-          fetch-depth: 0
-          token: ${{ github.token }}
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.0'
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Apply project formatter
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm exec biome format --write \
-            src/hooks/use-connection-data.ts \
-            src/services/process-connections.ts
-          pnpm exec biome format \
-            src/hooks/use-connection-data.ts \
-            src/services/process-connections.ts
-
-      - name: Commit formatted candidate
-        id: candidate
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if ! git diff --quiet; then
-            git add src/hooks/use-connection-data.ts src/services/process-connections.ts
-            git commit -m 'style: format final application attribution changes'
-            git push origin HEAD:feature/karing-style-diversion
-          fi
-          candidate=$(git rev-parse HEAD)
-          echo "sha=$candidate" >> "$GITHUB_OUTPUT"
-          echo "[通过] 最终候选：$candidate"
-
-      - name: Retarget registered audited release
-        env:
-          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin dev
-          git worktree add /tmp/dev origin/dev
-          cd /tmp/dev
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          path = Path('.github/workflows/karing4-audited-release.yml')
-          text = path.read_text(encoding='utf-8')
-          candidate = os.environ['CANDIDATE_SHA']
-          text, count = re.subn(
-              r'CANDIDATE_SHA: [0-9a-f]{40}',
-              f'CANDIDATE_SHA: {candidate}',
-              text,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit('[失败] 无法唯一更新固定候选 SHA')
-          text = re.sub(
-              r'run-name: Build and release v2\.5\.3-karing\.4.*',
-              'run-name: Build and release v2.5.3-karing.4 (formatted final candidate)',
-              text,
-              count=1,
-          )
-          path.write_text(text, encoding='utf-8')
-          PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/karing4-audited-release.yml
-          git commit -m 'ci: audit formatted final Karing 4 candidate'
-          git push origin HEAD:dev
+      - name: Explain workflow status
+        run: echo 'The final audited release workflow is the source of truth.'
