@@ -1,5 +1,5 @@
-name: Karing 4 Final Retarget
-run-name: Execute final candidate pin and audited release trigger
+name: Karing 4 Run Probe
+run-name: Report d1045d1 audited release run
 
 on:
   push:
@@ -10,57 +10,34 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
-  retarget:
+  report:
     runs-on: ubuntu-latest
-    env:
-      FINAL_CANDIDATE_SHA: d1045d1c449f40a2aa7e07ed5b36d7be08ac9d78
     steps:
-      - name: Checkout default branch
-        uses: actions/checkout@v7
-        with:
-          ref: dev
-          fetch-depth: 0
-          token: ${{ github.token }}
-
-      - name: Pin candidate and remove this one-time workflow
+      - name: Query final audited release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
+          sleep 8
+          json=$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow karing4-audited-release.yml \
+            --limit 5 \
+            --json databaseId,status,conclusion,headSha,event,createdAt,updatedAt,url)
+          cat > /tmp/probe.md <<EOF
+          <!-- karing4-d1045d1-run-probe -->
+          ## Karing 4 d1045d1 运行探针
 
-          path = Path('.github/workflows/karing4-audited-release.yml')
-          text = path.read_text(encoding='utf-8')
-          candidate = os.environ['FINAL_CANDIDATE_SHA']
-          text, count = re.subn(
-              r'CANDIDATE_SHA: [0-9a-f]{40}',
-              f'CANDIDATE_SHA: {candidate}',
-              text,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit('[失败] 无法唯一更新候选 SHA')
-          text = re.sub(
-              r'run-name: Build and release v2\.5\.3-karing\.4.*',
-              'run-name: Build and release v2.5.3-karing.4 (d1045d1 final)',
-              text,
-              count=1,
-          )
-          path.write_text(text, encoding='utf-8')
-          PY
-          rm -f .github/workflows/karing4-run-probe.yml
-
-      - name: Commit and trigger audited release
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/karing4-audited-release.yml .github/workflows/karing4-run-probe.yml
-          git commit -m 'ci: audit final formatted Karing 4 candidate'
-          git push origin HEAD:dev
+          \
+          \`\`\`json
+          ${json}
+          \`\`\`
+          EOF
+          gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/probe.md
