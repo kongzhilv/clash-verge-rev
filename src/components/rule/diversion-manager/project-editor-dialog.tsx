@@ -250,9 +250,7 @@ export const ProjectEditorDialog = ({
             draft.action !== 'none' &&
             conditionCount === 0 &&
             legacyPortCount === 0 && (
-              <Alert severity="warning">
-                至少选择一个应用或补充识别条件。
-              </Alert>
+              <Alert severity="warning">至少选择一个应用或补充识别条件。</Alert>
             )}
         </Stack>
       </DialogContent>

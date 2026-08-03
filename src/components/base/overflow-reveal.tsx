@@ -1,9 +1,4 @@
-import {
-  Box,
-  Tooltip,
-  Typography,
-  type TypographyProps,
-} from '@mui/material'
+import { Box, Tooltip, Typography, type TypographyProps } from '@mui/material'
 import {
   useCallback,
   useEffect,

@@ -181,7 +181,10 @@ export const ProjectPanel = ({
                   <Stack
                     direction={{ xs: 'column', sm: 'row' }}
                     spacing={1.25}
-                    sx={{ alignItems: { xs: 'stretch', sm: 'center' }, minWidth: 0 }}
+                    sx={{
+                      alignItems: { xs: 'stretch', sm: 'center' },
+                      minWidth: 0,
+                    }}
                   >
                     <Stack
                       direction="row"
@@ -255,7 +258,9 @@ export const ProjectPanel = ({
                               bgcolor: 'background.paper',
                             }}
                           >
-                            <LanRounded sx={{ fontSize: 16, flex: '0 0 auto' }} />
+                            <LanRounded
+                              sx={{ fontSize: 16, flex: '0 0 auto' }}
+                            />
                             <Box sx={{ minWidth: 0, flex: 1 }}>
                               <OverflowReveal
                                 value={policyLabel}

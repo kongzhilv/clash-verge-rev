@@ -10,7 +10,6 @@ import {
   SettingsEthernetRounded,
 } from '@mui/icons-material'
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -100,8 +99,7 @@ const isMihomoFakeIp = (value: string) => {
     .replace(/\/.+$/, '')
     .toLowerCase()
   return (
-    normalized.startsWith('198.18.') ||
-    normalized.startsWith('fdfe:dcba:9876:')
+    normalized.startsWith('198.18.') || normalized.startsWith('fdfe:dcba:9876:')
   )
 }
 
