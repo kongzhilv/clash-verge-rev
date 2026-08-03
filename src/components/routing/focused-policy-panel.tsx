@@ -13,6 +13,7 @@ import {
 } from '@mui/material'
 import { useMemo } from 'react'
 
+import { OverflowReveal, softScrollAreaSx } from '@/components/base'
 import { useProxySelection } from '@/hooks/use-proxy-selection'
 import { useAppRefreshers, useProxiesData } from '@/providers/app-data-context'
 import { showNotice } from '@/services/notice-service'
@@ -77,7 +78,7 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
       >
         <AccountTreeRounded color="primary" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 700 }}>{groupName}</Typography>
+          <OverflowReveal value={groupName} fontWeight={700} />
           <Stack
             direction="row"
             spacing={0.75}
@@ -87,29 +88,67 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
               size="small"
               label={`类型：${String(group.type ?? '未知')}`}
             />
-            <Chip
-              size="small"
-              color="primary"
-              icon={<CheckRounded />}
-              label={`当前：${current || '未选择'}`}
-            />
+            <Box
+              sx={{
+                display: 'inline-flex',
+                minWidth: 0,
+                maxWidth: { xs: '100%', sm: 360 },
+                alignItems: 'center',
+                gap: 0.45,
+                px: 0.85,
+                py: 0.15,
+                border: 1,
+                borderColor: 'primary.main',
+                borderRadius: 999,
+                color: 'primary.main',
+                bgcolor: 'background.paper',
+              }}
+            >
+              <CheckRounded sx={{ fontSize: 16, flex: '0 0 auto' }} />
+              <Typography variant="caption" sx={{ flex: '0 0 auto' }}>
+                当前：
+              </Typography>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <OverflowReveal
+                  value={current || '未选择'}
+                  variant="caption"
+                  fontWeight={650}
+                />
+              </Box>
+            </Box>
             <Chip size="small" label={`${proxiesInGroup.length} 个候选节点`} />
           </Stack>
         </Box>
-        <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 300 } }}>
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 320 } }}>
           <InputLabel>直接切换此代理组</InputLabel>
           <Select
             label="直接切换此代理组"
             value={current}
+            renderValue={(selected) => (
+              <OverflowReveal value={String(selected)} variant="body2" />
+            )}
+            MenuProps={{
+              slotProps: {
+                paper: {
+                  sx: {
+                    maxHeight: 'min(52vh, 420px)',
+                    ...softScrollAreaSx,
+                  },
+                },
+              },
+            }}
             onChange={(event) =>
               changeProxy(groupName, String(event.target.value), current)
             }
           >
             {proxiesInGroup.map((proxy) => {
               const name = String(proxy.name ?? '').trim()
+              const label = `${name} · ${String(proxy.type ?? '未知类型')}`
               return name ? (
-                <MenuItem key={name} value={name}>
-                  {name} · {String(proxy.type ?? '未知类型')}
+                <MenuItem key={name} value={name} sx={{ minWidth: 0 }}>
+                  <Box sx={{ minWidth: 0, width: '100%' }}>
+                    <OverflowReveal value={label} variant="body2" />
+                  </Box>
                 </MenuItem>
               ) : null
             })}
