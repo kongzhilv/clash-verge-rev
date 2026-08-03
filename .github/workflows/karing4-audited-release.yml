@@ -1,5 +1,5 @@
 name: Karing 4 Audited Release
-run-name: Build and release v2.5.3-karing.4 (d1045d1 final)
+run-name: Build and release v2.5.3-karing.4 (7ec661e final)
 
 on:
   push:
@@ -18,7 +18,7 @@ env:
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
   RELEASE_TAG: v2.5.3-karing.4
-  CANDIDATE_SHA: d1045d1c449f40a2aa7e07ed5b36d7be08ac9d78
+  CANDIDATE_SHA: 7ec661ec241ea7571058f82463b0cc644596b10d
 
 concurrency:
   group: karing4-final-audited-release
@@ -110,6 +110,7 @@ jobs:
               ('new connection fast sampling', 'src/hooks/use-connection-data.ts', 'PROCESS_CONNECTION_NEW_DELAY_MS'),
               ('new connection retry', 'src/hooks/use-connection-data.ts', 'requestFastProcessConnectionRefresh'),
               ('active-only native enrichment', 'src/hooks/use-connection-data.ts', 'activeConnections = enrichConnectionsWithProcesses'),
+              ('safe finally control flow', 'src/hooks/use-connection-data.ts', 'if (connectionListeners.size > 0) {'),
               ('Fake-IP guard', 'src/components/connection/connection-rule-assistant.tsx', 'isMihomoFakeIp'),
               ('connection filters', 'src/components/connection/connection-filter-menu.tsx', 'outbound: string'),
               ('common routing presets', 'src/components/rule/diversion-manager/settings-panel.tsx', '常用分流'),
@@ -234,7 +235,7 @@ jobs:
       - name: 恢复 Rust 缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing4-d1045d1-v1
+          prefix-key: karing4-7ec661e-v1
           key: ${{ matrix.os }}-${{ matrix.target }}-${{ matrix.kind }}
           workspaces: |
             . -> target
@@ -581,7 +582,7 @@ jobs:
           fi
 
           cat > /tmp/release-status.md <<EOF
-          <!-- karing4-d1045d1-release-status -->
+          <!-- karing4-7ec661e-release-status -->
           ## Karing 4 最终审查与发行状态
 
           ${status}
