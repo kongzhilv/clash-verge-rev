@@ -1,5 +1,5 @@
 name: Frontend Check
-run-name: Audit Karing 4 candidate with report (trigger)
+run-name: Audit Karing 4 candidate with setup report
 
 on:
   push:
@@ -27,27 +27,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout feature candidate
+        id: checkout
         uses: actions/checkout@v7
         with:
           ref: feature/karing-style-diversion
           fetch-depth: 0
 
       - name: Install pnpm
+        id: pnpm_setup
+        continue-on-error: true
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Install Node.js
+        id: node_setup
+        continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        id: install
+        if: steps.pnpm_setup.outcome == 'success' && steps.node_setup.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm install --frozen-lockfile 2>&1 | tee /tmp/install.log
 
       - name: Check formatting
         id: format
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -56,6 +68,7 @@ jobs:
 
       - name: Audit mature routing UI
         id: ui
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -78,6 +91,7 @@ jobs:
 
       - name: Run ESLint
         id: lint
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -86,6 +100,7 @@ jobs:
 
       - name: Run TypeScript check
         id: typecheck
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -94,6 +109,7 @@ jobs:
 
       - name: Run Knip report
         id: knip
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -102,6 +118,7 @@ jobs:
 
       - name: Build web application
         id: build
+        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -113,6 +130,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PNPM_SETUP: ${{ steps.pnpm_setup.outcome }}
+          NODE_SETUP: ${{ steps.node_setup.outcome }}
+          INSTALL: ${{ steps.install.outcome }}
           FORMAT: ${{ steps.format.outcome }}
           UI: ${{ steps.ui.outcome }}
           LINT: ${{ steps.lint.outcome }}
@@ -128,23 +148,27 @@ jobs:
             echo '## Karing 4 前端审查报告'
             echo
             echo "候选提交：\`$candidate\`"
+            echo "Action：https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo
             echo '| 检查 | 结果 |'
             echo '| --- | --- |'
+            echo "| pnpm 环境 | $PNPM_SETUP |"
+            echo "| Node 环境 | $NODE_SETUP |"
+            echo "| 依赖安装 | $INSTALL |"
             echo "| Biome | $FORMAT |"
             echo "| 成熟化 UI 审查 | $UI |"
             echo "| ESLint | $LINT |"
             echo "| TypeScript | $TYPECHECK |"
             echo "| Knip | $KNIP |"
             echo "| Web 构建 | $BUILD |"
-            for item in format ui lint typecheck knip build; do
+            for item in install format ui lint typecheck knip build; do
               value=$(printenv "$(echo "$item" | tr '[:lower:]' '[:upper:]')")
               if [ "$value" != success ]; then
                 echo
                 echo "<details><summary>$item 错误日志尾部</summary>"
                 echo
                 echo '```text'
-                tail -n 60 "/tmp/$item.log" 2>/dev/null || true
+                tail -n 80 "/tmp/$item.log" 2>/dev/null || true
                 echo '```'
                 echo '</details>'
               fi
@@ -156,6 +180,9 @@ jobs:
         if: always()
         shell: bash
         env:
+          PNPM_SETUP: ${{ steps.pnpm_setup.outcome }}
+          NODE_SETUP: ${{ steps.node_setup.outcome }}
+          INSTALL: ${{ steps.install.outcome }}
           FORMAT: ${{ steps.format.outcome }}
           UI: ${{ steps.ui.outcome }}
           LINT: ${{ steps.lint.outcome }}
@@ -164,6 +191,6 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
         run: |
           set -euo pipefail
-          for value in "$FORMAT" "$UI" "$LINT" "$TYPECHECK" "$KNIP" "$BUILD"; do
+          for value in "$PNPM_SETUP" "$NODE_SETUP" "$INSTALL" "$FORMAT" "$UI" "$LINT" "$TYPECHECK" "$KNIP" "$BUILD"; do
             test "$value" = success
           done
