@@ -117,7 +117,6 @@ export const DiversionManager = ({
     const autoOpenKey = initialOpen ? (focusProjectId ?? 'projects') : null
     if (!autoOpenKey || lastAutoOpenKeyRef.current === autoOpenKey) return
     lastAutoOpenKeyRef.current = autoOpenKey
-    setActiveTab('projects')
     void openManager()
   }, [focusProjectId, initialOpen, openManager])
 
