@@ -1,31 +1,32 @@
 import {
-  AddLinkRounded,
-  AppsRounded,
+  ArrowDownwardRounded,
+  ArrowUpwardRounded,
   CloseRounded,
   DnsRounded,
   HubRounded,
   LanRounded,
+  PowerOffRounded,
   RouteRounded,
   ScheduleRounded,
-  SwapVertRounded,
+  SpeedRounded,
+  TuneRounded,
 } from '@mui/icons-material'
 import {
   Box,
   Button,
-  Chip,
   Divider,
   Drawer,
   IconButton,
   Paper,
   Stack,
   Typography,
-  useTheme,
 } from '@mui/material'
 import { useLockFn } from 'ahooks'
 import dayjs from 'dayjs'
 import {
   useCallback,
   useImperativeHandle,
+  useMemo,
   useState,
   type ReactNode,
   type Ref,
@@ -34,6 +35,7 @@ import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
 import ConnectionProjectCard from '@/components/routing/connection-project-card'
+import { useConnectionData } from '@/hooks/use-connection-data'
 import parseTraffic from '@/utils/parse-traffic'
 
 import ConnectionRuleAssistant from './connection-rule-assistant'
@@ -43,30 +45,47 @@ export interface ConnectionDetailRef {
   close: () => void
 }
 
-const processNameFrom = (process: string, processPath: string) => {
-  const preferred = process.trim()
-  if (preferred) return preferred
-  const parts = processPath.split(/[\\/]/).filter(Boolean)
-  return parts.at(-1) ?? ''
-}
-
 export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
   const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState<IConnectionsItem | null>(null)
-  const [closed, setClosed] = useState(false)
+  const [selected, setSelected] = useState<IConnectionsItem | null>(null)
+  const [initiallyClosed, setInitiallyClosed] = useState(false)
   const [ruleAssistantOpen, setRuleAssistantOpen] = useState(false)
+  const {
+    response: { data: connectionData },
+  } = useConnectionData({ enabled: open })
+
+  const activeDetail = useMemo(
+    () =>
+      selected
+        ? connectionData.activeConnections.find(
+            (connection) => connection.id === selected.id,
+          )
+        : undefined,
+    [connectionData.activeConnections, selected],
+  )
+  const closedDetail = useMemo(
+    () =>
+      selected
+        ? connectionData.closedConnections.find(
+            (connection) => connection.id === selected.id,
+          )
+        : undefined,
+    [connectionData.closedConnections, selected],
+  )
+  const detail = activeDetail ?? closedDetail ?? selected
+  const closed = initiallyClosed || (!activeDetail && Boolean(closedDetail))
 
   const onClose = useCallback(() => {
     setOpen(false)
     setRuleAssistantOpen(false)
-    setDetail(null)
-    setClosed(false)
+    setSelected(null)
+    setInitiallyClosed(false)
   }, [])
 
   useImperativeHandle(ref, () => ({
     open: (nextDetail: IConnectionsItem, nextClosed: boolean) => {
-      setDetail(nextDetail)
-      setClosed(nextClosed)
+      setSelected(nextDetail)
+      setInitiallyClosed(nextClosed)
       setRuleAssistantOpen(false)
       setOpen(true)
     },
@@ -84,6 +103,7 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
             sx: {
               width: { xs: '100%', sm: 540 },
               maxWidth: '100vw',
+              height: '100%',
               bgcolor: 'background.default',
             },
           },
@@ -124,6 +144,26 @@ interface InformationItem {
   icon: ReactNode
 }
 
+interface MetricProps {
+  label: string
+  value: string
+  icon: ReactNode
+}
+
+const Metric = ({ label, value, icon }: MetricProps) => (
+  <Box sx={{ minWidth: 0, p: 1.25 }}>
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+      <Box sx={{ color: 'text.secondary', display: 'flex' }}>{icon}</Box>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+    </Stack>
+    <Typography sx={{ mt: 0.5, fontWeight: 700 }} noWrap>
+      {value}
+    </Typography>
+  </Box>
+)
+
 const InnerConnectionDetail = ({
   data,
   closed,
@@ -132,41 +172,21 @@ const InnerConnectionDetail = ({
 }: InnerProps) => {
   const { t } = useTranslation()
   const { metadata, rulePayload } = data
-  const theme = useTheme()
   const chains = [...data.chains].reverse().join(' / ')
   const rule = rulePayload ? `${data.rule}(${rulePayload})` : data.rule
   const hostAddress =
     metadata.host || metadata.destinationIP || metadata.remoteDestination
-  const host = `${hostAddress}:${metadata.destinationPort}`
   const destination = metadata.destinationIP || metadata.remoteDestination
-  const processPath = String(metadata.processPath ?? '').trim()
-  const processName = processNameFrom(
-    String(metadata.process ?? ''),
-    processPath,
-  )
-  const hasProcess = Boolean(processName || processPath)
+  const headerMeta = [
+    String(metadata.network || '').toUpperCase(),
+    metadata.type,
+    metadata.destinationPort ? `:${metadata.destinationPort}` : '',
+    closed ? '已结束' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   const information: InformationItem[] = [
-    {
-      label: t('shared.labels.downloaded'),
-      value: parseTraffic(data.download).join(' '),
-      icon: <SwapVertRounded fontSize="small" />,
-    },
-    {
-      label: t('shared.labels.uploaded'),
-      value: parseTraffic(data.upload).join(' '),
-      icon: <SwapVertRounded fontSize="small" />,
-    },
-    {
-      label: t('connections.components.fields.dlSpeed'),
-      value: `${parseTraffic(data.curDownload ?? -1).join(' ')}/s`,
-      icon: <SwapVertRounded fontSize="small" />,
-    },
-    {
-      label: t('connections.components.fields.ulSpeed'),
-      value: `${parseTraffic(data.curUpload ?? -1).join(' ')}/s`,
-      icon: <SwapVertRounded fontSize="small" />,
-    },
     {
       label: t('connections.components.fields.source'),
       value: `${metadata.sourceIP}:${metadata.sourcePort}`,
@@ -187,13 +207,14 @@ const InnerConnectionDetail = ({
   const onDelete = useLockFn(async () => closeConnection(data.id))
 
   return (
-    <Stack sx={{ minHeight: '100%', color: theme.palette.text.primary }}>
+    <Stack sx={{ height: '100%', minHeight: 0 }}>
       <Stack
         direction="row"
         spacing={1}
         sx={{
           px: 2,
-          py: 1.5,
+          py: 1.25,
+          flex: '0 0 auto',
           alignItems: 'center',
           borderBottom: 1,
           borderColor: 'divider',
@@ -202,8 +223,8 @@ const InnerConnectionDetail = ({
       >
         <Box
           sx={{
-            width: 42,
-            height: 42,
+            width: 40,
+            height: 40,
             display: 'grid',
             placeItems: 'center',
             borderRadius: 2,
@@ -218,7 +239,7 @@ const InnerConnectionDetail = ({
             {hostAddress || '未知目标'}
           </Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
-            {host}
+            {headerMeta || '连接详情'}
           </Typography>
         </Box>
         <IconButton onClick={onClose} aria-label="关闭连接详情">
@@ -226,95 +247,61 @@ const InnerConnectionDetail = ({
         </IconButton>
       </Stack>
 
-      <Stack spacing={1.5} sx={{ p: 2, overflowY: 'auto' }}>
-        <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap' }}>
-          <Chip size="small" label={metadata.network || '未知网络'} />
-          <Chip size="small" label={metadata.type || '未知类型'} />
-          {closed && <Chip size="small" color="default" label="已关闭" />}
-        </Stack>
-
-        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-          <Stack
-            direction="row"
-            spacing={1.25}
-            sx={{ alignItems: 'flex-start' }}
-          >
-            <Box
-              sx={{
-                width: 38,
-                height: 38,
-                flex: '0 0 auto',
-                display: 'grid',
-                placeItems: 'center',
-                borderRadius: 2,
-                bgcolor: hasProcess ? 'success.main' : 'action.hover',
-                color: hasProcess ? 'success.contrastText' : 'text.secondary',
-              }}
-            >
-              <AppsRounded />
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="caption" color="text.secondary">
-                Mihomo 进程元数据
-              </Typography>
-              <Typography sx={{ fontWeight: 700, wordBreak: 'break-all' }}>
-                {processName || '未返回程序信息'}
-              </Typography>
-              {processPath && (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 0.25, wordBreak: 'break-all' }}
-                >
-                  {processPath}
-                </Typography>
-              )}
-              {!hasProcess && (
-                <Typography variant="caption" color="text.secondary">
-                  下方仍会尝试用已登记的域名、IP 和端口识别程序或项目。
-                </Typography>
-              )}
-            </Box>
-          </Stack>
-        </Paper>
-
+      <Stack
+        spacing={1.25}
+        sx={{
+          p: 1.5,
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+        }}
+      >
         <ConnectionProjectCard connection={data} />
 
         <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-          <Stack divider={<Divider flexItem />}>
-            {information.map((item) => (
-              <Stack
-                key={item.label}
-                direction="row"
-                spacing={1.25}
-                sx={{ px: 1.5, py: 1.1, alignItems: 'center' }}
-              >
-                <Box sx={{ color: 'text.secondary', display: 'flex' }}>
-                  {item.icon}
-                </Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 88 }}
-                >
-                  {item.label}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ flex: 1, textAlign: 'right', wordBreak: 'break-all' }}
-                >
-                  {item.value}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              '& > :nth-of-type(odd)': {
+                borderRight: 1,
+                borderColor: 'divider',
+              },
+              '& > :nth-of-type(-n+2)': {
+                borderBottom: 1,
+                borderColor: 'divider',
+              },
+            }}
+          >
+            <Metric
+              label={t('shared.labels.downloaded')}
+              value={parseTraffic(data.download).join(' ')}
+              icon={<ArrowDownwardRounded fontSize="small" />}
+            />
+            <Metric
+              label={t('shared.labels.uploaded')}
+              value={parseTraffic(data.upload).join(' ')}
+              icon={<ArrowUpwardRounded fontSize="small" />}
+            />
+            <Metric
+              label={t('connections.components.fields.dlSpeed')}
+              value={`${parseTraffic(data.curDownload ?? -1).join(' ')}/s`}
+              icon={<SpeedRounded fontSize="small" />}
+            />
+            <Metric
+              label={t('connections.components.fields.ulSpeed')}
+              value={`${parseTraffic(data.curUpload ?? -1).join(' ')}/s`}
+              icon={<SpeedRounded fontSize="small" />}
+            />
+          </Box>
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
           <Stack spacing={1}>
             <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
               <HubRounded color="primary" fontSize="small" />
-              <Typography variant="subtitle2">实际命中规则与出口</Typography>
+              <Typography variant="subtitle2">实际路由</Typography>
             </Stack>
             <Box>
               <Typography variant="caption" color="text.secondary">
@@ -335,27 +322,60 @@ const InnerConnectionDetail = ({
           </Stack>
         </Paper>
 
-        <Button
-          variant="contained"
-          size="large"
-          startIcon={<AddLinkRounded />}
-          onClick={onOpenRuleAssistant}
-        >
-          管理程序项目与分流规则
-        </Button>
+        <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+          <Stack divider={<Divider flexItem />}>
+            {information.map((item) => (
+              <Stack
+                key={item.label}
+                direction="row"
+                spacing={1}
+                sx={{ px: 1.5, py: 1, alignItems: 'center' }}
+              >
+                <Box sx={{ color: 'text.secondary', display: 'flex' }}>
+                  {item.icon}
+                </Box>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ minWidth: 72 }}
+                >
+                  {item.label}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ flex: 1, textAlign: 'right', wordBreak: 'break-all' }}
+                >
+                  {item.value}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        </Paper>
 
-        {!closed && (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <Button
-            variant="outlined"
-            color="error"
-            onClick={() => {
-              void onDelete()
-              onClose()
-            }}
+            fullWidth
+            variant="contained"
+            startIcon={<TuneRounded />}
+            onClick={onOpenRuleAssistant}
           >
-            {t('connections.components.actions.closeConnection')}
+            设置此应用分流
           </Button>
-        )}
+          {!closed && (
+            <Button
+              fullWidth
+              variant="outlined"
+              color="error"
+              startIcon={<PowerOffRounded />}
+              onClick={() => {
+                void onDelete()
+                onClose()
+              }}
+            >
+              断开此连接
+            </Button>
+          )}
+        </Stack>
       </Stack>
     </Stack>
   )
