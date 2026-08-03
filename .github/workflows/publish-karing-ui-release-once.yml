@@ -1,0 +1,301 @@
+name: Karing UI 成熟化正式发行（一次性）
+run-name: 发布 v2.5.3-karing.3 并清理旧分支
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/publish-karing-ui-release-once.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: karing-ui-release-v2.5.3-karing.3
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: v2.5.3-karing.3
+  RELEASE_VERSION: 2.5.3-karing.3
+  REVIEWED_RUN_ID: '30795382303'
+  REVIEWED_ARTIFACT_ID: '8849860609'
+  REVIEWED_ARTIFACT_DIGEST: sha256:0a61a623749d97cbd9cd2474b0a74ff12692a62336234e3086fd84ab6d356103
+  EXPECTED_HEAD_COMMIT: 0ee773da9fc7ca751e5b55b1b58b61c0b0840e2b
+
+jobs:
+  publish:
+    name: 发布已审查的成熟化版本
+    runs-on: ubuntu-latest
+    outputs:
+      release_url: ${{ steps.release.outputs.release_url }}
+      artifact_commit: ${{ steps.verify.outputs.artifact_commit }}
+    steps:
+      - name: 下载已审查的完整发行资产
+        uses: actions/download-artifact@v8
+        with:
+          name: karing-release-assets
+          path: release-assets
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.REVIEWED_RUN_ID }}
+
+      - name: 复核运行来源、安装文件和 SHA256
+        id: verify
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          run_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN_ID")
+          run_head=$(jq -r '.head_sha' <<< "$run_json")
+          run_conclusion=$(jq -r '.conclusion' <<< "$run_json")
+          if [ "$run_head" != "$EXPECTED_HEAD_COMMIT" ]; then
+            echo "[失败] 审查运行 head_sha=$run_head，预期=$EXPECTED_HEAD_COMMIT"
+            exit 1
+          fi
+          if [ "$run_conclusion" != 'success' ]; then
+            echo "[失败] 审查运行状态为 $run_conclusion"
+            exit 1
+          fi
+
+          artifact_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN_ID/artifacts" --paginate \
+            --jq '.artifacts[] | select(.name == "karing-release-assets")')
+          artifact_id=$(jq -r '.id' <<< "$artifact_json")
+          artifact_digest=$(jq -r '.digest' <<< "$artifact_json")
+          artifact_expired=$(jq -r '.expired' <<< "$artifact_json")
+          if [ "$artifact_id" != "$REVIEWED_ARTIFACT_ID" ] || \
+             [ "$artifact_digest" != "$REVIEWED_ARTIFACT_DIGEST" ] || \
+             [ "$artifact_expired" != 'false' ]; then
+            echo '[失败] 汇总 Artifact 身份、摘要或有效期不匹配'
+            jq '{id, name, digest, expired}' <<< "$artifact_json"
+            exit 1
+          fi
+
+          installer_count=$(find release-assets -maxdepth 1 -type f \
+            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
+            | wc -l)
+          if [ "$installer_count" -ne 12 ]; then
+            echo "[失败] 应有 12 个安装文件，实际为 $installer_count 个"
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
+
+          test -f release-assets/SHA256SUMS.txt
+          test -f release-assets/BUILD_INFO.txt
+
+          artifact_commit=$(sed -n 's/^[[:space:]]*Commit:[[:space:]]*//p' \
+            release-assets/BUILD_INFO.txt | head -n 1 | tr -d '\r')
+          if [ -z "$artifact_commit" ]; then
+            echo '[失败] BUILD_INFO.txt 中没有 Commit 字段'
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/commits/$artifact_commit" >/dev/null
+
+          compare_status=$(gh api \
+            "repos/$GITHUB_REPOSITORY/compare/$EXPECTED_HEAD_COMMIT...$artifact_commit" \
+            --jq '.status')
+          if [ "$compare_status" != 'ahead' ] && [ "$compare_status" != 'identical' ]; then
+            echo "[失败] Artifact 构建提交未包含预期分支头，compare=$compare_status"
+            exit 1
+          fi
+
+          (
+            cd release-assets
+            sha256sum --check SHA256SUMS.txt
+          )
+
+          cat > release-assets/release-notes.md <<EOF
+          # Clash Verge Rev Karing v${RELEASE_VERSION}
+
+          本版本在保留“程序 → 规则 → 出口 → 活动连接”深度联动的基础上，对界面和操作流程进行了成熟化重构。
+
+          ## 界面与交互
+          - 重构全局页面骨架，统一明暗主题背景、标题栏、间距与层级
+          - 将完整分流管理收敛为“分流中心”，按程序与项目、规则、设置分为三个工作区
+          - 正在联网程序改为高密度列表，可直接加入分流，减少重复说明和标签堆叠
+          - 项目档案改为紧凑行式卡片，连接、出口、编辑和删除改用清晰图标与提示
+          - 分流关系改为直观的“程序 → 规则组 → 出口”流程视图
+          - 连接页压缩流量、视图、项目和关闭连接工具栏，减少不必要文字按钮
+          - 代理页简化模式切换与链式代理入口；域名测试改为专注型工具
+          - 删除冗余提示、旧一次性修复/发布工作流和已经被当前分支吸收的旧开发分支
+
+          ## 深度联动保持不变
+          - Windows TCP/UDP IPv4/IPv6 连接继续归因到 PID、进程名和完整 exe 路径
+          - 活动连接、程序项目、PROCESS-NAME / PROCESS-PATH 规则、规则组和出口策略共享同一关系数据
+          - Merge / Script 保存后继续执行 Mihomo 校验、回滚保护和运行时热应用
+
+          ## 安装包
+          - Windows x64 与 ARM64
+          - Windows x64 与 ARM64 固定 WebView2 版本
+          - macOS Apple Silicon 与 Intel
+          - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
+
+          本分支安装包未使用上游官方签名或 Apple 公证。请使用 SHA256SUMS.txt 核验文件。
+
+          Reviewed run: ${REVIEWED_RUN_ID}
+          Branch head: ${EXPECTED_HEAD_COMMIT}
+          Artifact commit: ${artifact_commit}
+          Artifact digest: ${REVIEWED_ARTIFACT_DIGEST}
+          EOF
+
+          echo "artifact_commit=$artifact_commit" >> "$GITHUB_OUTPUT"
+          echo '[通过] 运行来源、Artifact 摘要、12 个安装文件和 SHA256 全部有效'
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 创建正式 Latest Release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+
+          if gh release view "$RELEASE_TAG" --repo "$repo" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --repo "$repo" --yes --cleanup-tag
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            release-assets/*.exe \
+            release-assets/*.dmg \
+            release-assets/*.deb \
+            release-assets/*.rpm \
+            release-assets/SHA256SUMS.txt \
+            release-assets/BUILD_INFO.txt \
+            --repo "$repo" \
+            --target "$EXPECTED_HEAD_COMMIT" \
+            --title "Clash Verge Rev Karing v${RELEASE_VERSION}" \
+            --notes-file release-assets/release-notes.md \
+            --latest
+
+          release_json=$(gh release view "$RELEASE_TAG" --repo "$repo" \
+            --json url,tagName,isDraft,isPrerelease,assets,targetCommitish)
+          asset_count=$(jq '.assets | length' <<< "$release_json")
+          installer_assets=$(jq '[.assets[].name | select(test("\\.(exe|dmg|deb|rpm)$"; "i"))] | length' <<< "$release_json")
+          metadata_assets=$(jq '[.assets[].name | select(. == "SHA256SUMS.txt" or . == "BUILD_INFO.txt")] | length' <<< "$release_json")
+          if [ "$asset_count" -ne 14 ] || [ "$installer_assets" -ne 12 ] || [ "$metadata_assets" -ne 2 ]; then
+            echo "[失败] Release 资产不完整：总数=$asset_count 安装包=$installer_assets 元数据=$metadata_assets"
+            jq -r '.assets[].name' <<< "$release_json"
+            exit 1
+          fi
+
+          jq -e \
+            --arg tag "$RELEASE_TAG" \
+            --arg commit "$EXPECTED_HEAD_COMMIT" \
+            '.tagName == $tag and .isDraft == false and .isPrerelease == false and .targetCommitish == $commit' \
+            <<< "$release_json" >/dev/null
+
+          tag_sha=$(gh api "repos/$repo/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
+          if [ "$tag_sha" != "$EXPECTED_HEAD_COMMIT" ]; then
+            echo "[失败] 标签实际指向 $tag_sha，预期 $EXPECTED_HEAD_COMMIT"
+            exit 1
+          fi
+
+          release_url=$(jq -r '.url' <<< "$release_json")
+          echo "release_url=$release_url" >> "$GITHUB_OUTPUT"
+          echo '[通过] 正式 Release 已创建，标签精确指向分支头并包含 14 个资产'
+          jq '{url, tagName, targetCommitish, isDraft, isPrerelease, assets: [.assets[].name]}' \
+            <<< "$release_json"
+
+  cleanup:
+    name: 清理已吸收分支和一次性工作流
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出默认分支
+        uses: actions/checkout@v6
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: 验证祖先关系并删除旧分支
+        shell: bash
+        run: |
+          set -euo pipefail
+          current='feature/karing-style-diversion'
+          old_branches=(
+            'feature/karing-style-diversion-restore-safety'
+            'work/program-project-linking'
+          )
+
+          git fetch --no-tags origin "+refs/heads/$current:refs/remotes/origin/$current"
+          for branch in "${old_branches[@]}"; do
+            git fetch --no-tags origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+            if ! git merge-base --is-ancestor "origin/$branch" "origin/$current"; then
+              echo "[失败] $branch 含有未被 $current 吸收的提交"
+              exit 1
+            fi
+            git push origin --delete "$branch"
+          done
+
+      - name: 删除本次一次性发布工作流
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -- '.github/workflows/publish-karing-ui-release-once.yml'
+          git commit -m 'chore: remove completed UI release workflow'
+          git push origin HEAD:dev
+
+  report:
+    name: 回报成熟化发行结果
+    if: ${{ always() }}
+    needs:
+      - publish
+      - cleanup
+    runs-on: ubuntu-latest
+    steps:
+      - name: 更新 PR #1
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
+          CLEANUP_RESULT: ${{ needs.cleanup.result }}
+          RELEASE_URL: ${{ needs.publish.outputs.release_url }}
+          ARTIFACT_COMMIT: ${{ needs.publish.outputs.artifact_commit }}
+        run: |
+          set -euo pipefail
+          marker='<!-- karing-ui-maturity-release-status -->'
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          if [ "$PUBLISH_RESULT" = 'success' ] && [ "$CLEANUP_RESULT" = 'success' ]; then
+            status='✅ UI 成熟化版本正式发行成功，仓库清理完成'
+          elif [ "$PUBLISH_RESULT" = 'success' ]; then
+            status="⚠️ Release 已成功，但仓库清理状态为 ${CLEANUP_RESULT}"
+          else
+            status="❌ 正式发行失败（${PUBLISH_RESULT}）"
+          fi
+
+          body=$(cat <<EOF
+          ${marker}
+          ## Karing UI 成熟化发行状态
+
+          ${status}
+
+          - 分支头提交：\`${EXPECTED_HEAD_COMMIT}\`
+          - Artifact 构建提交：\`${ARTIFACT_COMMIT:-未生成}\`
+          - 已审查运行：\`${REVIEWED_RUN_ID}\`
+          - 汇总 Artifact：\`${REVIEWED_ARTIFACT_ID}\` / \`${REVIEWED_ARTIFACT_DIGEST}\`
+          - 发行标签：\`${RELEASE_TAG}\`
+          - Release：${RELEASE_URL:-未创建}
+          - Action：${run_url}
+          - 安装文件：12 个；Release 资产：14 个
+          - 清理：旧恢复分支、旧联动工作分支、一次性发布工作流
+          EOF
+          )
+
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/issues/1/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"${marker}\")) | .id" | head -n 1)
+          if [ -n "$existing" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${existing}" \
+              -f body="$body" >/dev/null
+          else
+            gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body "$body"
+          fi
