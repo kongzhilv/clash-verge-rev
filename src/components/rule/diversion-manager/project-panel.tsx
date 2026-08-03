@@ -170,7 +170,8 @@ export const ProjectPanel = ({
                     borderRadius: 2.5,
                     borderColor: focused ? 'primary.main' : 'divider',
                     bgcolor: focused ? 'action.selected' : 'background.paper',
-                    transition: 'border-color 120ms ease, background 120ms ease',
+                    transition:
+                      'border-color 120ms ease, background 120ms ease',
                   }}
                 >
                   <Stack
@@ -208,7 +209,11 @@ export const ProjectPanel = ({
                           {project.name}
                         </Typography>
                         {!project.enabled && (
-                          <Chip size="small" label="已停用" variant="outlined" />
+                          <Chip
+                            size="small"
+                            label="已停用"
+                            variant="outlined"
+                          />
                         )}
                       </Stack>
                       <Typography
@@ -240,7 +245,10 @@ export const ProjectPanel = ({
                           color="primary"
                           variant="outlined"
                           icon={<LanRounded />}
-                          label={policy || actionLabel(project.action, project.policy)}
+                          label={
+                            policy ||
+                            actionLabel(project.action, project.policy)
+                          }
                         />
                       </Stack>
                     </Box>
