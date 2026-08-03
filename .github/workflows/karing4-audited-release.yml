@@ -1,5 +1,5 @@
 name: Karing 4 Audited Release
-run-name: Build and release v2.5.3-karing.4
+run-name: Build and release v2.5.3-karing.4 (retry 2)
 
 on:
   push:
@@ -111,7 +111,10 @@ jobs:
           grep -q 'GetExtendedTcpTable' src-tauri/src/cmd/process_connections.rs
           grep -q 'GetExtendedUdpTable' src-tauri/src/cmd/process_connections.rs
           grep -q 'QueryFullProcessImageNameW' src-tauri/src/cmd/process_connections.rs
-          grep -q 'cmd::get_process_connections' src-tauri/src/lib.rs
+          grep -q 'mod process_connections' src-tauri/src/cmd/mod.rs
+          grep -Fq '"process-connections" => process_connections::get_process_connections()' src-tauri/src/cmd/network.rs
+          grep -q 'network::get_network_interfaces_info' src-tauri/src/lib.rs
+          grep -q "kind: 'process-connections'" src/services/process-connections.ts
           echo '[pass] source and product audit completed'
 
   native-builds:
@@ -538,7 +541,7 @@ jobs:
 
           本分支安装包没有上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 校验下载文件。
 
-          Commit: `${{ needs.review.outputs.commit }}`
+          Commit: ${{ needs.review.outputs.commit }}
           EOF
 
           echo '[pass] packaged release assets:'
@@ -584,8 +587,8 @@ jobs:
           test -f release-assets/BUILD_INFO.txt
           (cd release-assets && sha256sum --check SHA256SUMS.txt)
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" --yes --cleanup-tag
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           fi
 
           gh release create "$RELEASE_TAG" \
@@ -665,7 +668,7 @@ jobs:
 
           ${status}
 
-          - 候选提交：`${CANDIDATE_SHA}`
+          - 候选提交：${CANDIDATE_SHA}
           - Action：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
           - 源码审查：${REVIEW}
           - Windows/macOS/Linux x64：${NATIVE}
