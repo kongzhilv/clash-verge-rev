@@ -129,7 +129,7 @@ mod windows_impl {
         Ok(vec![0; (size as usize).div_ceil(std::mem::size_of::<u32>())])
     }
 
-    fn table_buffer_len(table: &[u32]) -> usize {
+    const fn table_buffer_len(table: &[u32]) -> usize {
         std::mem::size_of_val(table)
     }
 
