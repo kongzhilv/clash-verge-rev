@@ -1,17 +1,22 @@
 import {
   AddRounded,
+  AppsRounded,
   CloseRounded,
+  RuleRounded,
   SaveRounded,
+  SettingsRounded,
   TuneRounded,
 } from '@mui/icons-material'
 import {
-  Alert,
   AppBar,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   IconButton,
   Stack,
+  Tab,
+  Tabs,
   Toolbar,
   Tooltip,
   Typography,
@@ -48,6 +53,8 @@ interface DiversionManagerProps {
   focusProjectId?: string | null
 }
 
+type ManagerTab = 'projects' | 'rules' | 'settings'
+
 export const DiversionManager = ({
   initialOpen = false,
   focusProjectId,
@@ -55,6 +62,7 @@ export const DiversionManager = ({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState<ManagerTab>('projects')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [mergeConfig, setMergeConfig] = useState<UnknownRecord>({})
   const [config, setConfig] = useState<DiversionConfig>(defaultConfig)
@@ -109,6 +117,7 @@ export const DiversionManager = ({
     const autoOpenKey = initialOpen ? (focusProjectId ?? 'projects') : null
     if (!autoOpenKey || lastAutoOpenKeyRef.current === autoOpenKey) return
     lastAutoOpenKeyRef.current = autoOpenKey
+    setActiveTab('projects')
     void openManager()
   }, [focusProjectId, initialOpen, openManager])
 
@@ -183,7 +192,7 @@ export const DiversionManager = ({
       setMergeConfig(serialized.mergeConfig)
       setConfig(serialized.config)
       notifyDiversionUpdated(serialized.config)
-      showNotice.success('分流、程序项目与代理组关系已保存并立即应用')
+      showNotice.success('分流配置已应用')
       setOpen(false)
     } catch (error) {
       showNotice.error(error)
@@ -194,35 +203,42 @@ export const DiversionManager = ({
 
   return (
     <>
-      <Tooltip title="统一管理规则、程序项目、连接识别和出口代理组">
+      <Tooltip title="管理程序、规则和出口">
         <Button
           size="small"
-          variant="outlined"
+          variant="contained"
           startIcon={<TuneRounded />}
-          onClick={() => void openManager()}
+          onClick={() => {
+            setActiveTab('projects')
+            void openManager()
+          }}
         >
-          分流设置
+          分流中心
         </Button>
       </Tooltip>
+
       <Dialog fullScreen open={open} onClose={() => !saving && setOpen(false)}>
-        <AppBar position="sticky" color="default" elevation={1}>
-          <Toolbar sx={{ gap: 1 }}>
+        <AppBar
+          position="sticky"
+          color="default"
+          elevation={0}
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Toolbar sx={{ gap: 1.25, minHeight: 60 }}>
             <IconButton
               edge="start"
               onClick={() => setOpen(false)}
               disabled={saving}
-              aria-label="关闭分流设置"
+              aria-label="关闭分流中心"
             >
               <CloseRounded />
             </IconButton>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6">完整分流管理</Typography>
-              <Typography
-                variant="caption"
-                sx={{ color: 'text.secondary', display: 'block' }}
-                noWrap
-              >
-                {`程序项目 ${config.projects.length} 个 · 已启用规则组 ${enabledGroupCount} 个`}
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                分流中心
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {`${config.projects.length} 个项目 · ${enabledGroupCount} 个规则组生效`}
               </Typography>
             </Box>
             <Button
@@ -231,30 +247,60 @@ export const DiversionManager = ({
               onClick={() => void save()}
               disabled={loading || saving}
             >
-              {saving ? '正在校验…' : '保存并应用'}
+              {saving ? '校验中…' : '应用'}
             </Button>
           </Toolbar>
+
+          <Tabs
+            value={activeTab}
+            onChange={(_, value: ManagerTab) => setActiveTab(value)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{ px: 1.5, minHeight: 46 }}
+          >
+            <Tab
+              value="projects"
+              icon={<AppsRounded fontSize="small" />}
+              iconPosition="start"
+              label={`程序与项目 ${config.projects.length}`}
+            />
+            <Tab
+              value="rules"
+              icon={<RuleRounded fontSize="small" />}
+              iconPosition="start"
+              label={`规则 ${manualGroups.length}`}
+            />
+            <Tab
+              value="settings"
+              icon={<SettingsRounded fontSize="small" />}
+              iconPosition="start"
+              label="设置"
+            />
+          </Tabs>
         </AppBar>
 
-        <Box sx={{ maxWidth: 1180, width: '100%', mx: 'auto', p: 2 }}>
-          {loading ? (
-            <Typography sx={{ color: 'text.secondary' }}>
-              正在读取全局 Merge 配置…
-            </Typography>
-          ) : (
-            <Stack spacing={2.5}>
-              <Alert severity="info">
-                已取消简单模式。这里直接显示完整规则、程序项目、优先级和出口；程序项目生成的规则组会与连接页和代理组页共享同一关系。
-              </Alert>
-
-              <SettingsPanel config={config} onChange={updateConfig} />
-
+        <Box
+          sx={{
+            minHeight: '100%',
+            bgcolor: 'background.default',
+            px: { xs: 1.25, md: 2.5 },
+            py: 2,
+          }}
+        >
+          <Box sx={{ maxWidth: 1180, width: '100%', mx: 'auto' }}>
+            {loading ? (
+              <Box sx={{ display: 'grid', placeItems: 'center', py: 10 }}>
+                <CircularProgress size={28} />
+              </Box>
+            ) : activeTab === 'projects' ? (
               <ProjectPanel
                 config={config}
                 focusProjectId={focusProjectId}
                 onChange={updateConfig}
               />
-
+            ) : activeTab === 'settings' ? (
+              <SettingsPanel config={config} onChange={updateConfig} />
+            ) : (
               <Box>
                 <Stack
                   direction={{ xs: 'column', sm: 'row' }}
@@ -262,22 +308,23 @@ export const DiversionManager = ({
                   sx={{
                     alignItems: { sm: 'center' },
                     justifyContent: 'space-between',
-                    mb: 1,
+                    mb: 1.5,
                   }}
                 >
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                      手动分流规则组
+                      自定义规则
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      程序项目的托管规则组在上方编辑；这里保留其他自定义规则。列表越靠上优先级越高。
+                    <Typography variant="body2" color="text.secondary">
+                      越靠上的规则优先级越高。
                     </Typography>
                   </Box>
                   <Button
+                    variant="outlined"
                     startIcon={<AddRounded />}
                     onClick={() => setCreateDialogOpen(true)}
                   >
-                    新建分流组
+                    新建规则组
                   </Button>
                 </Stack>
 
@@ -291,17 +338,17 @@ export const DiversionManager = ({
                 {manualGroups.length === 0 ? (
                   <Box
                     sx={{
-                      p: 4,
+                      py: 7,
                       textAlign: 'center',
                       border: 1,
                       borderStyle: 'dashed',
                       borderColor: 'divider',
-                      borderRadius: 2,
+                      borderRadius: 2.5,
+                      bgcolor: 'background.paper',
                     }}
                   >
                     <Typography color="text.secondary">
-                      没有额外的手动规则组。可直接使用上方程序项目，或在此创建任意
-                      Mihomo 分流规则。
+                      暂无额外规则。程序项目会自动生成对应规则。
                     </Typography>
                   </Box>
                 ) : (
@@ -320,8 +367,8 @@ export const DiversionManager = ({
                   </Stack>
                 )}
               </Box>
-            </Stack>
-          )}
+            )}
+          </Box>
         </Box>
       </Dialog>
     </>
