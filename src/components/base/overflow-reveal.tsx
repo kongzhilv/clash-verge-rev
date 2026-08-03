@@ -13,27 +13,7 @@ import {
   type WheelEvent,
 } from 'react'
 
-export const softScrollAreaSx = {
-  overscrollBehavior: 'contain',
-  scrollbarWidth: 'thin',
-  scrollbarColor: 'rgba(127, 127, 127, 0.36) transparent',
-  '&::-webkit-scrollbar': {
-    width: 7,
-    height: 7,
-  },
-  '&::-webkit-scrollbar-track': {
-    backgroundColor: 'transparent',
-  },
-  '&::-webkit-scrollbar-thumb': {
-    backgroundColor: 'rgba(127, 127, 127, 0.34)',
-    backgroundClip: 'padding-box',
-    border: '2px solid transparent',
-    borderRadius: 999,
-  },
-  '&::-webkit-scrollbar-thumb:hover': {
-    backgroundColor: 'rgba(127, 127, 127, 0.54)',
-  },
-} as const
+import { softScrollAreaSx } from './scroll-area'
 
 interface OverflowRevealProps {
   value: string
@@ -86,12 +66,17 @@ export const OverflowReveal = ({
     const node = contentRef.current
     if (!node) return
 
-    measure()
-    if (typeof ResizeObserver === 'undefined') return
+    const frame = window.requestAnimationFrame(measure)
+    if (typeof ResizeObserver === 'undefined') {
+      return () => window.cancelAnimationFrame(frame)
+    }
 
     const observer = new ResizeObserver(measure)
     observer.observe(node)
-    return () => observer.disconnect()
+    return () => {
+      window.cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
   }, [measure, value])
 
   const scrollBy = (distance: number) => {
