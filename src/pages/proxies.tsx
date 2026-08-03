@@ -193,12 +193,14 @@ const ProxyPage = () => {
       }
     >
       <Stack sx={{ height: '100%', minHeight: 0 }} spacing={1}>
-        <Box sx={{ px: 1.25, pt: 1.25 }}>
-          <Stack spacing={1}>
-            {policyFilter && <FocusedPolicyPanel policy={policyFilter} />}
-            <RoutingRelationsPanel policyFilter={policyFilter} compact />
-          </Stack>
-        </Box>
+        {policyFilter && (
+          <Box sx={{ px: 1.25, pt: 1.25 }}>
+            <Stack spacing={1}>
+              <FocusedPolicyPanel policy={policyFilter} />
+              <RoutingRelationsPanel policyFilter={policyFilter} compact />
+            </Stack>
+          </Box>
+        )}
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <ProxyGroups
             mode={curMode ?? 'rule'}
