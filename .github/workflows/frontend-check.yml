@@ -91,6 +91,10 @@ jobs:
             echo '[失败] 用户界面仍包含旧术语或重复文案'
             exit 1
           fi
+          if grep -RInE 'Mihomo 进程元数据|未返回程序信息' "${ui_paths[@]}"; then
+            echo '[失败] 连接界面仍包含误导性的旧进程文案'
+            exit 1
+          fi
           if grep -RInF 'label={project.groupId}' src/components; then
             echo '[失败] 用户界面暴露了内部托管规则组 ID'
             exit 1
@@ -101,9 +105,14 @@ jobs:
           grep -q 'rule: string' src/components/connection/connection-filter-menu.tsx
           grep -q 'outbound: string' src/components/connection/connection-filter-menu.tsx
           grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
-          grep -q 'AccordionSummary' src/components/connection/connection-detail.tsx
+          grep -q '技术详情' src/components/connection/connection-detail.tsx
           grep -q 'useConnectionProcessAttribution' src/components/routing/connection-project-card.tsx
-          grep -q 'Windows 唯一源端口识别' src/components/routing/connection-project-card.tsx
+          grep -q 'Windows TUN 端点识别' src/components/routing/connection-project-card.tsx
+          grep -q "'local-endpoint'" src/services/process-connections.ts
+          grep -q "'recent-local-endpoint'" src/services/process-connections.ts
+          grep -q 'RECENT_ENDPOINT_TTL_MS' src/services/process-connections.ts
+          grep -q 'PROCESS_CONNECTION_NEW_DELAY_MS' src/hooks/use-connection-data.ts
+          grep -q 'requestFastProcessConnectionRefresh' src/hooks/use-connection-data.ts
           grep -q "source: 'windows'" src/services/process-connections.ts
           grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
           grep -q 'builtinGroups={builtinGroups}' src/components/rule/diversion-manager/manager.tsx
@@ -125,7 +134,7 @@ jobs:
             exit 1
           fi
           grep -q '{policyFilter && (' src/pages/proxies.tsx
-          echo '[通过] 连接筛选、实时归因、滚动展示、常用预设和页面职责检查完成'
+          echo '[通过] 连接筛选、实时归因、短连接缓存、滚动展示、常用预设和页面职责检查完成'
 
       - name: 运行 ESLint
         if: steps.check_frontend.outputs.frontend == 'true'
