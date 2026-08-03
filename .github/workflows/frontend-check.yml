@@ -1,107 +1,133 @@
-name: Frontend Check
-run-name: Registered Karing 4 finalizer
+name: 前端检查
+run-name: 前端检查
 
 on:
-  push:
-    branches:
-      - dev
-    paths:
-      - '.github/workflows/frontend-check.yml'
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   HUSKY: 0
 
-concurrency:
-  group: registered-karing4-finalizer
-  cancel-in-progress: false
-
 jobs:
-  finalize:
+  frontend:
+    name: 检查前端代码
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout feature branch
+      - name: 检出代码
         uses: actions/checkout@v7
-        with:
-          ref: feature/karing-style-diversion
-          fetch-depth: 0
-          token: ${{ github.token }}
 
-      - name: Install pnpm
+      - name: 检测前端相关变更
+        id: check_frontend
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            frontend:
+              - 'src/**'
+              - '**/*.js'
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.css'
+              - '**/*.scss'
+              - '**/*.json'
+              - '**/*.md'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'knip.json'
+              - 'eslint.config.ts'
+              - 'tsconfig.json'
+              - 'vite.config.*'
+
+      - name: 无前端变更时跳过检查
+        if: steps.check_frontend.outputs.frontend != 'true'
+        run: echo "未检测到前端相关变更，跳过前端检查。"
+
+      - name: 安装 pnpm
+        if: steps.check_frontend.outputs.frontend == 'true'
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node.js
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
+        if: steps.check_frontend.outputs.frontend == 'true'
         with:
           node-version: '24.18.0'
-          cache: pnpm
+          cache: 'pnpm'
 
-      - name: Install dependencies
+      - name: 恢复 pnpm 缓存
+        if: steps.check_frontend.outputs.frontend == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.pnpm-store
+          key: "pnpm-shared-stable-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}"
+          restore-keys: |
+            pnpm-shared-stable-${{ runner.os }}-
+
+      - name: 安装项目依赖
+        if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm install --frozen-lockfile
 
-      - name: Format current routing changes
-        run: |
-          pnpm exec biome format --write \
-            src/components/connection/connection-filter-menu.tsx \
-            src/components/connection/connection-row-item.tsx \
-            src/components/connection/connection-detail.tsx \
-            src/components/connection/connection-rule-assistant.tsx \
-            src/components/routing/connection-project-card.tsx \
-            src/components/routing/routing-relations-panel.tsx \
-            src/components/rule/diversion-manager/manager.tsx \
-            src/components/rule/diversion-manager/project-editor-dialog.tsx \
-            src/components/rule/diversion-manager/settings-panel.tsx \
-            src/pages/connections.tsx \
-            src/pages/proxies.tsx \
-            src/pages/rules.tsx \
-            src/services/process-connections.ts
+      - name: 检查代码格式
+        if: steps.check_frontend.outputs.frontend == 'true'
+        run: pnpm format:check
 
-      - name: Set Karing 4 release tag
+      - name: 审查成熟化分流交互
+        if: steps.check_frontend.outputs.frontend == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('.github/workflows/karing-diagnostics-once.yml')
-          text = path.read_text(encoding='utf-8')
-          text = text.replace(
-              '  RELEASE_TAG: v2.5.3-karing\n',
-              '  RELEASE_TAG: v2.5.3-karing.4\n',
+          ui_paths=(
+            src/components/connection
+            src/components/routing
+            src/components/rule/diversion-manager
+            src/pages
+            README.md
           )
-          old_title = '--title "Clash Verge Rev Karing v' + '$' + '{{ needs.review.outputs.version }}"'
-          text = text.replace(
-              old_title,
-              '--title "Clash Verge Rev Karing v2.5.3-karing.4"',
-          )
-          path.write_text(text, encoding='utf-8')
-          PY
-          grep -q 'RELEASE_TAG: v2.5.3-karing.4' .github/workflows/karing-diagnostics-once.yml
+          if grep -RInE '程序项目|程序与项目|程序或项目|程序/项目|项目档案|程序档案|添加档案|保存档案|程序发现|应用应用' "${ui_paths[@]}"; then
+            echo '[失败] 用户界面仍包含旧术语或重复文案'
+            exit 1
+          fi
+          if grep -RInF 'label={project.groupId}' src/components; then
+            echo '[失败] 用户界面暴露了内部托管规则组 ID'
+            exit 1
+          fi
+          test -f src/components/connection/connection-filter-menu.tsx
+          grep -q 'ConnectionFilterMenu' src/pages/connections.tsx
+          grep -q 'application: string' src/components/connection/connection-filter-menu.tsx
+          grep -q 'rule: string' src/components/connection/connection-filter-menu.tsx
+          grep -q 'outbound: string' src/components/connection/connection-filter-menu.tsx
+          grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
+          grep -q 'AccordionSummary' src/components/connection/connection-detail.tsx
+          grep -q 'useConnectionProcessAttribution' src/components/routing/connection-project-card.tsx
+          grep -q 'Windows 唯一源端口识别' src/components/routing/connection-project-card.tsx
+          grep -q "source: 'windows'" src/services/process-connections.ts
+          grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
+          grep -q 'builtinGroups={builtinGroups}' src/components/rule/diversion-manager/manager.tsx
+          grep -q '常用分流' src/components/rule/diversion-manager/settings-panel.tsx
+          grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
+          if grep -q 'label="目标端口"' src/components/rule/diversion-manager/project-editor-dialog.tsx; then
+            echo '[失败] 应用分流编辑器仍暴露端口条件'
+            exit 1
+          fi
+          if grep -q 'RoutingRelationsPanel' src/pages/rules.tsx; then
+            echo '[失败] 规则页仍重复展示完整应用关系面板'
+            exit 1
+          fi
+          grep -q '{policyFilter && (' src/pages/proxies.tsx
+          echo '[通过] 连接筛选、实时归因、常用预设和页面职责检查完成'
 
-      - name: Restore permanent feature gate and push candidate
-        shell: bash
-        run: |
-          set -euo pipefail
-          git show da57d770bdb6e5634c4313eb2ffd118e965fdfe5:.github/workflows/frontend-check.yml > .github/workflows/frontend-check.yml
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src README.md .github/workflows/frontend-check.yml .github/workflows/karing-diagnostics-once.yml
-          git diff --cached --check
-          git commit -m 'release: finalize audited Karing 4 candidate'
-          git push origin HEAD:feature/karing-style-diversion
+      - name: 运行 ESLint
+        if: steps.check_frontend.outputs.frontend == 'true'
+        run: pnpm lint
 
-      - name: Restore registered default-branch workflow
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin dev
-          git checkout -B dev origin/dev
-          git show HEAD^:.github/workflows/frontend-check.yml > .github/workflows/frontend-check.yml
-          git add .github/workflows/frontend-check.yml
-          git commit -m 'chore: restore permanent frontend checks'
-          git push origin dev
+      - name: 运行 TypeScript 类型检查
+        if: steps.check_frontend.outputs.frontend == 'true'
+        run: pnpm typecheck
+
+      - name: 检查未使用的前端代码和依赖
+        if: steps.check_frontend.outputs.frontend == 'true'
+        run: pnpm knip:report
