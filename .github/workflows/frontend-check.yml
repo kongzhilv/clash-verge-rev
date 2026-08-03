@@ -13,7 +13,7 @@ env:
 
 jobs:
   format_once:
-    name: 官方格式化并恢复检查
+    name: 提交官方格式化结果
     if: github.event_name == 'pull_request' && github.head_ref == 'feature/karing-style-diversion'
     runs-on: ubuntu-latest
     steps:
@@ -45,14 +45,18 @@ jobs:
             src/components/rule/diversion-manager/project-panel.tsx \
             src/services/process-connections.ts
 
-      - name: 提交并恢复普通工作流
+      - name: 提交格式化源码
         shell: bash
         run: |
           set -euo pipefail
-          git checkout HEAD^ -- .github/workflows/frontend-check.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src .github/workflows/frontend-check.yml
+          git add \
+            src/components/connection/connection-rule-assistant.tsx \
+            src/components/routing/connection-project-card.tsx \
+            src/components/rule/diversion-manager/project-editor-dialog.tsx \
+            src/components/rule/diversion-manager/project-panel.tsx \
+            src/services/process-connections.ts
           git diff --cached --check
           git commit -m "style: format application routing UI"
           git push origin HEAD:feature/karing-style-diversion
