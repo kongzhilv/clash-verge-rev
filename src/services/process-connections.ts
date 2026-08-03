@@ -18,7 +18,14 @@ export interface ProcessConnectionSnapshot {
 }
 
 export type ProcessAttributionSource = 'mihomo' | 'windows' | 'unresolved'
-export type ProcessAttributionMatch = 'core' | 'tuple' | 'local-port' | 'none'
+export type ProcessAttributionMatch =
+  | 'core'
+  | 'tuple'
+  | 'local-endpoint'
+  | 'local-port'
+  | 'recent-tuple'
+  | 'recent-local-endpoint'
+  | 'none'
 
 export interface ProcessAttribution {
   connectionId: string
@@ -47,10 +54,18 @@ interface Endpoint {
   port: string
 }
 
+interface RecentCandidate {
+  identity: ProcessIdentity | null
+  seenAt: number
+}
+
 type AttributionListener = () => void
 
 const MAX_ATTRIBUTION_ITEMS = 2_000
+const RECENT_ENDPOINT_TTL_MS = 20_000
 const attributionListeners = new Set<AttributionListener>()
+const recentExactCandidates = new Map<string, RecentCandidate>()
+const recentLocalEndpointCandidates = new Map<string, RecentCandidate>()
 let processAttributionSnapshot: ProcessAttributionSnapshot = {
   version: 0,
   items: new Map(),
@@ -91,6 +106,17 @@ const processNameFromPath = (processPath: string) =>
 const identityKey = (identity: ProcessIdentity) =>
   `${identity.pid}|${identity.processPath.toLowerCase()}|${identity.processName.toLowerCase()}`
 
+const localEndpointKey = (protocol: string, host: string, port: string) =>
+  `${protocol}|${host}|${port}`
+
+const exactEndpointKey = (
+  protocol: string,
+  localHost: string,
+  localPort: string,
+  remoteHost: string,
+  remotePort: string,
+) => `${protocol}|${localHost}|${localPort}|${remoteHost}|${remotePort}`
+
 const insertCandidate = (
   map: Map<string, ProcessIdentity | null>,
   key: string,
@@ -104,6 +130,48 @@ const insertCandidate = (
   if (current && identityKey(current) !== identityKey(identity)) {
     map.set(key, null)
   }
+}
+
+const rememberCandidate = (
+  map: Map<string, RecentCandidate>,
+  key: string,
+  identity: ProcessIdentity,
+  now: number,
+) => {
+  const current = map.get(key)
+  if (!current || now - current.seenAt > RECENT_ENDPOINT_TTL_MS) {
+    map.set(key, { identity, seenAt: now })
+    return
+  }
+
+  map.set(key, {
+    identity:
+      current.identity && identityKey(current.identity) === identityKey(identity)
+        ? identity
+        : null,
+    seenAt: now,
+  })
+}
+
+const purgeRecentCandidates = (
+  map: Map<string, RecentCandidate>,
+  now: number,
+) => {
+  for (const [key, candidate] of map) {
+    if (now - candidate.seenAt > RECENT_ENDPOINT_TTL_MS) map.delete(key)
+  }
+}
+
+const readRecentCandidate = (
+  map: Map<string, RecentCandidate>,
+  key: string,
+  now: number,
+) => {
+  const candidate = map.get(key)
+  if (!candidate || now - candidate.seenAt > RECENT_ENDPOINT_TTL_MS) {
+    return undefined
+  }
+  return candidate.identity ?? undefined
 }
 
 const sameAttribution = (
@@ -165,8 +233,13 @@ export const enrichConnectionsWithProcesses = (
   connections: IConnectionsItem[],
   snapshot?: ProcessConnectionSnapshot,
 ) => {
+  const now = Date.now()
   const exact = new Map<string, ProcessIdentity | null>()
+  const localEndpoint = new Map<string, ProcessIdentity | null>()
   const localPort = new Map<string, ProcessIdentity | null>()
+
+  purgeRecentCandidates(recentExactCandidates, now)
+  purgeRecentCandidates(recentLocalEndpointCandidates, now)
 
   if (snapshot?.supported) {
     for (const processConnection of snapshot.connections) {
@@ -174,6 +247,8 @@ export const enrichConnectionsWithProcesses = (
       if (!local?.port) continue
 
       const protocol = processConnection.protocol.trim().toUpperCase()
+      if (!protocol) continue
+
       const processPath = processConnection.processPath.trim()
       const identity: ProcessIdentity = {
         pid: processConnection.pid,
@@ -182,15 +257,29 @@ export const enrichConnectionsWithProcesses = (
           processNameFromPath(processPath),
         processPath,
       }
+      if (!identity.processName && !identity.processPath) continue
+
+      const localKey = localEndpointKey(protocol, local.host, local.port)
+      insertCandidate(localEndpoint, localKey, identity)
       insertCandidate(localPort, `${protocol}|${local.port}`, identity)
+      rememberCandidate(
+        recentLocalEndpointCandidates,
+        localKey,
+        identity,
+        now,
+      )
 
       const remote = parseEndpoint(processConnection.remoteAddress)
       if (remote?.host && remote.port) {
-        insertCandidate(
-          exact,
-          `${protocol}|${local.port}|${remote.host}|${remote.port}`,
-          identity,
+        const exactKey = exactEndpointKey(
+          protocol,
+          local.host,
+          local.port,
+          remote.host,
+          remote.port,
         )
+        insertCandidate(exact, exactKey, identity)
+        rememberCandidate(recentExactCandidates, exactKey, identity, now)
       }
     }
   }
@@ -217,7 +306,7 @@ export const enrichConnectionsWithProcesses = (
         processName: currentProcess || processNameFromPath(currentPath),
         processPath: currentPath,
         detail: '代理核心直接返回应用信息',
-        updatedAt: Date.now(),
+        updatedAt: now,
       })
       return connection
     }
@@ -225,6 +314,7 @@ export const enrichConnectionsWithProcesses = (
     const protocol = String(metadata.network || '')
       .trim()
       .toUpperCase()
+    const sourceHost = normalizeHost(String(metadata.sourceIP || ''))
     const sourcePort = String(metadata.sourcePort || '').trim()
     const destinationHost = normalizeHost(
       String(metadata.destinationIP || metadata.remoteDestination || ''),
@@ -239,20 +329,53 @@ export const enrichConnectionsWithProcesses = (
         processName: currentProcess,
         processPath: currentPath,
         detail: '连接缺少协议或源端口，无法与系统连接表关联',
-        updatedAt: Date.now(),
+        updatedAt: now,
       })
       return connection
     }
 
     const exactKey =
-      destinationHost && destinationPort
-        ? `${protocol}|${sourcePort}|${destinationHost}|${destinationPort}`
+      sourceHost && destinationHost && destinationPort
+        ? exactEndpointKey(
+            protocol,
+            sourceHost,
+            sourcePort,
+            destinationHost,
+            destinationPort,
+          )
         : ''
-    const localKey = `${protocol}|${sourcePort}`
+    const localKey = sourceHost
+      ? localEndpointKey(protocol, sourceHost, sourcePort)
+      : ''
+    const portKey = `${protocol}|${sourcePort}`
+
     const exactCandidate = exactKey ? exact.get(exactKey) : undefined
-    const localCandidate = localPort.get(localKey)
-    const exactMatched = Boolean(exactCandidate)
-    const identity = exactCandidate || localCandidate
+    const localEndpointCandidate = localKey
+      ? localEndpoint.get(localKey)
+      : undefined
+    const localPortCandidate = localPort.get(portKey)
+    const recentExactCandidate =
+      !exactCandidate && exactKey
+        ? readRecentCandidate(recentExactCandidates, exactKey, now)
+        : undefined
+    const recentLocalCandidate =
+      !localEndpointCandidate && localKey
+        ? readRecentCandidate(recentLocalEndpointCandidates, localKey, now)
+        : undefined
+
+    const identity =
+      exactCandidate ||
+      localEndpointCandidate ||
+      recentExactCandidate ||
+      recentLocalCandidate ||
+      localPortCandidate
+
+    let match: ProcessAttributionMatch = 'none'
+    if (exactCandidate) match = 'tuple'
+    else if (localEndpointCandidate) match = 'local-endpoint'
+    else if (recentExactCandidate) match = 'recent-tuple'
+    else if (recentLocalCandidate) match = 'recent-local-endpoint'
+    else if (localPortCandidate) match = 'local-port'
 
     if (!identity) {
       if (wasInjectedByWindows && previousAttribution) {
@@ -261,12 +384,15 @@ export const enrichConnectionsWithProcesses = (
       }
 
       const errors = snapshot?.errors.filter(Boolean).join('；')
-      let detail = 'Windows 连接表中未找到相同源端口的应用'
+      let detail = 'Windows 连接表中未找到对应应用'
       if (!snapshot) detail = '正在等待 Windows 连接表采样'
       else if (!snapshot.supported)
         detail = errors || '当前平台不支持系统应用归因'
-      else if (localPort.has(localKey) && localCandidate === null)
-        detail = '同一源端口存在多个应用候选，已停止不安全的猜测'
+      else if (
+        (localKey && localEndpoint.has(localKey) && !localEndpointCandidate) ||
+        (localPort.has(portKey) && !localPortCandidate)
+      )
+        detail = '同一端点存在多个应用候选，已停止不安全的猜测'
       else if (errors) detail = `系统应用归因未完成：${errors}`
 
       attributionUpdates.set(connection.id, {
@@ -276,22 +402,31 @@ export const enrichConnectionsWithProcesses = (
         processName: currentProcess,
         processPath: currentPath,
         detail,
-        updatedAt: Date.now(),
+        updatedAt: now,
       })
       return connection
     }
 
+    const detailByMatch: Record<
+      Exclude<ProcessAttributionMatch, 'core' | 'none'>,
+      string
+    > = {
+      tuple: 'Windows 连接表精确匹配本地和目标端点',
+      'local-endpoint': 'TUN/Fake-IP 场景下按本地端点识别应用',
+      'local-port': '按唯一源端口识别应用',
+      'recent-tuple': '短连接已结束，使用最近的精确端点记录识别应用',
+      'recent-local-endpoint':
+        '短连接已结束，使用最近的 TUN/Fake-IP 本地端点记录识别应用',
+    }
     const attribution: ProcessAttribution = {
       connectionId: connection.id,
       source: 'windows',
-      match: exactMatched ? 'tuple' : 'local-port',
+      match,
       pid: identity.pid,
       processName: identity.processName,
       processPath: identity.processPath,
-      detail: exactMatched
-        ? 'Windows 连接表精确匹配协议、源端口和目标端点'
-        : 'TUN 场景下按唯一源端口关联 Windows 应用',
-      updatedAt: Date.now(),
+      detail: detailByMatch[match as keyof typeof detailByMatch],
+      updatedAt: now,
     }
     attributionUpdates.set(connection.id, attribution)
 
