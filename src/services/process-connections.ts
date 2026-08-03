@@ -146,7 +146,8 @@ const rememberCandidate = (
 
   map.set(key, {
     identity:
-      current.identity && identityKey(current.identity) === identityKey(identity)
+      current.identity &&
+      identityKey(current.identity) === identityKey(identity)
         ? identity
         : null,
     seenAt: now,
@@ -262,12 +263,7 @@ export const enrichConnectionsWithProcesses = (
       const localKey = localEndpointKey(protocol, local.host, local.port)
       insertCandidate(localEndpoint, localKey, identity)
       insertCandidate(localPort, `${protocol}|${local.port}`, identity)
-      rememberCandidate(
-        recentLocalEndpointCandidates,
-        localKey,
-        identity,
-        now,
-      )
+      rememberCandidate(recentLocalEndpointCandidates, localKey, identity, now)
 
       const remote = parseEndpoint(processConnection.remoteAddress)
       if (remote?.host && remote.port) {
