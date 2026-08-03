@@ -11,7 +11,6 @@ import {
   type VirtualListHandle,
 } from '@/components/base'
 import { ScrollTopButton } from '@/components/layout/scroll-top-button'
-import RoutingRelationsPanel from '@/components/routing/routing-relations-panel'
 import DiversionDetector from '@/components/rule/diversion-detector'
 import DiversionManager from '@/components/rule/diversion-manager/index'
 import { ProviderButton } from '@/components/rule/provider-button'
@@ -47,7 +46,9 @@ const RulesPage = () => {
       lineNo: index + 1,
     }))
 
-    return rulesWithLineNo.filter((item) => match(item.payload ?? ''))
+    return rulesWithLineNo.filter((item) =>
+      match(`${item.payload ?? ''} ${item.type} ${item.proxy}`),
+    )
   }, [rules, match])
 
   const handleScroll = useCallback((event: Event) => {
@@ -79,10 +80,6 @@ const RulesPage = () => {
         </Stack>
       }
     >
-      <Box sx={{ mx: 1.25, pt: 1.25 }}>
-        <RoutingRelationsPanel />
-      </Box>
-
       <Box
         sx={{
           px: 1.25,
