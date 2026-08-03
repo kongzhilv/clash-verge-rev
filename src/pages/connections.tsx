@@ -1,5 +1,8 @@
 import {
   AccountTreeRounded,
+  CloseRounded,
+  CloudDownloadRounded,
+  CloudUploadRounded,
   DeleteForeverRounded,
   TableChartRounded,
   TableRowsRounded,
@@ -13,6 +16,7 @@ import {
   Fab,
   IconButton,
   MenuItem,
+  Stack,
   Tooltip,
   Zoom,
 } from '@mui/material'
@@ -220,91 +224,97 @@ const ConnectionsPage = () => {
   return (
     <BasePage
       full
-      title={
-        <span style={{ whiteSpace: 'nowrap' }}>
-          {t('connections.page.title')}
-        </span>
-      }
+      title={t('connections.page.title')}
       contentStyle={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        borderRadius: '8px',
         minHeight: 0,
       }}
       header={
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ mx: 0.5 }}>
-            {t('shared.labels.downloaded')}:{' '}
-            {parseTraffic(traffic?.downTotal || 0)}
-          </Box>
-          <Box sx={{ mx: 0.5 }}>
-            {t('shared.labels.uploaded')}: {parseTraffic(traffic?.upTotal || 0)}
-          </Box>
-          <Button
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <Chip
             size="small"
-            startIcon={<AccountTreeRounded />}
-            onClick={() => navigate('/rules?manage=projects')}
-          >
-            程序项目
-          </Button>
-          <IconButton
-            color="inherit"
+            variant="outlined"
+            icon={<CloudDownloadRounded />}
+            label={parseTraffic(traffic?.downTotal || 0)}
+          />
+          <Chip
             size="small"
-            onClick={() =>
-              setSetting((previous) =>
-                previous?.layout !== 'table'
-                  ? { ...previous, layout: 'table' }
-                  : { ...previous, layout: 'list' },
-              )
+            variant="outlined"
+            icon={<CloudUploadRounded />}
+            label={parseTraffic(traffic?.upTotal || 0)}
+          />
+          <Tooltip title="程序项目">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/rules?manage=projects')}
+            >
+              <AccountTreeRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip
+            title={
+              isTableLayout
+                ? t('shared.actions.listView')
+                : t('shared.actions.tableView')
             }
           >
-            {isTableLayout ? (
-              <TableRowsRounded titleAccess={t('shared.actions.listView')} />
-            ) : (
-              <TableChartRounded titleAccess={t('shared.actions.tableView')} />
-            )}
-          </IconButton>
-          <Button size="small" variant="contained" onClick={onCloseAll}>
-            {t('shared.actions.closeAll')}
-          </Button>
-        </Box>
+            <IconButton
+              size="small"
+              onClick={() =>
+                setSetting((previous) =>
+                  previous?.layout !== 'table'
+                    ? { ...previous, layout: 'table' }
+                    : { ...previous, layout: 'list' },
+                )
+              }
+            >
+              {isTableLayout ? (
+                <TableRowsRounded fontSize="small" />
+              ) : (
+                <TableChartRounded fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('shared.actions.closeAll')}>
+            <IconButton size="small" color="error" onClick={onCloseAll}>
+              <CloseRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       }
     >
       <Box
         sx={{
-          pt: 1,
-          mb: 0.5,
-          mx: '10px',
-          minHeight: '36px',
+          px: 1.25,
+          py: 1,
           display: 'flex',
           alignItems: 'center',
-          gap: 1,
+          gap: 0.75,
+          bgcolor: 'background.default',
           userSelect: 'text',
           position: 'sticky',
           top: 0,
           zIndex: 2,
         }}
       >
-        <ButtonGroup sx={{ mr: 1, flexBasis: 'content' }}>
+        <ButtonGroup size="small">
           <Button
-            size="small"
             variant={connectionsType === 'active' ? 'contained' : 'outlined'}
             onClick={() => selectConnectionsType('active')}
           >
-            {t('connections.components.actions.active')}{' '}
-            {connections?.activeConnections.length}
+            {`${t('connections.components.actions.active')} ${connections?.activeConnections.length ?? 0}`}
           </Button>
           <Button
-            size="small"
             variant={connectionsType === 'closed' ? 'contained' : 'outlined'}
             onClick={() => selectConnectionsType('closed')}
           >
-            {t('connections.components.actions.closed')}{' '}
-            {connections?.closedConnections.length}
+            {`${t('connections.components.actions.closed')} ${connections?.closedConnections.length ?? 0}`}
           </Button>
         </ButtonGroup>
+
         {!isTableLayout && (
           <BaseStyledSelect
             value={curOrderOpt}
@@ -317,11 +327,12 @@ const ConnectionsPage = () => {
             ))}
           </BaseStyledSelect>
         )}
+
         {projectFilter && (
           <Chip
             size="small"
             color="primary"
-            label={`项目：${activeProject?.name ?? projectFilter}`}
+            label={activeProject?.name ?? projectFilter}
             onDelete={() => navigate('/connections')}
           />
         )}
@@ -329,20 +340,21 @@ const ConnectionsPage = () => {
           <Chip
             size="small"
             color="secondary"
-            label={`出口：${policyFilter}`}
+            label={policyFilter}
             onDelete={() => navigate('/connections')}
           />
         )}
-        <Box sx={{ flex: 1, display: 'flex', '& > *': { flex: 1 } }}>
+
+        <Box sx={{ flex: 1, minWidth: 120 }}>
           <BaseSearchBox onSearch={handleSearch} />
         </Box>
+
         {isTableLayout && hasTableData && (
           <Tooltip title={t('connections.components.columnManager.title')}>
             <IconButton
               size="small"
               aria-label={t('connections.components.columnManager.title')}
               onClick={() => setIsColumnManagerOpen(true)}
-              sx={{ flex: '0 0 auto' }}
             >
               <ViewColumnRounded fontSize="small" />
             </IconButton>
@@ -380,7 +392,6 @@ const ConnectionsPage = () => {
           }}
           style={{
             flex: 1,
-            borderRadius: '8px',
             WebkitOverflowScrolling: 'touch',
             overscrollBehavior: 'contain',
           }}
