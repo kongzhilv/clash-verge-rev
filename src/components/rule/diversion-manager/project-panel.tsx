@@ -21,7 +21,11 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { actionLabel } from './action-label'
+import DetectedProgramsPanel, {
+  type DetectedProgram,
+} from './detected-programs-panel'
 import {
+  makeProject,
   resolveActionPolicy,
   type DiversionConfig,
   type DiversionProject,
@@ -71,6 +75,21 @@ export const ProjectPanel = ({
     setManualEditorOpen(true)
   }
 
+  const importDetectedProgram = (program: DetectedProgram) => {
+    const processName = program.name.trim()
+    const processPath = program.path.trim()
+    setEditingProject(
+      makeProject(config.projects.length, {
+        kind: 'program',
+        name: processName.replace(/\.exe$/i, '') || processName,
+        description: `由系统连接发现；PID：${program.pids.join(', ')}；当前连接：${program.connectionCount}`,
+        processNames: processName ? [processName] : [],
+        processPaths: processPath ? [processPath] : [],
+      }),
+    )
+    setManualEditorOpen(true)
+  }
+
   const saveProject = (project: DiversionProject) => {
     const exists = config.projects.some((item) => item.id === project.id)
     const projects = exists
@@ -98,6 +117,11 @@ export const ProjectPanel = ({
 
   return (
     <Box>
+      <DetectedProgramsPanel
+        projects={config.projects}
+        onImport={importDetectedProgram}
+      />
+
       <Stack
         direction={{ xs: 'column', sm: 'row' }}
         spacing={1}
@@ -119,8 +143,8 @@ export const ProjectPanel = ({
 
       {config.projects.length === 0 ? (
         <Alert severity="info">
-          还没有程序或项目档案。Mihomo 无法返回进程信息时，添加域名、IP
-          或端口特征仍可识别连接并应用分流。
+          还没有程序或项目档案。可从上方系统连接直接导入，也可手工添加域名、IP
+          或端口特征。
         </Alert>
       ) : (
         <Stack spacing={1}>
