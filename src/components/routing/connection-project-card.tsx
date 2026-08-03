@@ -3,9 +3,8 @@ import {
   ArrowForwardRounded,
   LanRounded,
   RuleRounded,
-  WarningAmberRounded,
 } from '@mui/icons-material'
-import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material'
+import { Box, Button, Divider, Paper, Stack, Typography } from '@mui/material'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 
@@ -27,16 +26,36 @@ const processNameFrom = (process: string, processPath: string) => {
 const attributionLabel = (
   source: 'mihomo' | 'windows' | 'unresolved' | undefined,
   match: 'core' | 'tuple' | 'local-port' | 'none' | undefined,
-  hasProcess: boolean,
-  inferred: boolean,
 ) => {
-  if (source === 'mihomo') return '核心识别'
-  if (source === 'windows' && match === 'tuple') return 'Windows 精确匹配'
-  if (source === 'windows' && match === 'local-port') return 'Windows TUN 归因'
-  if (hasProcess) return '已识别'
-  if (inferred) return '规则识别'
-  return '应用未识别'
+  if (source === 'mihomo') return '由代理核心识别'
+  if (source === 'windows' && match === 'tuple') {
+    return '由 Windows 连接端点精确识别'
+  }
+  if (source === 'windows' && match === 'local-port') {
+    return '由 Windows 唯一源端口识别（TUN）'
+  }
+  return '暂未识别应用'
 }
+
+interface RelationRowProps {
+  label: string
+  value: string
+}
+
+const RelationRow = ({ label, value }: RelationRowProps) => (
+  <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline' }}>
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      sx={{ width: 68, flex: '0 0 auto' }}
+    >
+      {label}
+    </Typography>
+    <Typography variant="body2" sx={{ minWidth: 0, wordBreak: 'break-all' }}>
+      {value}
+    </Typography>
+  </Stack>
+)
 
 export const ConnectionProjectCard = ({
   connection,
@@ -54,124 +73,105 @@ export const ConnectionProjectCard = ({
     String(connection.metadata.process ?? ''),
     processPath,
   )
-  const hasProcess = Boolean(processName || processPath)
-  const applicationName = processName || match?.project.name || '应用未识别'
+  const applicationName = processName || match?.project.name || '未识别应用'
   const applicationDetail =
     processPath ||
     attribution?.detail ||
     (match
-      ? '已通过域名、IP 或端口命中应用规则'
-      : '系统和代理核心暂未提供可用的应用信息')
-  const ruleName = match?.project.name || '未设置应用规则'
-  const actualChain = [...connection.chains].reverse()
-  const outlet = match?.policy || actualChain[0] || '未返回出口'
-  const hasApplication = Boolean(hasProcess || match)
+      ? `依据 ${match.reasons.join('、')} 识别`
+      : '当前连接没有可用的应用信息')
+  const expectedPolicy = match?.policy || '未设置'
+  const actualRule = connection.rule || '未返回'
+  const actualOutbound =
+    [...connection.chains].reverse().join(' / ') || '未返回'
+  const routeDiffers =
+    match?.policy &&
+    actualOutbound !== '未返回' &&
+    !connection.chains.some(
+      (item) => item.trim().toLowerCase() === match.policy.toLowerCase(),
+    )
 
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-      <Stack spacing={1.25}>
-        <Stack direction="row" spacing={1.25} sx={{ alignItems: 'flex-start' }}>
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              flex: '0 0 auto',
-              display: 'grid',
-              placeItems: 'center',
-              borderRadius: 2,
-              bgcolor: hasApplication ? 'success.main' : 'action.hover',
-              color: hasApplication ? 'success.contrastText' : 'text.secondary',
-            }}
-          >
-            <AppsRounded />
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Stack
-              direction="row"
-              spacing={0.75}
-              sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-            >
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                {applicationName}
-              </Typography>
-              <Chip
-                size="small"
-                color={hasApplication ? 'success' : 'default'}
-                variant="outlined"
-                label={attributionLabel(
-                  attribution?.source,
-                  attribution?.match,
-                  hasProcess,
-                  Boolean(match),
-                )}
-              />
-              {match?.inferred && (
-                <Chip
-                  size="small"
-                  color="warning"
-                  icon={<WarningAmberRounded />}
-                  label="连接特征"
-                />
-              )}
-            </Stack>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ mt: 0.25, wordBreak: 'break-all' }}
-            >
-              {applicationDetail}
-            </Typography>
-            {attribution?.pid !== undefined && (
-              <Typography variant="caption" color="text.secondary">
-                PID {attribution.pid}
-              </Typography>
-            )}
-          </Box>
-        </Stack>
-
-        <Stack
-          direction="row"
-          spacing={0.75}
+    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+      <Stack direction="row" spacing={1.25} sx={{ p: 1.5, alignItems: 'center' }}>
+        <Box
           sx={{
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            px: 1,
-            py: 0.75,
-            borderRadius: 1.5,
-            bgcolor: 'action.hover',
+            width: 38,
+            height: 38,
+            flex: '0 0 auto',
+            display: 'grid',
+            placeItems: 'center',
+            borderRadius: 2,
+            bgcolor: processName || match ? 'success.main' : 'action.hover',
+            color:
+              processName || match ? 'success.contrastText' : 'text.secondary',
           }}
         >
-          <RuleRounded fontSize="small" color="action" />
-          <Typography variant="body2">{ruleName}</Typography>
-          <ArrowForwardRounded fontSize="small" color="action" />
-          <LanRounded fontSize="small" color="action" />
-          <Typography variant="body2">{outlet}</Typography>
-        </Stack>
+          <AppsRounded fontSize="small" />
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
+            {applicationName}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', wordBreak: 'break-all' }}
+          >
+            {applicationDetail}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {attributionLabel(attribution?.source, attribution?.match)}
+            {attribution?.pid !== undefined ? ` · PID ${attribution.pid}` : ''}
+          </Typography>
+        </Box>
+      </Stack>
 
-        <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+      <Divider />
+
+      <Stack spacing={0.75} sx={{ px: 1.5, py: 1.25 }}>
+        <RelationRow
+          label="应用规则"
+          value={match?.project.name || '未设置'}
+        />
+        <RelationRow label="预期出口" value={expectedPolicy} />
+        <RelationRow label="命中规则" value={actualRule} />
+        <RelationRow label="实际出口" value={actualOutbound} />
+        {routeDiffers && (
+          <Typography variant="caption" color="warning.main">
+            当前连接未经过预期出口；保存后需重新建立连接才能重新匹配。
+          </Typography>
+        )}
+      </Stack>
+
+      <Divider />
+
+      <Stack direction="row" spacing={0.5} sx={{ px: 1, py: 0.5 }}>
+        <Button
+          size="small"
+          startIcon={<RuleRounded />}
+          onClick={() =>
+            navigate(
+              match
+                ? `/rules?project=${encodeURIComponent(match.project.id)}`
+                : '/rules?manage=projects',
+            )
+          }
+        >
+          {match ? '编辑应用分流' : '设置应用分流'}
+        </Button>
+        {match?.policy && (
           <Button
             size="small"
+            startIcon={<LanRounded />}
+            endIcon={<ArrowForwardRounded />}
             onClick={() =>
-              navigate(
-                match
-                  ? `/rules?project=${encodeURIComponent(match.project.id)}`
-                  : '/rules?manage=projects',
-              )
+              navigate(`/proxies?policy=${encodeURIComponent(match.policy)}`)
             }
           >
-            {match ? '编辑应用规则' : '创建应用规则'}
+            出口
           </Button>
-          {match?.policy && (
-            <Button
-              size="small"
-              onClick={() =>
-                navigate(`/proxies?policy=${encodeURIComponent(match.policy)}`)
-              }
-            >
-              查看出口策略
-            </Button>
-          )}
-        </Stack>
+        )}
       </Stack>
     </Paper>
   )
