@@ -1,8 +1,6 @@
 import {
   AccountTreeRounded,
   CloseRounded,
-  CloudDownloadRounded,
-  CloudUploadRounded,
   DeleteForeverRounded,
   TableChartRounded,
   TableRowsRounded,
@@ -38,6 +36,9 @@ import {
   ConnectionDetail,
   type ConnectionDetailRef,
 } from '@/components/connection/connection-detail'
+import ConnectionFilterMenu, {
+  type ConnectionFilters,
+} from '@/components/connection/connection-filter-menu'
 import { ConnectionRowItem } from '@/components/connection/connection-row-item'
 import {
   getConnectionStartTime,
@@ -51,9 +52,7 @@ import {
 import { useConnectionData } from '@/hooks/use-connection-data'
 import { useConnectionSetting } from '@/hooks/use-connection-setting'
 import { useDiversionProfile } from '@/hooks/use-diversion-profile'
-import { useTrafficData } from '@/hooks/use-traffic-data'
 import { useVisibility } from '@/hooks/use-visibility'
-import parseTraffic from '@/utils/parse-traffic'
 
 type OrderFunc = (list: IConnectionsItem[]) => IConnectionsItem[]
 
@@ -91,6 +90,21 @@ const orderFunctionMap = ORDER_OPTIONS.reduce<Record<OrderKey, OrderFunc>>(
 )
 
 const EMPTY_CONNECTIONS: IConnectionsItem[] = []
+const EMPTY_FILTERS: ConnectionFilters = {
+  application: '',
+  rule: '',
+  outbound: '',
+}
+
+const connectionApplication = (connection: IConnectionsItem) => {
+  const process = String(connection.metadata.process ?? '').trim()
+  if (process) return process
+  const path = String(connection.metadata.processPath ?? '').trim()
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+}
+
+const connectionOutbound = (connection: IConnectionsItem) =>
+  connection.chains.at(-1)?.trim() ?? ''
 
 const ConnectionsPage = () => {
   const { t } = useTranslation()
@@ -104,6 +118,7 @@ const ConnectionsPage = () => {
     () => () => true,
   )
   const [hasSearch, setHasSearch] = useState(false)
+  const [filters, setFilters] = useState<ConnectionFilters>(EMPTY_FILTERS)
   const [curOrderOpt, setCurOrderOpt] = useState<OrderKey>('default')
   const [connectionsType, setConnectionsType] = useState<'active' | 'closed'>(
     'active',
@@ -113,9 +128,6 @@ const ConnectionsPage = () => {
     response: { data: connections },
     clearClosedConnections,
   } = useConnectionData({ enabled: pageVisible })
-  const {
-    response: { data: traffic },
-  } = useTrafficData({ enabled: pageVisible })
 
   const [setting, setSetting] = useConnectionSetting()
   const isTableLayout = setting.layout === 'table'
@@ -155,26 +167,54 @@ const ConnectionsPage = () => {
       ) {
         return false
       }
+      if (
+        filters.application &&
+        connectionApplication(conn) !== filters.application
+      ) {
+        return false
+      }
+      if (filters.rule && conn.rule !== filters.rule) return false
+      if (filters.outbound && connectionOutbound(conn) !== filters.outbound) {
+        return false
+      }
       if (!hasSearch) return true
 
-      const { host, destinationIP, process, processPath } = conn.metadata
+      const {
+        host,
+        destinationIP,
+        remoteDestination,
+        process,
+        processPath,
+      } = conn.metadata
       return (
         match(host || '') ||
         match(destinationIP || '') ||
+        match(remoteDestination || '') ||
         match(process || '') ||
         match(processPath || '') ||
+        match(conn.rule || '') ||
+        match(conn.chains.join(' ')) ||
         match(projectMatch?.project.name ?? '') ||
         match(projectMatch?.project.description ?? '') ||
         match(projectMatch?.policy ?? '')
       )
     })
 
-    if (isTableLayout && !hasSearch && !projectFilter && !policyFilter) {
+    if (
+      isTableLayout &&
+      !hasSearch &&
+      !projectFilter &&
+      !policyFilter &&
+      !filters.application &&
+      !filters.rule &&
+      !filters.outbound
+    ) {
       return filtered
     }
     return orderFunc([...filtered])
   }, [
     curOrderOpt,
+    filters,
     hasSearch,
     isTableLayout,
     match,
@@ -234,19 +274,7 @@ const ConnectionsPage = () => {
       }}
       header={
         <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
-          <Chip
-            size="small"
-            variant="outlined"
-            icon={<CloudDownloadRounded />}
-            label={parseTraffic(traffic?.downTotal || 0)}
-          />
-          <Chip
-            size="small"
-            variant="outlined"
-            icon={<CloudUploadRounded />}
-            label={parseTraffic(traffic?.upTotal || 0)}
-          />
-          <Tooltip title="应用规则">
+          <Tooltip title="应用分流">
             <IconButton
               size="small"
               onClick={() => navigate('/rules?manage=projects')}
@@ -349,6 +377,12 @@ const ConnectionsPage = () => {
           <BaseSearchBox onSearch={handleSearch} />
         </Box>
 
+        <ConnectionFilterMenu
+          connections={selectedConnections}
+          value={filters}
+          onChange={setFilters}
+        />
+
         {isTableLayout && hasTableData && (
           <Tooltip title={t('connections.components.columnManager.title')}>
             <IconButton
@@ -375,7 +409,7 @@ const ConnectionsPage = () => {
         <VirtualList
           key={`${connectionsType}:${projectFilter}:${policyFilter}`}
           count={displayRows.length}
-          estimateSize={64}
+          estimateSize={58}
           renderItem={(index) => {
             const row = displayRows[index]
             const projectMatch = projectMatches.get(row.id)
