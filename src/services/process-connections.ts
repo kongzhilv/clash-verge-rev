@@ -18,11 +18,7 @@ export interface ProcessConnectionSnapshot {
 }
 
 export type ProcessAttributionSource = 'mihomo' | 'windows' | 'unresolved'
-export type ProcessAttributionMatch =
-  | 'core'
-  | 'tuple'
-  | 'local-port'
-  | 'none'
+export type ProcessAttributionMatch = 'core' | 'tuple' | 'local-port' | 'none'
 
 export interface ProcessAttribution {
   connectionId: string
@@ -170,7 +166,8 @@ export const enrichConnectionsWithProcesses = (
       const identity: ProcessIdentity = {
         pid: processConnection.pid,
         processName:
-          processConnection.processName.trim() || processNameFromPath(processPath),
+          processConnection.processName.trim() ||
+          processNameFromPath(processPath),
         processPath,
       }
       insertCandidate(localPort, `${protocol}|${local.port}`, identity)
@@ -192,7 +189,9 @@ export const enrichConnectionsWithProcesses = (
     const metadata = connection.metadata
     const currentProcess = String(metadata.process ?? '').trim()
     const currentPath = String(metadata.processPath ?? '').trim()
-    const previousAttribution = processAttributionSnapshot.items.get(connection.id)
+    const previousAttribution = processAttributionSnapshot.items.get(
+      connection.id,
+    )
     const wasInjectedByWindows =
       previousAttribution?.source === 'windows' &&
       currentProcess === previousAttribution.processName &&

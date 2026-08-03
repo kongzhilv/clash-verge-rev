@@ -149,7 +149,9 @@ export const ProjectPanel = ({
         </Stack>
 
         {config.projects.length === 0 ? (
-          <Alert severity="info">从上方选择联网应用，或新建一条应用规则。</Alert>
+          <Alert severity="info">
+            从上方选择联网应用，或新建一条应用规则。
+          </Alert>
         ) : (
           <Stack spacing={0.75}>
             {config.projects.map((project) => {

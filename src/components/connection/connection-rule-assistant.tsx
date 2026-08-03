@@ -234,8 +234,7 @@ const buildProjectFromConnection = (
   return makeProject(index, {
     kind: processName || processPath ? 'program' : 'project',
     name,
-    description:
-      '由连接详情创建，可继续补充此应用使用的域名、IP 和端口。',
+    description: '由连接详情创建，可继续补充此应用使用的域名、IP 和端口。',
     action: 'current',
     processNames: processName ? [processName] : [],
     processPaths: processPath ? [processPath] : [],

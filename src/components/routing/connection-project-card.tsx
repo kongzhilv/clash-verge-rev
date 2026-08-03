@@ -75,9 +75,7 @@ export const ConnectionProjectCard = ({
               placeItems: 'center',
               borderRadius: 2,
               bgcolor: hasApplication ? 'success.main' : 'action.hover',
-              color: hasApplication
-                ? 'success.contrastText'
-                : 'text.secondary',
+              color: hasApplication ? 'success.contrastText' : 'text.secondary',
             }}
           >
             <AppsRounded />
@@ -95,7 +93,10 @@ export const ConnectionProjectCard = ({
                 size="small"
                 color={hasApplication ? 'success' : 'default'}
                 variant="outlined"
-                label={attributionLabel(attribution?.source, attribution?.match)}
+                label={attributionLabel(
+                  attribution?.source,
+                  attribution?.match,
+                )}
               />
               {match?.inferred && (
                 <Chip

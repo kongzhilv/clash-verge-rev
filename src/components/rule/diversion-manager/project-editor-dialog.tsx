@@ -87,9 +87,7 @@ export const ProjectEditorDialog = ({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>
-        {project ? '编辑应用规则' : '新建应用规则'}
-      </DialogTitle>
+      <DialogTitle>{project ? '编辑应用规则' : '新建应用规则'}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
           <Alert severity="info">
