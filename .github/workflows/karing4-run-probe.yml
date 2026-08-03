@@ -1,5 +1,5 @@
 name: Karing 4 Final Retarget
-run-name: Pin final formatted candidate and trigger audited release
+run-name: Execute final candidate pin and audited release trigger
 
 on:
   push:
