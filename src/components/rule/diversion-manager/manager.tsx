@@ -202,7 +202,7 @@ export const DiversionManager = ({
 
   return (
     <>
-      <Tooltip title="管理程序、规则和出口">
+      <Tooltip title="管理应用、规则和出口">
         <Button
           size="small"
           variant="contained"
@@ -237,7 +237,7 @@ export const DiversionManager = ({
                 分流中心
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
-                {`${config.projects.length} 个项目 · ${enabledGroupCount} 个规则组生效`}
+                {`${config.projects.length} 个应用规则 · ${enabledGroupCount} 个规则组生效`}
               </Typography>
             </Box>
             <Button
@@ -261,7 +261,7 @@ export const DiversionManager = ({
               value="projects"
               icon={<AppsRounded fontSize="small" />}
               iconPosition="start"
-              label={`程序与项目 ${config.projects.length}`}
+              label={`应用分流 ${config.projects.length}`}
             />
             <Tab
               value="rules"
@@ -347,7 +347,7 @@ export const DiversionManager = ({
                     }}
                   >
                     <Typography color="text.secondary">
-                      暂无额外规则。程序项目会自动生成对应规则。
+                      暂无额外规则。应用规则会自动生成对应规则。
                     </Typography>
                   </Box>
                 ) : (

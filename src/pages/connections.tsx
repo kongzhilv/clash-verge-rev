@@ -246,7 +246,7 @@ const ConnectionsPage = () => {
             icon={<CloudUploadRounded />}
             label={parseTraffic(traffic?.upTotal || 0)}
           />
-          <Tooltip title="程序项目">
+          <Tooltip title="应用规则">
             <IconButton
               size="small"
               onClick={() => navigate('/rules?manage=projects')}

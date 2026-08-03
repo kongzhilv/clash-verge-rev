@@ -6,7 +6,6 @@ import {
   HubRounded,
   LanRounded,
   LinkRounded,
-  WorkspacesRounded,
 } from '@mui/icons-material'
 import {
   Alert,
@@ -134,10 +133,10 @@ export const ProjectPanel = ({
         >
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              项目
+              应用规则
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              一个项目对应一组识别条件和一个出口。
+              一个应用规则对应一组识别条件和一个出口。
             </Typography>
           </Box>
           <Button
@@ -150,7 +149,7 @@ export const ProjectPanel = ({
         </Stack>
 
         {config.projects.length === 0 ? (
-          <Alert severity="info">从上方选择程序，或新建一个项目。</Alert>
+          <Alert severity="info">从上方选择联网应用，或新建一条应用规则。</Alert>
         ) : (
           <Stack spacing={0.75}>
             {config.projects.map((project) => {
@@ -192,11 +191,7 @@ export const ProjectPanel = ({
                           : 'text.secondary',
                       }}
                     >
-                      {project.kind === 'program' ? (
-                        <AppsRounded fontSize="small" />
-                      ) : (
-                        <WorkspacesRounded fontSize="small" />
-                      )}
+                      <AppsRounded fontSize="small" />
                     </Avatar>
 
                     <Box sx={{ flex: 1, minWidth: 0 }}>

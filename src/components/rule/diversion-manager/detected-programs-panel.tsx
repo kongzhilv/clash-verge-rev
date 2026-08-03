@@ -135,7 +135,7 @@ export const DetectedProgramsPanel = ({
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              程序发现
+              联网应用
             </Typography>
             {snapshot?.supported && (
               <Typography variant="caption" color="text.secondary">
@@ -144,7 +144,7 @@ export const DetectedProgramsPanel = ({
             )}
           </Stack>
           <Typography variant="body2" color="text.secondary" noWrap>
-            Windows 当前联网程序，可直接加入分流。
+            识别当前联网应用，并为其设置出口策略。
           </Typography>
         </Box>
         <Tooltip title="刷新">

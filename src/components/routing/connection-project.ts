@@ -132,7 +132,7 @@ export const resolveConnectionProject = (
         )
       ) {
         score += 120
-        reasons.push('完整程序路径')
+        reasons.push('完整应用路径')
       }
 
       if (
@@ -143,7 +143,7 @@ export const resolveConnectionProject = (
         })
       ) {
         score += 100
-        reasons.push('程序名称')
+        reasons.push('应用名称')
       }
 
       if (host && project.domains.some((value) => domainMatches(host, value))) {

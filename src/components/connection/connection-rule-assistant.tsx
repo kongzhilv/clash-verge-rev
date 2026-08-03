@@ -9,7 +9,6 @@ import {
   RefreshRounded,
   RouterRounded,
   SettingsEthernetRounded,
-  WorkspacesRounded,
 } from '@mui/icons-material'
 import {
   Alert,
@@ -195,7 +194,7 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
     candidates.push({
       id: candidateKey('PROCESS-NAME', processName),
       label: '进程名称',
-      description: '按程序文件名匹配，适合同一程序路径可能变化的情况。',
+      description: '按应用名称匹配，适合同一应用路径可能变化的情况。',
       type: 'PROCESS-NAME',
       value: processName,
       icon: <AppsRounded />,
@@ -205,7 +204,7 @@ const buildCandidates = (connection: IConnectionsItem): RuleCandidate[] => {
     candidates.push({
       id: candidateKey('PROCESS-PATH', processPath),
       label: '进程路径',
-      description: '只匹配这个完整程序路径。',
+      description: '只匹配这个应用完整路径。',
       type: 'PROCESS-PATH',
       value: processPath,
       icon: <RouterRounded />,
@@ -230,13 +229,13 @@ const buildProjectFromConnection = (
     String(metadata.destinationIP || metadata.remoteDestination || ''),
   )
   const destinationPort = String(metadata.destinationPort ?? '').trim()
-  const name = processName || host || `连接项目 ${index + 1}`
+  const name = processName || host || `应用规则 ${index + 1}`
 
   return makeProject(index, {
     kind: processName || processPath ? 'program' : 'project',
     name,
     description:
-      '由连接详情创建，可继续补充同一程序或项目使用的其他域名、IP 和端口。',
+      '由连接详情创建，可继续补充此应用使用的域名、IP 和端口。',
     action: 'current',
     processNames: processName ? [processName] : [],
     processPaths: processPath ? [processPath] : [],
@@ -315,8 +314,8 @@ export const ConnectionRuleAssistant = ({
         }
         showNotice.success(
           closed
-            ? '程序项目与分流规则已保存并立即应用'
-            : '程序项目与分流规则已保存；当前连接已关闭，下次连接会重新匹配',
+            ? '应用规则与分流规则已保存并立即应用'
+            : '应用规则与分流规则已保存；当前连接已关闭，下次连接会重新匹配',
         )
         return true
       } catch (error) {
@@ -444,10 +443,10 @@ export const ConnectionRuleAssistant = ({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>连接、程序项目、规则组与出口联动</DialogTitle>
+        <DialogTitle>连接、应用规则、规则组与出口联动</DialogTitle>
         <DialogContent dividers sx={{ p: 0 }}>
           <Alert severity="info" sx={{ borderRadius: 0 }}>
-            可把整条连接保存为程序/项目档案，也可把单个域名、IP、端口或进程条件加入手动规则组。
+            可把整条连接保存为应用规则，也可把单个域名、IP、端口或进程条件加入手动规则组。
           </Alert>
 
           <Box sx={{ p: 2 }}>
@@ -494,11 +493,11 @@ export const ConnectionRuleAssistant = ({
               <Stack spacing={0.75} sx={{ alignSelf: { md: 'flex-start' } }}>
                 <Button
                   variant="contained"
-                  startIcon={<WorkspacesRounded />}
+                  startIcon={<AppsRounded />}
                   onClick={openProjectEditor}
                   disabled={loading || savingGroupId !== null}
                 >
-                  {linkedProject ? '编辑关联项目' : '添加为程序或项目'}
+                  {linkedProject ? '编辑关联应用规则' : '添加为应用规则'}
                 </Button>
                 <Button
                   startIcon={<OpenInNewRounded />}
@@ -547,7 +546,7 @@ export const ConnectionRuleAssistant = ({
               </List>
               {candidates.length === 0 && (
                 <Typography sx={{ p: 2, color: 'text.secondary' }}>
-                  没有可单独添加的连接条件，仍可通过上方按钮手动建立程序或项目档案。
+                  没有可单独添加的连接条件，仍可通过上方按钮手动建立应用规则。
                 </Typography>
               )}
             </Box>
@@ -642,7 +641,7 @@ export const ConnectionRuleAssistant = ({
               ) : (
                 <Box sx={{ p: 3 }}>
                   <Typography color="text.secondary">
-                    没有额外的手动规则组。优先使用“程序或项目档案”，它会同时维护多项识别条件、规则组和出口。
+                    没有额外的手动规则组。优先使用“应用规则”，它会同时维护多项识别条件、规则组和出口。
                   </Typography>
                 </Box>
               )}

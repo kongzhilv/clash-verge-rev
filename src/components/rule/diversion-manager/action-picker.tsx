@@ -213,7 +213,7 @@ export const ActionPicker = ({
             <Box>
               <Typography sx={{ fontWeight: 700 }}>现有策略组</Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                对应 Karing 服务器选择页中的测速组和自定义组。
+                选择现有代理组，或手动填写一个出口名称。
               </Typography>
             </Box>
           </Stack>

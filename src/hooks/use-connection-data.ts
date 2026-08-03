@@ -3,7 +3,9 @@ import { MihomoWebSocket } from 'tauri-plugin-mihomo-api'
 
 import {
   enrichConnectionsWithProcesses,
+  getProcessAttributionSnapshot,
   getSystemProcessConnections,
+  subscribeProcessAttribution,
   type ProcessConnectionSnapshot,
 } from '@/services/process-connections'
 
@@ -521,4 +523,15 @@ export const useConnectionSummaryData = (options?: { enabled?: boolean }) => {
     response,
     refreshGetClashConnectionSummary,
   }
+}
+
+export const useConnectionProcessAttribution = (
+  connectionId?: string | null,
+) => {
+  const snapshot = useSyncExternalStore(
+    subscribeProcessAttribution,
+    getProcessAttributionSnapshot,
+    getProcessAttributionSnapshot,
+  )
+  return connectionId ? snapshot.items.get(connectionId) : undefined
 }

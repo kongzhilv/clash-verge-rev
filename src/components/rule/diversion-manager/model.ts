@@ -133,7 +133,7 @@ export const makeProject = (
     id,
     groupId: patch.groupId?.trim() || `project-${id}`,
     kind: patch.kind === 'project' ? 'project' : 'program',
-    name: patch.name?.trim() || `程序或项目 ${index + 1}`,
+    name: patch.name?.trim() || `应用规则 ${index + 1}`,
     description: patch.description ?? '',
     enabled: patch.enabled !== false,
     action: patch.action ?? 'current',
@@ -236,7 +236,7 @@ const normalizeProject = (value: unknown, index: number): DiversionProject => {
     name:
       typeof raw.name === 'string' && raw.name.trim()
         ? raw.name.trim()
-        : `程序或项目 ${index + 1}`,
+        : `应用规则 ${index + 1}`,
     description: typeof raw.description === 'string' ? raw.description : '',
     enabled: raw.enabled !== false,
     action,
@@ -289,7 +289,7 @@ export const syncProjectGroups = (config: DiversionConfig): DiversionConfig => {
   )
   const managed = config.projects.map((project) => ({
     id: project.groupId,
-    name: `${project.kind === 'program' ? '程序' : '项目'} · ${project.name}`,
+    name: `应用 · ${project.name}`,
     enabled: project.enabled,
     logic: 'or' as const,
     action: project.action,
@@ -502,14 +502,14 @@ export const validateConfig = (input: DiversionConfig): string | null => {
   const projectGroupIds = new Set<string>()
   for (const project of config.projects) {
     const name = project.name.trim()
-    if (!name) return '存在未命名的程序或项目档案'
+    if (!name) return '存在未命名的应用规则'
     const key = name.toLowerCase()
-    if (projectNames.has(key)) return `程序或项目“${name}”名称重复`
+    if (projectNames.has(key)) return `应用规则“${name}”名称重复`
     projectNames.add(key)
-    if (projectIds.has(project.id)) return `程序或项目“${name}”的内部 ID 重复`
+    if (projectIds.has(project.id)) return `应用规则“${name}”的内部 ID 重复`
     projectIds.add(project.id)
     if (projectGroupIds.has(project.groupId)) {
-      return `程序或项目“${name}”的托管规则组 ID 重复`
+      return `应用规则“${name}”的托管规则组 ID 重复`
     }
     projectGroupIds.add(project.groupId)
     if (
@@ -517,10 +517,10 @@ export const validateConfig = (input: DiversionConfig): string | null => {
       project.action !== 'none' &&
       projectConditionCount(project) === 0
     ) {
-      return `程序或项目“${name}”至少需要一个程序、域名、IP 或端口条件`
+      return `应用规则“${name}”至少需要一个应用、域名、IP 或端口条件`
     }
     if (project.action === 'policy' && !project.policy?.trim()) {
-      return `程序或项目“${name}”缺少指定策略组名称`
+      return `应用规则“${name}”缺少指定策略组名称`
     }
   }
 

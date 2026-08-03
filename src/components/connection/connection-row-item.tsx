@@ -123,7 +123,7 @@ export const ConnectionRowItem = memo(
                 title={`${projectName}${projectPolicy ? ` → ${projectPolicy}` : ''}${projectInferred ? '（依据连接特征推断）' : ''}`}
               >
                 <AccountTreeRounded sx={{ fontSize: 12 }} />
-                项目：{projectName}
+                应用规则：{projectName}
                 {projectInferred ? ' · 推断' : ''}
               </span>
             )}
@@ -133,7 +133,7 @@ export const ConnectionRowItem = memo(
                 title={row.processPath || row.process}
               >
                 <AppsRounded sx={{ fontSize: 12 }} />
-                程序：{row.process}
+                应用：{row.process}
               </span>
             )}
             <span style={tagStyle}>{row.network}</span>

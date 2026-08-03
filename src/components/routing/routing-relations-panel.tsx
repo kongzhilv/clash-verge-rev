@@ -90,7 +90,7 @@ export const RoutingRelationsPanel = ({
           </Button>
         }
       >
-        尚未建立程序分流关系。
+        尚未建立应用分流关系。
       </Alert>
     )
   }
@@ -109,7 +109,7 @@ export const RoutingRelationsPanel = ({
           </Button>
         }
       >
-        没有项目使用“{policyFilter}”。
+        没有应用规则使用“{policyFilter}”。
       </Alert>
     )
   }
@@ -126,11 +126,11 @@ export const RoutingRelationsPanel = ({
           <Typography sx={{ fontWeight: 700 }}>分流关系</Typography>
           {!compact && (
             <Typography variant="caption" color="text.secondary">
-              程序 → 规则 → 出口
+              应用 → 规则 → 出口
             </Typography>
           )}
         </Box>
-        <Tooltip title="管理项目">
+        <Tooltip title="管理应用规则">
           <IconButton
             size="small"
             onClick={() => navigate('/rules?manage=projects')}
@@ -205,7 +205,7 @@ export const RoutingRelationsPanel = ({
               </Stack>
 
               <Tooltip
-                title={`项目连接 ${matchedConnections} · 出口连接 ${policyConnections}`}
+                title={`规则连接 ${matchedConnections} · 出口连接 ${policyConnections}`}
               >
                 <Chip size="small" label={matchedConnections} />
               </Tooltip>
