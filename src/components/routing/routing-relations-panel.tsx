@@ -100,7 +100,11 @@ export const RoutingRelationsPanel = ({
       <Alert
         severity="warning"
         action={
-          <Button color="inherit" size="small" onClick={() => navigate('/proxies')}>
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => navigate('/proxies')}
+          >
             清除
           </Button>
         }
@@ -223,7 +227,9 @@ export const RoutingRelationsPanel = ({
                   <IconButton
                     size="small"
                     onClick={() =>
-                      navigate(`/rules?project=${encodeURIComponent(project.id)}`)
+                      navigate(
+                        `/rules?project=${encodeURIComponent(project.id)}`,
+                      )
                     }
                   >
                     <RuleRounded fontSize="small" />
@@ -234,7 +240,9 @@ export const RoutingRelationsPanel = ({
                     <IconButton
                       size="small"
                       onClick={() =>
-                        navigate(`/proxies?policy=${encodeURIComponent(policy)}`)
+                        navigate(
+                          `/proxies?policy=${encodeURIComponent(policy)}`,
+                        )
                       }
                     >
                       <LanRounded fontSize="small" />
