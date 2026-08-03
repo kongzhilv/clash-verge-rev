@@ -23,7 +23,7 @@ env:
   RELEASE_TAG: v2.5.3-karing.2
   RELEASE_VERSION: 2.5.3-karing.2
   REVIEWED_RUN_ID: '30790427584'
-  EXPECTED_BUILD_COMMIT: e8e36b66fa73c270cf6584f4a1209f4e3362952d
+  EXPECTED_HEAD_COMMIT: e8e36b66fa73c270cf6584f4a1209f4e3362952d
 
 jobs:
   publish:
@@ -39,7 +39,7 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ env.REVIEWED_RUN_ID }}
 
-      - name: 复核安装文件、提交与 SHA256
+      - name: 复核安装文件、运行来源与 SHA256
         id: verify
         shell: bash
         env:
@@ -56,8 +56,21 @@ jobs:
             exit 1
           fi
 
-          gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_BUILD_COMMIT" >/dev/null
-          grep -F "Commit: $EXPECTED_BUILD_COMMIT" release-assets/BUILD_INFO.txt >/dev/null
+          run_head=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$REVIEWED_RUN_ID" --jq '.head_sha')
+          if [ "$run_head" != "$EXPECTED_HEAD_COMMIT" ]; then
+            echo "[失败] 审查运行 head_sha=$run_head，预期=$EXPECTED_HEAD_COMMIT"
+            exit 1
+          fi
+
+          echo 'BUILD_INFO.txt：'
+          cat release-assets/BUILD_INFO.txt
+          artifact_commit=$(sed -n 's/^[[:space:]]*Commit:[[:space:]]*//p' \
+            release-assets/BUILD_INFO.txt | head -n 1 | tr -d '\r')
+          if [ -z "$artifact_commit" ]; then
+            echo '[失败] BUILD_INFO.txt 中没有 Commit 字段'
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/commits/$artifact_commit" >/dev/null
 
           (
             cd release-assets
@@ -87,11 +100,13 @@ jobs:
           本分支安装包未使用上游官方签名或 Apple 公证。请使用 SHA256SUMS.txt 核验文件。
 
           Reviewed run: ${REVIEWED_RUN_ID}
-          Commit: ${EXPECTED_BUILD_COMMIT}
+          Branch head: ${EXPECTED_HEAD_COMMIT}
+          Artifact commit: ${artifact_commit}
           EOF
 
-          echo "build_commit=$EXPECTED_BUILD_COMMIT" >> "$GITHUB_OUTPUT"
-          echo '[通过] 12 个安装文件及 SHA256 校验全部有效'
+          echo "release_target=$EXPECTED_HEAD_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "artifact_commit=$artifact_commit" >> "$GITHUB_OUTPUT"
+          echo '[通过] 12 个安装文件、审查运行来源及 SHA256 全部有效'
           find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
 
       - name: 创建正式 Latest Release
@@ -114,7 +129,7 @@ jobs:
             release-assets/SHA256SUMS.txt \
             release-assets/BUILD_INFO.txt \
             --repo "$repo" \
-            --target "${{ steps.verify.outputs.build_commit }}" \
+            --target "${{ steps.verify.outputs.release_target }}" \
             --title "Clash Verge Rev Karing v${RELEASE_VERSION}" \
             --notes-file release-assets/release-notes.md \
             --latest
@@ -130,7 +145,7 @@ jobs:
 
           jq -e \
             --arg tag "$RELEASE_TAG" \
-            --arg commit "$EXPECTED_BUILD_COMMIT" \
+            --arg commit "$EXPECTED_HEAD_COMMIT" \
             '.tagName == $tag and .isDraft == false and .isPrerelease == false and .targetCommitish == $commit' \
             <<< "$release_json" >/dev/null
 
@@ -168,7 +183,7 @@ jobs:
 
           ${status}
 
-          - 构建提交：${EXPECTED_BUILD_COMMIT}
+          - 分支头提交：${EXPECTED_HEAD_COMMIT}
           - 已审查运行：${REVIEWED_RUN_ID}
           - 发行标签：${RELEASE_TAG}
           - Action：${run_url}
