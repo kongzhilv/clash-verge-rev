@@ -118,7 +118,9 @@ export const enrichConnectionsWithProcesses = (
     const metadata = connection.metadata
     if (metadata.process && metadata.processPath) return connection
 
-    const protocol = String(metadata.network || '').trim().toUpperCase()
+    const protocol = String(metadata.network || '')
+      .trim()
+      .toUpperCase()
     const sourcePort = String(metadata.sourcePort || '').trim()
     const destinationHost = normalizeHost(
       String(metadata.destinationIP || metadata.remoteDestination || ''),
