@@ -75,7 +75,7 @@ jobs:
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm format:check
 
-      - name: 审查应用分流文案与实时联动
+      - name: 审查成熟化分流交互
         if: steps.check_frontend.outputs.frontend == 'true'
         shell: bash
         run: |
@@ -87,19 +87,38 @@ jobs:
             src/pages
             README.md
           )
-          if grep -RInE '程序项目|程序与项目|程序或项目|程序/项目|项目档案|程序档案|添加档案|保存档案|程序发现' "${ui_paths[@]}"; then
-            echo '[失败] 用户界面仍包含旧的“程序/项目/档案”产品术语'
+          if grep -RInE '程序项目|程序与项目|程序或项目|程序/项目|项目档案|程序档案|添加档案|保存档案|程序发现|应用应用' "${ui_paths[@]}"; then
+            echo '[失败] 用户界面仍包含旧术语或重复文案'
             exit 1
           fi
           if grep -RInF 'label={project.groupId}' src/components; then
             echo '[失败] 用户界面暴露了内部托管规则组 ID'
             exit 1
           fi
-          grep -q 'useConnectionProcessAttribution' src/hooks/use-connection-data.ts
-          grep -q 'Windows TUN 归因' src/components/routing/connection-project-card.tsx
+          test -f src/components/connection/connection-filter-menu.tsx
+          grep -q 'ConnectionFilterMenu' src/pages/connections.tsx
+          grep -q 'application: string' src/components/connection/connection-filter-menu.tsx
+          grep -q 'rule: string' src/components/connection/connection-filter-menu.tsx
+          grep -q 'outbound: string' src/components/connection/connection-filter-menu.tsx
           grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
+          grep -q 'AccordionSummary' src/components/connection/connection-detail.tsx
+          grep -q 'useConnectionProcessAttribution' src/components/routing/connection-project-card.tsx
+          grep -q 'Windows 唯一源端口识别' src/components/routing/connection-project-card.tsx
           grep -q "source: 'windows'" src/services/process-connections.ts
-          echo '[通过] 应用分流术语、实时详情和归因来源检查完成'
+          grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
+          grep -q 'builtinGroups={builtinGroups}' src/components/rule/diversion-manager/manager.tsx
+          grep -q '常用分流' src/components/rule/diversion-manager/settings-panel.tsx
+          grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
+          if grep -q 'label="目标端口"' src/components/rule/diversion-manager/project-editor-dialog.tsx; then
+            echo '[失败] 应用分流编辑器仍暴露端口条件'
+            exit 1
+          fi
+          if grep -q 'RoutingRelationsPanel' src/pages/rules.tsx; then
+            echo '[失败] 规则页仍重复展示完整应用关系面板'
+            exit 1
+          fi
+          grep -q '{policyFilter && (' src/pages/proxies.tsx
+          echo '[通过] 连接筛选、实时归因、常用预设和页面职责检查完成'
 
       - name: 运行 ESLint
         if: steps.check_frontend.outputs.frontend == 'true'
