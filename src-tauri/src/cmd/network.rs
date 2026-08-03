@@ -4,10 +4,14 @@ use crate::core::sysopt::Sysopt;
 use clash_verge_logging::{Type, logging};
 use gethostname::gethostname;
 use network_interface::NetworkInterface;
+use serde_json::Value;
 use serde_yaml_ng::Mapping;
 use std::net::TcpListener;
 use sysproxy::{Autoproxy, Sysproxy};
 use tauri_plugin_clash_verge_sysinfo;
+
+#[path = "process_connections.rs"]
+mod process_connections;
 
 /// get the system proxy
 #[tauri::command]
@@ -81,9 +85,13 @@ pub fn get_network_interfaces() -> Vec<String> {
     tauri_plugin_clash_verge_sysinfo::list_network_interfaces()
 }
 
-/// 获取网络接口详细信息
+/// 获取网络接口详细信息；kind=process-connections 时返回系统连接与进程归因快照。
 #[tauri::command]
-pub fn get_network_interfaces_info() -> CmdResult<Vec<NetworkInterface>> {
+pub fn get_network_interfaces_info(kind: Option<String>) -> CmdResult<Value> {
+    if kind.as_deref() == Some("process-connections") {
+        return serde_json::to_value(process_connections::get_process_connections()).stringify_err();
+    }
+
     use network_interface::{NetworkInterface, NetworkInterfaceConfig as _};
 
     let names = get_network_interfaces();
@@ -97,7 +105,7 @@ pub fn get_network_interfaces_info() -> CmdResult<Vec<NetworkInterface>> {
         }
     }
 
-    Ok(result)
+    serde_json::to_value(result).stringify_err()
 }
 
 #[tauri::command]
