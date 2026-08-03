@@ -1,4 +1,4 @@
-import { Box } from '@mui/material'
+import { Box, Stack } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router'
@@ -69,38 +69,32 @@ const RulesPage = () => {
         overflow: 'hidden',
       }}
       header={
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            flexWrap: 'wrap',
-          }}
-        >
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
           <DiversionManager
             initialOpen={manageProjects || Boolean(focusProjectId)}
             focusProjectId={focusProjectId}
           />
           <DiversionDetector />
           <ProviderButton />
-        </Box>
+        </Stack>
       }
     >
-      <Box sx={{ mx: '10px', pt: 1 }}>
+      <Box sx={{ mx: 1.25, pt: 1.25 }}>
         <RoutingRelationsPanel />
       </Box>
 
       <Box
         sx={{
-          pt: 1,
-          mb: 0.5,
-          mx: '10px',
-          height: '36px',
+          px: 1.25,
+          py: 1,
           display: 'flex',
           alignItems: 'center',
+          bgcolor: 'background.default',
         }}
       >
-        <BaseSearchBox onSearch={(nextMatch) => setMatch(() => nextMatch)} />
+        <Box sx={{ width: '100%', maxWidth: 680 }}>
+          <BaseSearchBox onSearch={(nextMatch) => setMatch(() => nextMatch)} />
+        </Box>
       </Box>
 
       {filteredRules.length > 0 ? (
