@@ -47,7 +47,9 @@ interface DetectedProgramsPanelProps {
 }
 
 const getProcessConnections = () =>
-  invoke<ProcessConnectionSnapshot>('get_process_connections')
+  invoke<ProcessConnectionSnapshot>('get_network_interfaces_info', {
+    kind: 'process-connections',
+  })
 
 export const DetectedProgramsPanel = ({
   projects,
