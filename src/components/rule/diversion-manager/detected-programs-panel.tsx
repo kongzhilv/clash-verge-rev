@@ -1,12 +1,23 @@
-import { RefreshRounded } from '@mui/icons-material'
+import {
+  AddRounded,
+  AppsRounded,
+  CheckRounded,
+  RefreshRounded,
+} from '@mui/icons-material'
 import {
   Alert,
+  Avatar,
   Box,
-  Button,
-  Chip,
   CircularProgress,
+  Divider,
+  IconButton,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
   Paper,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -25,7 +36,6 @@ export interface DetectedProgram {
   pids: number[]
   connectionCount: number
   protocols: string[]
-  remoteAddresses: string[]
 }
 
 interface DetectedProgramsPanelProps {
@@ -75,7 +85,6 @@ export const DetectedProgramsPanel = ({
         pids: [],
         connectionCount: 0,
         protocols: [],
-        remoteAddresses: [],
       }
 
       current.connectionCount += 1
@@ -84,12 +93,6 @@ export const DetectedProgramsPanel = ({
       }
       if (!current.protocols.includes(connection.protocol)) {
         current.protocols.push(connection.protocol)
-      }
-      if (
-        connection.remoteAddress &&
-        !current.remoteAddresses.includes(connection.remoteAddress)
-      ) {
-        current.remoteAddresses.push(connection.remoteAddress)
       }
       grouped.set(key, current)
     }
@@ -100,7 +103,7 @@ export const DetectedProgramsPanel = ({
           right.connectionCount - left.connectionCount ||
           left.name.localeCompare(right.name),
       )
-      .slice(0, 40)
+      .slice(0, 24)
   }, [snapshot])
 
   const registeredPaths = useMemo(
@@ -123,121 +126,148 @@ export const DetectedProgramsPanel = ({
   )
 
   return (
-    <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 2 }}>
+    <Paper variant="outlined" sx={{ borderRadius: 2.5, overflow: 'hidden' }}>
       <Stack
-        direction={{ xs: 'column', sm: 'row' }}
+        direction="row"
         spacing={1}
-        sx={{ alignItems: { sm: 'center' } }}
+        sx={{ px: 1.5, py: 1.25, alignItems: 'center' }}
       >
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            正在联网的程序
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            从 Windows 系统 TCP/UDP 连接表读取 PID、进程名称和完整 exe
-            路径；导入后会进入同一套程序档案、规则组和出口策略链。
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'baseline' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              程序发现
+            </Typography>
+            {snapshot?.supported && (
+              <Typography variant="caption" color="text.secondary">
+                {programs.length} 个
+              </Typography>
+            )}
+          </Stack>
+          <Typography variant="body2" color="text.secondary" noWrap>
+            Windows 当前联网程序，可直接加入分流。
           </Typography>
         </Box>
-        <Button
-          size="small"
-          startIcon={
-            loading ? <CircularProgress size={16} /> : <RefreshRounded />
-          }
-          onClick={() => void refresh()}
-          disabled={loading}
-        >
-          刷新连接
-        </Button>
+        <Tooltip title="刷新">
+          <span>
+            <IconButton
+              size="small"
+              onClick={() => void refresh()}
+              disabled={loading}
+            >
+              {loading ? (
+                <CircularProgress size={18} />
+              ) : (
+                <RefreshRounded fontSize="small" />
+              )}
+            </IconButton>
+          </span>
+        </Tooltip>
       </Stack>
 
       {snapshot && !snapshot.supported && (
-        <Alert severity="info" sx={{ mt: 1 }}>
+        <Alert severity="info" sx={{ borderRadius: 0 }}>
           {snapshot.source}
         </Alert>
       )}
       {error && (
-        <Alert severity="warning" sx={{ mt: 1 }}>
-          部分系统连接读取失败：{error}
+        <Alert severity="warning" sx={{ borderRadius: 0 }}>
+          部分连接无法读取：{error}
         </Alert>
       )}
+
       {loading && !snapshot ? (
-        <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}>
+        <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}>
           <CircularProgress size={24} />
         </Box>
       ) : snapshot?.supported && programs.length === 0 ? (
-        <Alert severity="info" sx={{ mt: 1 }}>
-          当前没有发现可归因的系统连接。启动目标程序后点击“刷新连接”。
-        </Alert>
-      ) : (
-        <Stack spacing={1} sx={{ mt: programs.length > 0 ? 1.5 : 0 }}>
-          {programs.map((program) => {
-            const registered = program.path
-              ? registeredPaths.has(program.path.toLowerCase())
-              : registeredNames.has(program.name.toLowerCase())
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ px: 1.5, pb: 1.5 }}
+        >
+          暂未发现可归因连接。
+        </Typography>
+      ) : programs.length > 0 ? (
+        <>
+          <Divider />
+          <List disablePadding sx={{ maxHeight: 360, overflowY: 'auto' }}>
+            {programs.map((program, index) => {
+              const registered = program.path
+                ? registeredPaths.has(program.path.toLowerCase())
+                : registeredNames.has(program.name.toLowerCase())
+              const protocolLabel = program.protocols.join(' / ')
+              const processLabel =
+                program.pids.length > 1 ? `${program.pids.length} 个进程` : '1 个进程'
 
-            return (
-              <Paper
-                key={program.key}
-                variant="outlined"
-                sx={{ p: 1.25, borderRadius: 2 }}
-              >
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={1}
-                  sx={{ alignItems: { md: 'center' } }}
-                >
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 700 }}>
-                      {program.name}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ display: 'block', wordBreak: 'break-all' }}
-                    >
-                      {program.path ||
-                        '系统进程路径受保护，仍可按进程名称建立规则'}
-                    </Typography>
-                    <Stack
-                      direction="row"
-                      spacing={0.75}
-                      sx={{ mt: 0.75, flexWrap: 'wrap' }}
-                    >
-                      <Chip
-                        size="small"
-                        label={`PID ${program.pids.join(', ')}`}
-                      />
-                      <Chip
-                        size="small"
-                        label={`${program.connectionCount} 条系统连接`}
-                      />
-                      {program.protocols.map((protocol) => (
-                        <Chip key={protocol} size="small" label={protocol} />
-                      ))}
-                      {program.remoteAddresses.slice(0, 3).map((address) => (
-                        <Chip
-                          key={address}
-                          size="small"
-                          variant="outlined"
-                          label={address}
-                        />
-                      ))}
-                    </Stack>
-                  </Box>
-                  <Button
-                    size="small"
-                    variant={registered ? 'text' : 'outlined'}
-                    disabled={registered}
-                    onClick={() => onImport(program)}
+              return (
+                <Box key={program.key}>
+                  {index > 0 && <Divider component="li" />}
+                  <ListItem
+                    secondaryAction={
+                      <Tooltip title={registered ? '已加入' : '加入分流'}>
+                        <span>
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            color={registered ? 'success' : 'primary'}
+                            disabled={registered}
+                            onClick={() => onImport(program)}
+                          >
+                            {registered ? (
+                              <CheckRounded fontSize="small" />
+                            ) : (
+                              <AddRounded fontSize="small" />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    }
+                    sx={{ pr: 6, py: 0.9 }}
                   >
-                    {registered ? '已加入档案' : '加入分流档案'}
-                  </Button>
-                </Stack>
-              </Paper>
-            )
-          })}
-        </Stack>
-      )}
+                    <ListItemAvatar sx={{ minWidth: 46 }}>
+                      <Avatar
+                        variant="rounded"
+                        sx={{ width: 34, height: 34, bgcolor: 'action.hover' }}
+                      >
+                        <AppsRounded fontSize="small" color="primary" />
+                      </Avatar>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={program.name}
+                      secondary={
+                        <>
+                          <Typography
+                            component="span"
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{
+                              display: 'block',
+                              maxWidth: 760,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {program.path || '受保护的系统进程'}
+                          </Typography>
+                          <Typography
+                            component="span"
+                            variant="caption"
+                            color="text.secondary"
+                          >
+                            {`${program.connectionCount} 条连接 · ${processLabel}${protocolLabel ? ` · ${protocolLabel}` : ''}`}
+                          </Typography>
+                        </>
+                      }
+                      slotProps={{ primary: { fontWeight: 650, noWrap: true } }}
+                    />
+                  </ListItem>
+                </Box>
+              )
+            })}
+          </List>
+        </>
+      ) : null}
     </Paper>
   )
 }
