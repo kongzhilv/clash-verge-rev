@@ -22,6 +22,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { OverflowReveal, softScrollAreaSx } from '@/components/base'
 import {
   getSystemProcessConnections,
   type ProcessConnectionSnapshot,
@@ -143,7 +144,7 @@ export const DetectedProgramsPanel = ({
               </Typography>
             )}
           </Stack>
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography variant="body2" color="text.secondary">
             识别当前联网应用，并为其设置出口策略。
           </Typography>
         </Box>
@@ -190,7 +191,15 @@ export const DetectedProgramsPanel = ({
       ) : programs.length > 0 ? (
         <>
           <Divider />
-          <List disablePadding sx={{ maxHeight: 360, overflowY: 'auto' }}>
+          <List
+            disablePadding
+            aria-label="当前联网应用"
+            sx={{
+              maxHeight: 'min(42vh, 420px)',
+              overflowY: 'auto',
+              ...softScrollAreaSx,
+            }}
+          >
             {programs.map((program, index) => {
               const registered = program.path
                 ? registeredPaths.has(program.path.toLowerCase())
@@ -235,35 +244,26 @@ export const DetectedProgramsPanel = ({
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText
-                      primary={program.name}
+                      disableTypography
+                      primary={
+                        <OverflowReveal
+                          value={program.name}
+                          variant="body2"
+                          fontWeight={650}
+                        />
+                      }
                       secondary={
-                        <>
-                          <Typography
-                            component="span"
+                        <Stack spacing={0.2} sx={{ mt: 0.15, minWidth: 0 }}>
+                          <OverflowReveal
+                            value={program.path || '受保护的系统进程'}
                             variant="caption"
                             color="text.secondary"
-                            sx={{
-                              display: 'block',
-                              maxWidth: 760,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {program.path || '受保护的系统进程'}
-                          </Typography>
-                          <Typography
-                            component="span"
-                            variant="caption"
-                            color="text.secondary"
-                          >
+                          />
+                          <Typography variant="caption" color="text.secondary">
                             {`${program.connectionCount} 条连接 · ${processLabel}${protocolLabel ? ` · ${protocolLabel}` : ''}`}
                           </Typography>
-                        </>
+                        </Stack>
                       }
-                      slotProps={{
-                        primary: { noWrap: true, sx: { fontWeight: 650 } },
-                      }}
                     />
                   </ListItem>
                 </Box>
