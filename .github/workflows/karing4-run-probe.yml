@@ -1,5 +1,5 @@
 name: Karing 4 Run Probe
-run-name: Report Karing 4 release run
+run-name: Report Karing 4 release run after audit fix
 
 on:
   push:
