@@ -49,6 +49,7 @@ interface Endpoint {
 
 type AttributionListener = () => void
 
+const MAX_ATTRIBUTION_ITEMS = 2_000
 const attributionListeners = new Set<AttributionListener>()
 let processAttributionSnapshot: ProcessAttributionSnapshot = {
   version: 0,
@@ -126,6 +127,17 @@ const publishAttributions = (updates: Map<string, ProcessAttribution>) => {
   for (const [connectionId, attribution] of updates) {
     if (sameAttribution(nextItems.get(connectionId), attribution)) continue
     nextItems.set(connectionId, attribution)
+    changed = true
+  }
+
+  if (nextItems.size > MAX_ATTRIBUTION_ITEMS) {
+    const removeCount = nextItems.size - MAX_ATTRIBUTION_ITEMS
+    const oldest = [...nextItems.values()]
+      .sort((left, right) => left.updatedAt - right.updatedAt)
+      .slice(0, removeCount)
+    for (const attribution of oldest) {
+      nextItems.delete(attribution.connectionId)
+    }
     changed = true
   }
 
