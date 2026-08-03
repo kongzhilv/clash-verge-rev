@@ -1,5 +1,5 @@
 name: Frontend Check
-run-name: Audit Karing 4 candidate with setup report
+run-name: Fix and audit Karing 4 candidate
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
   pull-requests: write
 
@@ -18,48 +18,86 @@ env:
   HUSKY: 0
 
 concurrency:
-  group: karing4-readonly-audit
-  cancel-in-progress: true
+  group: karing4-fix-and-audit
+  cancel-in-progress: false
 
 jobs:
   frontend:
-    name: Audit feature candidate
+    name: Fix and audit feature candidate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout feature candidate
-        id: checkout
         uses: actions/checkout@v7
         with:
           ref: feature/karing-style-diversion
           fetch-depth: 0
+          token: ${{ github.token }}
 
       - name: Install pnpm
-        id: pnpm_setup
-        continue-on-error: true
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Install Node.js
-        id: node_setup
-        continue-on-error: true
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
       - name: Install dependencies
-        id: install
-        if: steps.pnpm_setup.outcome == 'success' && steps.node_setup.outcome == 'success'
-        continue-on-error: true
+        run: pnpm install --frozen-lockfile
+
+      - name: Remove the obsolete import
         shell: bash
         run: |
-          set -o pipefail
-          pnpm install --frozen-lockfile 2>&1 | tee /tmp/install.log
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/connection/connection-rule-assistant.tsx')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace("import {\n  Alert,\n  Box,", "import {\n  Box,")
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Apply official format and lint fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            src/components/base/index.ts
+            src/components/base/overflow-reveal.tsx
+            src/components/base/scroll-area.ts
+            src/components/connection/connection-rule-assistant.tsx
+            src/components/routing/focused-policy-panel.tsx
+            src/components/routing/routing-relations-panel.tsx
+            src/components/rule/diversion-manager/action-picker.tsx
+            src/components/rule/diversion-manager/detected-programs-panel.tsx
+            src/components/rule/diversion-manager/project-editor-dialog.tsx
+            src/components/rule/diversion-manager/project-panel.tsx
+          )
+          pnpm exec biome format --write "${files[@]}"
+          pnpm exec eslint -c eslint.config.ts --fix --max-warnings=0 "${files[@]}"
+          pnpm exec biome format --write "${files[@]}"
+
+      - name: Commit source fixes
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No source fixes were required'
+          else
+            git commit -m 'style: finalize readable overflow interactions'
+            git push origin HEAD:feature/karing-style-diversion
+          fi
+          echo "candidate=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Check formatting
         id: format
-        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -68,7 +106,6 @@ jobs:
 
       - name: Audit mature routing UI
         id: ui
-        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -76,8 +113,10 @@ jobs:
           {
             set -euo pipefail
             test -f src/components/base/overflow-reveal.tsx
+            test -f src/components/base/scroll-area.ts
             grep -q "overflowX: 'auto'" src/components/base/overflow-reveal.tsx
             grep -q 'ResizeObserver' src/components/base/overflow-reveal.tsx
+            grep -q 'requestAnimationFrame' src/components/base/overflow-reveal.tsx
             grep -q 'softScrollAreaSx' src/components/rule/diversion-manager/detected-programs-panel.tsx
             grep -q 'OverflowReveal' src/components/rule/diversion-manager/project-panel.tsx
             grep -q 'OverflowReveal' src/components/rule/diversion-manager/action-picker.tsx
@@ -91,7 +130,6 @@ jobs:
 
       - name: Run ESLint
         id: lint
-        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -100,7 +138,6 @@ jobs:
 
       - name: Run TypeScript check
         id: typecheck
-        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -109,7 +146,6 @@ jobs:
 
       - name: Run Knip report
         id: knip
-        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -118,7 +154,6 @@ jobs:
 
       - name: Build web application
         id: build
-        if: steps.install.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: |
@@ -130,9 +165,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          PNPM_SETUP: ${{ steps.pnpm_setup.outcome }}
-          NODE_SETUP: ${{ steps.node_setup.outcome }}
-          INSTALL: ${{ steps.install.outcome }}
+          CANDIDATE: ${{ steps.commit.outputs.candidate }}
           FORMAT: ${{ steps.format.outcome }}
           UI: ${{ steps.ui.outcome }}
           LINT: ${{ steps.lint.outcome }}
@@ -141,34 +174,30 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
         run: |
           set -euo pipefail
-          candidate=$(git rev-parse HEAD)
           report=/tmp/audit-report.md
           {
-            echo '<!-- karing4-frontend-audit -->'
-            echo '## Karing 4 前端审查报告'
+            echo '<!-- karing4-frontend-audit-fixed -->'
+            echo '## Karing 4 前端最终审查'
             echo
-            echo "候选提交：\`$candidate\`"
+            echo "候选提交：\`$CANDIDATE\`"
             echo "Action：https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo
             echo '| 检查 | 结果 |'
             echo '| --- | --- |'
-            echo "| pnpm 环境 | $PNPM_SETUP |"
-            echo "| Node 环境 | $NODE_SETUP |"
-            echo "| 依赖安装 | $INSTALL |"
             echo "| Biome | $FORMAT |"
             echo "| 成熟化 UI 审查 | $UI |"
             echo "| ESLint | $LINT |"
             echo "| TypeScript | $TYPECHECK |"
             echo "| Knip | $KNIP |"
             echo "| Web 构建 | $BUILD |"
-            for item in install format ui lint typecheck knip build; do
+            for item in format ui lint typecheck knip build; do
               value=$(printenv "$(echo "$item" | tr '[:lower:]' '[:upper:]')")
               if [ "$value" != success ]; then
                 echo
                 echo "<details><summary>$item 错误日志尾部</summary>"
                 echo
                 echo '```text'
-                tail -n 80 "/tmp/$item.log" 2>/dev/null || true
+                tail -n 100 "/tmp/$item.log" 2>/dev/null || true
                 echo '```'
                 echo '</details>'
               fi
@@ -180,9 +209,6 @@ jobs:
         if: always()
         shell: bash
         env:
-          PNPM_SETUP: ${{ steps.pnpm_setup.outcome }}
-          NODE_SETUP: ${{ steps.node_setup.outcome }}
-          INSTALL: ${{ steps.install.outcome }}
           FORMAT: ${{ steps.format.outcome }}
           UI: ${{ steps.ui.outcome }}
           LINT: ${{ steps.lint.outcome }}
@@ -191,6 +217,6 @@ jobs:
           BUILD: ${{ steps.build.outcome }}
         run: |
           set -euo pipefail
-          for value in "$PNPM_SETUP" "$NODE_SETUP" "$INSTALL" "$FORMAT" "$UI" "$LINT" "$TYPECHECK" "$KNIP" "$BUILD"; do
+          for value in "$FORMAT" "$UI" "$LINT" "$TYPECHECK" "$KNIP" "$BUILD"; do
             test "$value" = success
           done
