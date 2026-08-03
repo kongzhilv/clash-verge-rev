@@ -14,12 +14,12 @@ env:
   HUSKY: 0
 
 concurrency:
-  group: karing4-prepare-${{ github.ref }}
+  group: karing4-finalizer-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  prepare_once:
-    name: 格式化并加固 Karing 4 候选
+  finalize:
+    name: 格式化并完成 Karing 4 候选
     if: github.event_name == 'pull_request' && github.head_ref == 'feature/karing-style-diversion'
     runs-on: ubuntu-latest
     steps:
@@ -61,13 +61,12 @@ jobs:
             src/pages/rules.tsx \
             src/services/process-connections.ts
 
-      - name: 加固 Karing 4 发布链
+      - name: 设置独立发行标签
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('.github/workflows/karing-diagnostics-once.yml')
           text = path.read_text(encoding='utf-8')
@@ -75,219 +74,17 @@ jobs:
               '  RELEASE_TAG: v2.5.3-karing\n',
               '  RELEASE_TAG: v2.5.3-karing.4\n',
           )
+          old_title = '--title "Clash Verge Rev Karing v' + '$' + '{{ needs.review.outputs.version }}"'
           text = text.replace(
-              '--title "Clash Verge Rev Karing v${{ needs.review.outputs.version }}"',
+              old_title,
               '--title "Clash Verge Rev Karing v2.5.3-karing.4"',
           )
-
-          commit_expr = '$' + '{{ needs.review.outputs.commit }}'
-          notes = f'''          cat > release-assets/release-notes.md <<EOF
-          # Clash Verge Rev Karing v2.5.3-karing.4
-
-          本版本继续收敛应用分流与连接工作区，并修复 Windows TUN/Fake-IP 场景的应用归因和实时详情。
-
-          ## 主要变化
-          - 连接页支持按应用、命中规则和实际出口组合筛选
-          - 连接列表去除标签堆叠，详情合并应用、规则与出口关系
-          - 详情持续订阅连接与 Windows 归因结果，不再显示点开时的旧快照
-          - TUN 场景仅在源端口归属唯一时回退识别，避免跨应用误判
-          - Fake-IP/Fake-IPv6 不再被保存为应用 IP 规则
-          - 常用分流预设可以直接开关并选择出口
-          - 应用分流编辑器不再暴露会被编译链忽略的端口条件
-          - 规则页和代理页删除重复的全局关系面板
-
-          ## 安装包
-          - Windows x64 与 ARM64
-          - Windows x64 与 ARM64 固定 WebView2 版本
-          - macOS Apple Silicon 与 Intel
-          - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
-
-          本分支安装包没有上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 校验下载文件。
-
-          Commit: `{commit_expr}`
-          EOF'''
-          text, count = re.subn(
-              r'          cat > release-assets/release-notes\.md <<EOF\n.*?\n          EOF',
-              notes,
-              text,
-              count=1,
-              flags=re.S,
-          )
-          if count != 1:
-              raise SystemExit('release notes block not found')
-
-          marker = '''          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
-          fi'''
-          validation = '''          installer_count=$(find release-assets -maxdepth 1 -type f \\
-            \\( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \\) \\
-            | wc -l)
-          if [ "$installer_count" -ne 12 ]; then
-            echo "[失败] 发布前应有 12 个安装文件，实际为 $installer_count"
-            exit 1
-          fi
-          test -f release-assets/SHA256SUMS.txt
-          test -f release-assets/BUILD_INFO.txt
-          (cd release-assets && sha256sum --check SHA256SUMS.txt)
-
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            gh release delete "${RELEASE_TAG}" --yes --cleanup-tag
-          fi'''
-          if marker not in text and '[失败] 发布前应有 12 个安装文件' not in text:
-              raise SystemExit('release preflight marker not found')
-          if marker in text:
-              text = text.replace(marker, validation, 1)
-
-          old_final = '''          gh release view "${RELEASE_TAG}" --json url,assets --jq '{url: .url, assets: [.assets[].name]}' '''.rstrip()
-          expected_expr = '$' + '{{ needs.review.outputs.commit }}'
-          new_final = f'''          release_json=$(gh release view "${{RELEASE_TAG}}" \\
-            --json url,tagName,isDraft,isPrerelease,targetCommitish,assets)
-          asset_count=$(jq '.assets | length' <<< "$release_json")
-          installer_assets=$(jq '[.assets[].name | select(test("\\\\.(exe|dmg|deb|rpm)$"; "i"))] | length' <<< "$release_json")
-          metadata_assets=$(jq '[.assets[].name | select(. == "SHA256SUMS.txt" or . == "BUILD_INFO.txt")] | length' <<< "$release_json")
-          if [ "$asset_count" -ne 14 ] || [ "$installer_assets" -ne 12 ] || [ "$metadata_assets" -ne 2 ]; then
-            echo "[失败] Release 资产不完整：总数=$asset_count 安装包=$installer_assets 元数据=$metadata_assets"
-            exit 1
-          fi
-          expected_commit='{expected_expr}'
-          jq -e \\
-            --arg tag "$RELEASE_TAG" \\
-            --arg commit "$expected_commit" \\
-            '.tagName == $tag and .isDraft == false and .isPrerelease == false and .targetCommitish == $commit' \\
-            <<< "$release_json" >/dev/null
-          tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
-          if [ "$tag_sha" != "$expected_commit" ]; then
-            echo "[失败] 标签实际指向 $tag_sha，预期 $expected_commit"
-            exit 1
-          fi
-          echo '[通过] Release 标签、提交与 14 个资产全部一致'
-          jq '{{url, tagName, targetCommitish, assets: [.assets[].name]}}' <<< "$release_json"'''
-          if old_final in text:
-              text = text.replace(old_final, new_final, 1)
-          elif '[通过] Release 标签、提交与 14 个资产全部一致' not in text:
-              raise SystemExit('release final verification marker not found')
-
           path.write_text(text, encoding='utf-8')
           PY
+          grep -q 'RELEASE_TAG: v2.5.3-karing.4' .github/workflows/karing-diagnostics-once.yml
 
-      - name: 恢复只读永久前端门禁
-        shell: bash
-        run: |
-          cat > .github/workflows/frontend-check.yml <<'YAML'
-          name: 前端检查
-          run-name: 前端检查
-
-          on:
-            pull_request:
-            workflow_dispatch:
-
-          permissions:
-            contents: read
-
-          env:
-            HUSKY: 0
-
-          jobs:
-            frontend:
-              name: 检查前端代码
-              runs-on: ubuntu-latest
-              steps:
-                - name: 检出代码
-                  uses: actions/checkout@v7
-
-                - name: 检测前端相关变更
-                  id: check_frontend
-                  uses: dorny/paths-filter@v4
-                  with:
-                    filters: |
-                      frontend:
-                        - 'src/**'
-                        - '**/*.js'
-                        - '**/*.ts'
-                        - '**/*.tsx'
-                        - '**/*.css'
-                        - '**/*.scss'
-                        - '**/*.json'
-                        - '**/*.md'
-                        - 'package.json'
-                        - 'pnpm-lock.yaml'
-                        - 'pnpm-workspace.yaml'
-                        - 'knip.json'
-                        - 'eslint.config.ts'
-                        - 'tsconfig.json'
-                        - 'vite.config.*'
-
-                - name: 无前端变更时跳过检查
-                  if: steps.check_frontend.outputs.frontend != 'true'
-                  run: echo "未检测到前端相关变更，跳过前端检查。"
-
-                - name: 安装 pnpm
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  uses: pnpm/action-setup@v6
-                  with:
-                    run_install: false
-
-                - name: 安装 Node.js
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  uses: actions/setup-node@v6
-                  with:
-                    node-version: '24.18.0'
-                    cache: 'pnpm'
-
-                - name: 安装项目依赖
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  run: pnpm install --frozen-lockfile
-
-                - name: 检查代码格式
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  run: pnpm format:check
-
-                - name: 审查成熟化分流交互
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    ui_paths=(src/components/connection src/components/routing src/components/rule/diversion-manager src/pages README.md)
-                    if grep -RInE '程序项目|程序与项目|程序或项目|程序/项目|项目档案|程序档案|添加档案|保存档案|程序发现|应用应用' "${ui_paths[@]}"; then
-                      echo '[失败] 用户界面仍包含旧术语或重复文案'
-                      exit 1
-                    fi
-                    if grep -RInF 'label={project.groupId}' src/components; then
-                      echo '[失败] 用户界面暴露了内部托管规则组 ID'
-                      exit 1
-                    fi
-                    test -f src/components/connection/connection-filter-menu.tsx
-                    grep -q 'ConnectionFilterMenu' src/pages/connections.tsx
-                    grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
-                    grep -q 'useConnectionProcessAttribution' src/components/routing/connection-project-card.tsx
-                    grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
-                    grep -q 'builtinGroups={builtinGroups}' src/components/rule/diversion-manager/manager.tsx
-                    grep -q '常用分流' src/components/rule/diversion-manager/settings-panel.tsx
-                    grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
-                    if grep -q 'label="目标端口"' src/components/rule/diversion-manager/project-editor-dialog.tsx; then
-                      echo '[失败] 应用分流编辑器仍暴露端口条件'
-                      exit 1
-                    fi
-                    if grep -q 'RoutingRelationsPanel' src/pages/rules.tsx; then
-                      echo '[失败] 规则页仍重复展示完整应用关系面板'
-                      exit 1
-                    fi
-                    grep -q '{policyFilter && (' src/pages/proxies.tsx
-                    echo '[通过] 连接筛选、实时归因、常用预设和页面职责检查完成'
-
-                - name: 运行 ESLint
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  run: pnpm lint
-
-                - name: 运行 TypeScript 类型检查
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  run: pnpm typecheck
-
-                - name: 检查未使用的前端代码和依赖
-                  if: steps.check_frontend.outputs.frontend == 'true'
-                  run: pnpm knip:report
-          YAML
-          sed -i 's/^          //' .github/workflows/frontend-check.yml
+      - name: 恢复永久只读前端门禁
+        run: git show da57d770bdb6e5634c4313eb2ffd118e965fdfe5:.github/workflows/frontend-check.yml > .github/workflows/frontend-check.yml
 
       - name: 提交最终候选
         shell: bash
