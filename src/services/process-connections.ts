@@ -88,6 +88,7 @@ export const enrichConnectionsWithProcesses = (
     return connections
   }
 
+  // 深度联动安全约束：优先匹配完整连接四元组，仅在源端口归属唯一时降级。
   const exact = new Map<string, ProcessIdentity | null>()
   const localPort = new Map<string, ProcessIdentity | null>()
 
