@@ -1,5 +1,5 @@
-name: Karing 4 Final Candidate Repair
-run-name: Repair no-unsafe-finally and retarget audited release
+name: Karing 4 Final Retarget
+run-name: Pin 7ec661e and trigger final audited release
 
 on:
   push:
@@ -16,83 +16,22 @@ permissions:
   pull-requests: write
 
 jobs:
-  repair:
+  retarget:
     runs-on: ubuntu-latest
+    env:
+      FINAL_CANDIDATE_SHA: 7ec661ec241ea7571058f82463b0cc644596b10d
     steps:
-      - name: Checkout feature branch
+      - name: Checkout default branch
         uses: actions/checkout@v7
         with:
-          ref: feature/karing-style-diversion
+          ref: dev
           fetch-depth: 0
           token: ${{ github.token }}
 
-      - name: Replace unsafe finally control flow
+      - name: Pin final candidate
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('src/hooks/use-connection-data.ts')
-          text = path.read_text(encoding='utf-8')
-          old = """  } finally {
-            processConnectionRefreshing = false
-            if (connectionListeners.size === 0) return
-
-            if (processConnectionRefreshQueued) {
-              processConnectionRefreshQueued = false
-              scheduleProcessConnectionRefresh(PROCESS_CONNECTION_NEW_DELAY_MS)
-            } else if (processConnectionFastRetryPending) {
-              processConnectionFastRetryPending = false
-              scheduleProcessConnectionRefresh(PROCESS_CONNECTION_RETRY_DELAY_MS)
-            } else {
-              scheduleProcessConnectionRefresh()
-            }
-          }
-          """
-          new = """  } finally {
-            processConnectionRefreshing = false
-            if (connectionListeners.size > 0) {
-              if (processConnectionRefreshQueued) {
-                processConnectionRefreshQueued = false
-                scheduleProcessConnectionRefresh(PROCESS_CONNECTION_NEW_DELAY_MS)
-              } else if (processConnectionFastRetryPending) {
-                processConnectionFastRetryPending = false
-                scheduleProcessConnectionRefresh(PROCESS_CONNECTION_RETRY_DELAY_MS)
-              } else {
-                scheduleProcessConnectionRefresh()
-              }
-            }
-          }
-          """
-          if text.count(old) != 1:
-              raise SystemExit('[失败] 未唯一找到 no-unsafe-finally 目标代码块')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
-
-      - name: Commit repaired candidate
-        id: candidate
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/hooks/use-connection-data.ts
-          git commit -m 'fix: preserve errors during attribution cleanup'
-          git push origin HEAD:feature/karing-style-diversion
-          candidate=$(git rev-parse HEAD)
-          echo "sha=$candidate" >> "$GITHUB_OUTPUT"
-          echo "[通过] 新候选：$candidate"
-
-      - name: Retarget registered audited release
-        env:
-          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin dev
-          git worktree add /tmp/dev origin/dev
-          cd /tmp/dev
           python3 - <<'PY'
           import os
           import re
@@ -100,7 +39,7 @@ jobs:
 
           path = Path('.github/workflows/karing4-audited-release.yml')
           text = path.read_text(encoding='utf-8')
-          candidate = os.environ['CANDIDATE_SHA']
+          candidate = os.environ['FINAL_CANDIDATE_SHA']
           text, count = re.subn(
               r'CANDIDATE_SHA: [0-9a-f]{40}',
               f'CANDIDATE_SHA: {candidate}',
@@ -117,6 +56,11 @@ jobs:
           )
           path.write_text(text, encoding='utf-8')
           PY
+
+      - name: Commit audited release trigger
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add .github/workflows/karing4-audited-release.yml
@@ -126,7 +70,6 @@ jobs:
       - name: Report new audited run
         env:
           GH_TOKEN: ${{ github.token }}
-          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -137,10 +80,10 @@ jobs:
             --limit 3 \
             --json databaseId,status,conclusion,headSha,event,createdAt,url)
           cat > /tmp/status.md <<EOF
-          <!-- karing4-lint-clean-retarget -->
-          ## Karing 4 lint 修复与重新审查
+          <!-- karing4-7ec661e-retarget -->
+          ## Karing 4 最终候选重新审查
 
-          - 新候选：\`${CANDIDATE_SHA}\`
+          - 候选提交：\`${FINAL_CANDIDATE_SHA}\`
 
           \`\`\`json
           ${json}
