@@ -1,52 +1,79 @@
-import { Typography } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
+import { Box, Typography } from '@mui/material'
 import React, { ReactNode } from 'react'
 
 import { BaseErrorBoundary } from './base-error-boundary'
 
 interface Props {
-  title?: React.ReactNode // the page title
-  header?: React.ReactNode // something behind title
+  title?: React.ReactNode
+  header?: React.ReactNode
   contentStyle?: React.CSSProperties
   children?: ReactNode
   full?: boolean
 }
 
-export const BasePage: React.FC<Props> = (props) => {
-  const { title, header, contentStyle, full, children } = props
-  const theme = useTheme()
-
-  const isDark = theme.palette.mode === 'dark'
-
-  return (
-    <BaseErrorBoundary>
-      <div className="base-page">
-        <header data-tauri-drag-region="true" style={{ userSelect: 'none' }}>
-          <Typography
-            sx={{ fontSize: '20px', fontWeight: '700 ' }}
-            data-tauri-drag-region="true"
-          >
-            {title}
-          </Typography>
-
-          {header}
-        </header>
-
-        <div
-          className={full ? 'base-container no-padding' : 'base-container'}
-          style={{ backgroundColor: isDark ? '#1e1f27' : '#ffffff' }}
+export const BasePage: React.FC<Props> = ({
+  title,
+  header,
+  contentStyle,
+  full,
+  children,
+}) => (
+  <BaseErrorBoundary>
+    <Box className="base-page" sx={{ bgcolor: 'background.default' }}>
+      <Box
+        component="header"
+        data-tauri-drag-region="true"
+        sx={{
+          minHeight: 58,
+          px: 2,
+          gap: 1.5,
+          display: 'flex',
+          alignItems: 'center',
+          userSelect: 'none',
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Typography
+          variant="h6"
+          data-tauri-drag-region="true"
+          sx={{
+            minWidth: 0,
+            fontSize: 19,
+            fontWeight: 700,
+            letterSpacing: '-0.015em',
+          }}
         >
-          <section
-            style={{
-              backgroundColor: isDark ? '#1e1f27' : 'var(--background-color)',
+          {title}
+        </Typography>
+
+        {header && (
+          <Box
+            sx={{
+              ml: 'auto',
+              minWidth: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 1,
             }}
           >
-            <div className="base-content" style={contentStyle}>
-              {children}
-            </div>
-          </section>
-        </div>
-      </div>
-    </BaseErrorBoundary>
-  )
-}
+            {header}
+          </Box>
+        )}
+      </Box>
+
+      <Box
+        className={full ? 'base-container no-padding' : 'base-container'}
+        sx={{ bgcolor: 'background.default' }}
+      >
+        <Box component="section" sx={{ bgcolor: 'background.default' }}>
+          <div className="base-content" style={contentStyle}>
+            {children}
+          </div>
+        </Box>
+      </Box>
+    </Box>
+  </BaseErrorBoundary>
+)
