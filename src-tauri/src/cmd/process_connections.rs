@@ -48,15 +48,13 @@ mod windows_impl {
     use std::os::windows::ffi::OsStringExt as _;
     use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER, WIN32_ERROR};
     use windows::Win32::NetworkManagement::IpHelper::{
-        GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6ROW_OWNER_PID,
-        MIB_TCP6TABLE_OWNER_PID, MIB_TCPROW_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
-        MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPROW_OWNER_PID,
+        GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCP6ROW_OWNER_PID, MIB_TCP6TABLE_OWNER_PID, MIB_TCPROW_OWNER_PID,
+        MIB_TCPTABLE_OWNER_PID, MIB_UDP6ROW_OWNER_PID, MIB_UDP6TABLE_OWNER_PID, MIB_UDPROW_OWNER_PID,
         MIB_UDPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL, UDP_TABLE_OWNER_PID,
     };
     use windows::Win32::Networking::WinSock::{AF_INET, AF_INET6};
     use windows::Win32::System::Threading::{
-        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-        QueryFullProcessImageNameW,
+        OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
     };
 
     const MAX_TABLE_BYTES: u32 = 100_000_000;
@@ -128,20 +126,14 @@ mod windows_impl {
         if size == 0 || size > MAX_TABLE_BYTES {
             return Err(anyhow!("系统返回了异常缓冲区大小：{size}"));
         }
-        Ok(vec![
-            0;
-            (size as usize).div_ceil(std::mem::size_of::<u32>())
-        ])
+        Ok(vec![0; (size as usize).div_ceil(std::mem::size_of::<u32>())])
     }
 
     fn table_buffer_len(table: &[u32]) -> usize {
         std::mem::size_of_val(table)
     }
 
-    fn process_identity(
-        pid: u32,
-        identities: &mut HashMap<u32, ProcessIdentity>,
-    ) -> Option<ProcessIdentity> {
+    fn process_identity(pid: u32, identities: &mut HashMap<u32, ProcessIdentity>) -> Option<ProcessIdentity> {
         if pid == 0 {
             return None;
         }
@@ -222,14 +214,7 @@ mod windows_impl {
     ) -> Result<()> {
         unsafe {
             let mut size = 0_u32;
-            let first = GetExtendedTcpTable(
-                None,
-                &mut size,
-                false,
-                AF_INET.0 as u32,
-                TCP_TABLE_OWNER_PID_ALL,
-                0,
-            );
+            let first = GetExtendedTcpTable(None, &mut size, false, AF_INET.0 as u32, TCP_TABLE_OWNER_PID_ALL, 0);
             if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
                 return Err(anyhow!("首次读取返回代码 {first}"));
             }
@@ -249,8 +234,7 @@ mod windows_impl {
 
             let tcp_table = &*(table.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
             let count = tcp_table.dwNumEntries as usize;
-            let required = std::mem::size_of::<u32>()
-                + count * std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
+            let required = std::mem::size_of::<u32>() + count * std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
             if table_buffer_len(&table) < required {
                 return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
             }
@@ -289,14 +273,7 @@ mod windows_impl {
     ) -> Result<()> {
         unsafe {
             let mut size = 0_u32;
-            let first = GetExtendedTcpTable(
-                None,
-                &mut size,
-                false,
-                AF_INET6.0 as u32,
-                TCP_TABLE_OWNER_PID_ALL,
-                0,
-            );
+            let first = GetExtendedTcpTable(None, &mut size, false, AF_INET6.0 as u32, TCP_TABLE_OWNER_PID_ALL, 0);
             if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
                 return Err(anyhow!("首次读取返回代码 {first}"));
             }
@@ -316,8 +293,7 @@ mod windows_impl {
 
             let tcp_table = &*(table.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID);
             let count = tcp_table.dwNumEntries as usize;
-            let required = std::mem::size_of::<u32>()
-                + count * std::mem::size_of::<MIB_TCP6ROW_OWNER_PID>();
+            let required = std::mem::size_of::<u32>() + count * std::mem::size_of::<MIB_TCP6ROW_OWNER_PID>();
             if table_buffer_len(&table) < required {
                 return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
             }
@@ -360,14 +336,7 @@ mod windows_impl {
     ) -> Result<()> {
         unsafe {
             let mut size = 0_u32;
-            let first = GetExtendedUdpTable(
-                None,
-                &mut size,
-                false,
-                AF_INET.0 as u32,
-                UDP_TABLE_OWNER_PID,
-                0,
-            );
+            let first = GetExtendedUdpTable(None, &mut size, false, AF_INET.0 as u32, UDP_TABLE_OWNER_PID, 0);
             if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
                 return Err(anyhow!("首次读取返回代码 {first}"));
             }
@@ -387,8 +356,7 @@ mod windows_impl {
 
             let udp_table = &*(table.as_ptr() as *const MIB_UDPTABLE_OWNER_PID);
             let count = udp_table.dwNumEntries as usize;
-            let required = std::mem::size_of::<u32>()
-                + count * std::mem::size_of::<MIB_UDPROW_OWNER_PID>();
+            let required = std::mem::size_of::<u32>() + count * std::mem::size_of::<MIB_UDPROW_OWNER_PID>();
             if table_buffer_len(&table) < required {
                 return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
             }
@@ -423,14 +391,7 @@ mod windows_impl {
     ) -> Result<()> {
         unsafe {
             let mut size = 0_u32;
-            let first = GetExtendedUdpTable(
-                None,
-                &mut size,
-                false,
-                AF_INET6.0 as u32,
-                UDP_TABLE_OWNER_PID,
-                0,
-            );
+            let first = GetExtendedUdpTable(None, &mut size, false, AF_INET6.0 as u32, UDP_TABLE_OWNER_PID, 0);
             if WIN32_ERROR(first) != ERROR_INSUFFICIENT_BUFFER {
                 return Err(anyhow!("首次读取返回代码 {first}"));
             }
@@ -450,8 +411,7 @@ mod windows_impl {
 
             let udp_table = &*(table.as_ptr() as *const MIB_UDP6TABLE_OWNER_PID);
             let count = udp_table.dwNumEntries as usize;
-            let required = std::mem::size_of::<u32>()
-                + count * std::mem::size_of::<MIB_UDP6ROW_OWNER_PID>();
+            let required = std::mem::size_of::<u32>() + count * std::mem::size_of::<MIB_UDP6ROW_OWNER_PID>();
             if table_buffer_len(&table) < required {
                 return Err(anyhow!("连接表长度不足：{} < {required}", table_buffer_len(&table)));
             }
