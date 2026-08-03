@@ -1,0 +1,84 @@
+name: 修复进程融合格式与编译错误
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/fix-process-fusion-format-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-process-fusion-format-once
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    name: 自动修复并提交
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出功能分支
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: 安装 Rust 1.95 与 rustfmt
+        uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          run_install: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 修复已确认的编译错误
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          network = Path('src-tauri/src/cmd/network.rs')
+          text = network.read_text(encoding='utf-8')
+          text = text.replace('use network_interface::NetworkInterface;\n', '')
+          network.write_text(text, encoding='utf-8')
+
+          process = Path('src-tauri/src/cmd/process_connections.rs')
+          text = process.read_text(encoding='utf-8')
+          text = text.replace('row.dwState.0', 'row.dwState')
+          process.write_text(text, encoding='utf-8')
+          PY
+
+      - name: 格式化 Rust
+        run: cargo fmt --all
+
+      - name: 安装前端依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 格式化进程融合前端文件
+        run: >-
+          pnpm exec prettier --write
+          src/components/rule/diversion-manager/detected-programs-panel.tsx
+          src/components/rule/diversion-manager/project-panel.tsx
+
+      - name: 删除一次性工作流并提交
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/fix-process-fusion-format-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: format and compile native process fusion'
+          git push origin HEAD:feature/karing-style-diversion
