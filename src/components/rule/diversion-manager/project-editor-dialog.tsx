@@ -1,9 +1,4 @@
-import {
-  AddRounded,
-  AppsRounded,
-  FolderOpenRounded,
-  WorkspacesRounded,
-} from '@mui/icons-material'
+import { AddRounded, FolderOpenRounded } from '@mui/icons-material'
 import {
   Alert,
   Box,
@@ -12,11 +7,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
   FormControlLabel,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
   Switch,
   TextField,
@@ -27,11 +18,7 @@ import { useState } from 'react'
 
 import { actionLabel } from './action-label'
 import ActionPicker from './action-picker'
-import {
-  makeProject,
-  type DiversionProject,
-  type DiversionProjectKind,
-} from './model'
+import { makeProject, type DiversionProject } from './model'
 
 interface ProjectEditorDialogProps {
   open: boolean
@@ -69,11 +56,11 @@ export const ProjectEditorDialog = ({
   const patch = (next: Partial<DiversionProject>) =>
     setDraft((previous) => ({ ...previous, ...next }))
 
-  const choosePrograms = async () => {
+  const chooseApplications = async () => {
     const selected = await openFileDialog({
       multiple: true,
       directory: false,
-      title: '选择程序可执行文件',
+      title: '选择应用可执行文件',
     })
     if (!selected) return
     const paths = Array.isArray(selected) ? selected : [selected]
@@ -101,52 +88,20 @@ export const ProjectEditorDialog = ({
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>
-        {project ? '编辑程序或项目档案' : '添加程序或项目档案'}
+        {project ? '编辑应用规则' : '新建应用规则'}
       </DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
           <Alert severity="info">
-            档案会生成一个真实分流规则组。即使 Mihomo
-            没有返回进程名，也能根据你登记的域名、IP
-            或端口识别连接并应用同一个出口。
+            应用规则将识别条件与一个出口策略绑定，并生成真实的 Mihomo
+            规则。应用信息缺失时，仍可使用域名、IP 或端口匹配。
           </Alert>
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <FormControl size="small" sx={{ minWidth: 170 }}>
-              <InputLabel>档案类型</InputLabel>
-              <Select
-                label="档案类型"
-                value={draft.kind}
-                onChange={(event) =>
-                  patch({ kind: event.target.value as DiversionProjectKind })
-                }
-              >
-                <MenuItem value="program">
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center' }}
-                  >
-                    <AppsRounded fontSize="small" />
-                    <span>程序</span>
-                  </Stack>
-                </MenuItem>
-                <MenuItem value="project">
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center' }}
-                  >
-                    <WorkspacesRounded fontSize="small" />
-                    <span>项目</span>
-                  </Stack>
-                </MenuItem>
-              </Select>
-            </FormControl>
             <TextField
               fullWidth
               size="small"
-              label="名称"
+              label="规则名称"
               value={draft.name}
               onChange={(event) => patch({ name: event.target.value })}
             />
@@ -171,7 +126,7 @@ export const ProjectEditorDialog = ({
 
           <Box>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              出口与代理组
+              出口策略
             </Typography>
             <Button
               variant="outlined"
@@ -182,7 +137,7 @@ export const ProjectEditorDialog = ({
             </Button>
             <ActionPicker
               open={actionPickerOpen}
-              title={`${draft.name || '当前档案'}的处理方式`}
+              title={`${draft.name || '当前应用规则'}的出口策略`}
               action={draft.action}
               policy={draft.policy}
               allowDrop
@@ -210,12 +165,12 @@ export const ProjectEditorDialog = ({
             <Button
               variant="contained"
               startIcon={<FolderOpenRounded />}
-              onClick={() => void choosePrograms()}
+              onClick={() => void chooseApplications()}
             >
-              选择程序文件
+              选择应用文件
             </Button>
             <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-              选择后会同时登记完整路径和程序文件名，可继续手动修改。
+              选择后会同时登记完整路径和应用文件名，也可继续手动修改。
             </Typography>
           </Stack>
 
@@ -224,19 +179,19 @@ export const ProjectEditorDialog = ({
               fullWidth
               multiline
               minRows={4}
-              label="程序名称"
+              label="应用名称"
               placeholder={'chrome.exe\nDiscord.exe'}
               value={draft.processNames.join('\n')}
               onChange={(event) =>
                 patch({ processNames: splitValues(event.target.value) })
               }
-              helperText="每行一个；Mihomo 能返回进程时优先精确匹配。"
+              helperText="每行一个；代理核心或 Windows 识别成功时优先精确匹配。"
             />
             <TextField
               fullWidth
               multiline
               minRows={4}
-              label="程序完整路径"
+              label="应用完整路径"
               placeholder={'C:\\Program Files\\App\\app.exe\n/opt/app/app'}
               value={draft.processPaths.join('\n')}
               onChange={(event) =>
@@ -257,7 +212,7 @@ export const ProjectEditorDialog = ({
               onChange={(event) =>
                 patch({ domains: splitValues(event.target.value) })
               }
-              helperText="当进程信息缺失时，可根据连接域名推断并路由。"
+              helperText="应用信息缺失时，可根据连接域名识别并路由。"
             />
             <TextField
               fullWidth
@@ -286,7 +241,7 @@ export const ProjectEditorDialog = ({
           </Stack>
 
           <Alert severity={conditionCount > 0 ? 'success' : 'warning'}>
-            当前档案包含 {conditionCount}{' '}
+            当前应用规则包含 {conditionCount}{' '}
             个识别条件。至少需要一个条件才能启用并保存。
           </Alert>
         </Stack>
@@ -299,7 +254,7 @@ export const ProjectEditorDialog = ({
           disabled={!canSave}
           onClick={() => onSave({ ...draft, name: draft.name.trim() })}
         >
-          保存档案
+          保存应用规则
         </Button>
       </DialogActions>
     </Dialog>
