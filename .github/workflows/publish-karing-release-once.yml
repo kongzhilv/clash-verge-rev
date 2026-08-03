@@ -1,5 +1,5 @@
 name: Karing 正式发行（一次性）
-run-name: 发布 v2.5.3-karing.1 正式版本
+run-name: 补发 v2.5.3-karing.2 正式版本
 
 on:
   push:
@@ -16,31 +16,30 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: karing-release-v2.5.3-karing.1
+  group: karing-release-v2.5.3-karing.2
   cancel-in-progress: true
 
 env:
-  RELEASE_TAG: v2.5.3-karing.1
-  RELEASE_VERSION: 2.5.3-karing.1
-  REVIEWED_RUN_ID: '30622446790'
-  EXPECTED_BUILD_COMMIT: 43cdada7829272b4f504674bdce1d676ecb25e24
+  RELEASE_TAG: v2.5.3-karing.2
+  RELEASE_VERSION: 2.5.3-karing.2
+  REVIEWED_RUN_ID: '30790427584'
+  EXPECTED_BUILD_COMMIT: e8e36b66fa73c270cf6584f4a1209f4e3362952d
 
 jobs:
   publish:
-    name: 汇总已审查安装包并发布正式版本
+    name: 发布已审查的 12 个安装文件
     runs-on: ubuntu-latest
     steps:
-      - name: 下载已通过审查的全部平台产物
+      - name: 下载已审查的完整发行资产
         uses: actions/download-artifact@v8
         with:
-          pattern: karing-*
-          path: downloaded-assets
-          merge-multiple: true
+          name: karing-release-assets
+          path: release-assets
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ env.REVIEWED_RUN_ID }}
 
-      - name: 汇总并复核 12 个安装文件
+      - name: 复核安装文件、提交与 SHA256
         id: verify
         shell: bash
         env:
@@ -48,53 +47,36 @@ jobs:
         run: |
           set -euo pipefail
 
-          mkdir -p release-assets
-          find downloaded-assets -type f \
-            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
-            -exec cp '{}' release-assets/ \;
-
           installer_count=$(find release-assets -maxdepth 1 -type f \
             \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
             | wc -l)
           if [ "$installer_count" -ne 12 ]; then
             echo "[失败] 应有 12 个安装文件，实际为 $installer_count 个"
-            find downloaded-assets -type f -printf '%P\n' | sort
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
             exit 1
           fi
 
           gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_BUILD_COMMIT" >/dev/null
+          grep -F "Commit: $EXPECTED_BUILD_COMMIT" release-assets/BUILD_INFO.txt >/dev/null
 
           (
             cd release-assets
-            sha256sum *.exe *.dmg *.deb *.rpm 2>/dev/null | sort -k2 > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
-
-          cat > release-assets/BUILD_INFO.txt <<EOF
-          Repository: ${GITHUB_REPOSITORY}
-          Reviewed run: ${REVIEWED_RUN_ID}
-          Commit: ${EXPECTED_BUILD_COMMIT}
-          Version: ${RELEASE_VERSION}
-          Release tag: ${RELEASE_TAG}
-          Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
-          Signing: unsigned fork build; no upstream Apple notarization or updater signature
-          Android: intentionally not included
-          EOF
 
           cat > release-assets/release-notes.md <<EOF
           # Clash Verge Rev Karing v${RELEASE_VERSION}
 
-          本次修正版继续融合 Karing 风格分流交互，并重点修复启动开关和连接页面体验：
+          本版本将 Windows 原生程序连接归因深度接入 Clash Verge Rev / Mihomo 分流链路，不再只是手动维护程序档案。
 
-          - 软件启动后代理总开关默认保持关闭，不再自动启动 Mihomo 核心
-          - 启动时清理活动系统代理状态，但保留节点、TUN 和分流规则设置
-          - 连接详情由右下角提示窗改为右侧抽屉，进入规则助手时自动收起，避免窗口重叠
-          - 连接列表与详情突出显示程序名称和完整进程路径，并支持按路径搜索
-          - 配置缺少进程匹配模式时默认使用 find-process-mode: strict；用户明确设置 off/always 时不会覆盖
-          - 连接详情继续支持将域名、IP、端口、进程名或进程路径添加到规则组，或从已有规则组移除
-          - 点击规则行弹出出口选择器，可选无、当前选择、自动选择、直连、拦截及现有策略组
-          - 新建规则组可选空白组、常用模板或复制现有规则组；添加匹配条件先选择类型和常用值
-          - 修改规则后复用 Merge 校验、回滚与运行时热加载；活动连接会关闭并在下次连接时重新匹配
+          ## 核心改动
+          - 通过 Windows IP Helper API 枚举 TCP/UDP IPv4/IPv6 连接及 PID
+          - 读取进程名称和完整 exe 路径，并回填 Mihomo 活动连接
+          - 优先按协议、源端口、目标地址和目标端口精确匹配；仅在源端口归属唯一时降级
+          - 规则页展示正在联网的程序，可一键创建程序分流档案
+          - 程序档案生成 PROCESS-NAME / PROCESS-PATH 规则，并联动规则组和出口策略
+          - 连接页、规则助手、程序项目和代理组共用同一份关系数据
+          - Merge / Script 保存后重新生成并热应用运行时配置
 
           ## 安装包
           - Windows x64 与 ARM64
@@ -102,7 +84,7 @@ jobs:
           - macOS Apple Silicon 与 Intel
           - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
 
-          Android 不在本次发行范围内。本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
+          本分支安装包未使用上游官方签名或 Apple 公证。请使用 SHA256SUMS.txt 核验文件。
 
           Reviewed run: ${REVIEWED_RUN_ID}
           Commit: ${EXPECTED_BUILD_COMMIT}
@@ -112,18 +94,13 @@ jobs:
           echo '[通过] 12 个安装文件及 SHA256 校验全部有效'
           find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
 
-      - name: 创建并发布正式 Latest 版本
+      - name: 创建正式 Latest Release
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
-
-          if [ -z "$GH_TOKEN" ]; then
-            echo '[失败] 未读取到仓库 Secret：RELEASE_TOKEN'
-            exit 1
-          fi
 
           if gh release view "$RELEASE_TAG" --repo "$repo" >/dev/null 2>&1; then
             gh release delete "$RELEASE_TAG" --repo "$repo" --yes --cleanup-tag
@@ -158,16 +135,15 @@ jobs:
             <<< "$release_json" >/dev/null
 
           echo '[通过] 正式 Release 已创建并包含 14 个资产'
-          jq '{url, tagName, targetCommitish, isDraft, isPrerelease, assets: [.assets[].name]}' \
-            <<< "$release_json"
+          jq '{url, tagName, targetCommitish, assets: [.assets[].name]}' <<< "$release_json"
 
   report:
-    name: 将正式发行结果回报到 PR
+    name: 回报发行结果到 PR
     if: ${{ always() }}
     needs: publish
     runs-on: ubuntu-latest
     steps:
-      - name: 写入或更新 PR #1 发行状态
+      - name: 更新 PR #1 发行状态
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLISH_RESULT: ${{ needs.publish.result }}
