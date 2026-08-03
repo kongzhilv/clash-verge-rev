@@ -306,16 +306,16 @@ async function refreshProcessConnections() {
     console.warn('[Connections] Failed to refresh native process owners', error)
   } finally {
     processConnectionRefreshing = false
-    if (connectionListeners.size === 0) return
-
-    if (processConnectionRefreshQueued) {
-      processConnectionRefreshQueued = false
-      scheduleProcessConnectionRefresh(PROCESS_CONNECTION_NEW_DELAY_MS)
-    } else if (processConnectionFastRetryPending) {
-      processConnectionFastRetryPending = false
-      scheduleProcessConnectionRefresh(PROCESS_CONNECTION_RETRY_DELAY_MS)
-    } else {
-      scheduleProcessConnectionRefresh()
+    if (connectionListeners.size > 0) {
+      if (processConnectionRefreshQueued) {
+        processConnectionRefreshQueued = false
+        scheduleProcessConnectionRefresh(PROCESS_CONNECTION_NEW_DELAY_MS)
+      } else if (processConnectionFastRetryPending) {
+        processConnectionFastRetryPending = false
+        scheduleProcessConnectionRefresh(PROCESS_CONNECTION_RETRY_DELAY_MS)
+      } else {
+        scheduleProcessConnectionRefresh()
+      }
     }
   }
 }
