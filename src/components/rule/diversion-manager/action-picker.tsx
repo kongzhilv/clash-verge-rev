@@ -29,6 +29,7 @@ import {
 } from '@mui/material'
 import { useMemo, useState, type ReactNode } from 'react'
 
+import { OverflowReveal, softScrollAreaSx } from '@/components/base'
 import { useProxiesData } from '@/providers/app-data-context'
 
 import type { Action } from './model'
@@ -159,8 +160,18 @@ export const ActionPicker = ({
 
   return (
     <Dialog open={open} onClose={resetAndClose} fullWidth maxWidth="sm">
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent dividers sx={{ p: 0 }}>
+      <DialogTitle>
+        <OverflowReveal value={title} variant="h6" fontWeight={700} />
+      </DialogTitle>
+      <DialogContent
+        dividers
+        sx={{
+          p: 0,
+          maxHeight: 'min(78vh, 760px)',
+          overflowY: 'auto',
+          ...softScrollAreaSx,
+        }}
+      >
         <List disablePadding>
           {actions.map((option) => (
             <ListItemButton
@@ -210,7 +221,7 @@ export const ActionPicker = ({
             sx={{ alignItems: 'center', mb: 1 }}
           >
             <AccountTreeRounded color="action" />
-            <Box>
+            <Box sx={{ minWidth: 0 }}>
               <Typography sx={{ fontWeight: 700 }}>现有策略组</Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 选择现有代理组，或手动填写一个出口名称。
@@ -241,12 +252,14 @@ export const ActionPicker = ({
           {filteredPolicies.length > 0 ? (
             <List
               disablePadding
+              aria-label="可选策略组"
               sx={{
-                maxHeight: 260,
+                maxHeight: 'min(38vh, 320px)',
                 overflowY: 'auto',
                 border: 1,
                 borderColor: 'divider',
                 borderRadius: 1.5,
+                ...softScrollAreaSx,
               }}
             >
               {filteredPolicies.map((name) => (
@@ -258,7 +271,16 @@ export const ActionPicker = ({
                   <ListItemIcon>
                     <AccountTreeRounded />
                   </ListItemIcon>
-                  <ListItemText primary={name} />
+                  <ListItemText
+                    disableTypography
+                    primary={
+                      <OverflowReveal
+                        value={name}
+                        variant="body2"
+                        fontWeight={600}
+                      />
+                    }
+                  />
                   {action === 'policy' && policy === name && (
                     <CheckRounded color="primary" />
                   )}
