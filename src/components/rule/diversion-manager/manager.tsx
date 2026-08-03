@@ -267,13 +267,13 @@ export const DiversionManager = ({
               value="rules"
               icon={<RuleRounded fontSize="small" />}
               iconPosition="start"
-              label={`规则 ${manualGroups.length}`}
+              label={`通用规则 ${manualGroups.length}`}
             />
             <Tab
               value="settings"
               icon={<SettingsRounded fontSize="small" />}
               iconPosition="start"
-              label="设置"
+              label="全局设置"
             />
           </Tabs>
         </AppBar>
@@ -312,7 +312,7 @@ export const DiversionManager = ({
                 >
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                      自定义规则
+                      通用规则
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       越靠上的规则优先级越高。
@@ -323,7 +323,7 @@ export const DiversionManager = ({
                     startIcon={<AddRounded />}
                     onClick={() => setCreateDialogOpen(true)}
                   >
-                    新建规则组
+                    新建通用规则
                   </Button>
                 </Stack>
 
@@ -347,7 +347,7 @@ export const DiversionManager = ({
                     }}
                   >
                     <Typography color="text.secondary">
-                      暂无额外规则。应用规则会自动生成对应规则。
+                      暂无通用规则。应用分流会自动生成所需规则。
                     </Typography>
                   </Box>
                 ) : (

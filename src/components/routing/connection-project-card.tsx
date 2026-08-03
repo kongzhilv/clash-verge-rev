@@ -25,12 +25,16 @@ const processNameFrom = (process: string, processPath: string) => {
 }
 
 const attributionLabel = (
-  source?: 'mihomo' | 'windows' | 'unresolved',
-  match?: 'core' | 'tuple' | 'local-port' | 'none',
+  source: 'mihomo' | 'windows' | 'unresolved' | undefined,
+  match: 'core' | 'tuple' | 'local-port' | 'none' | undefined,
+  hasProcess: boolean,
+  inferred: boolean,
 ) => {
   if (source === 'mihomo') return '核心识别'
   if (source === 'windows' && match === 'tuple') return 'Windows 精确匹配'
   if (source === 'windows' && match === 'local-port') return 'Windows TUN 归因'
+  if (hasProcess) return '已识别'
+  if (inferred) return '规则识别'
   return '应用未识别'
 }
 
@@ -50,6 +54,7 @@ export const ConnectionProjectCard = ({
     String(connection.metadata.process ?? ''),
     processPath,
   )
+  const hasProcess = Boolean(processName || processPath)
   const applicationName = processName || match?.project.name || '应用未识别'
   const applicationDetail =
     processPath ||
@@ -60,7 +65,7 @@ export const ConnectionProjectCard = ({
   const ruleName = match?.project.name || '未设置应用规则'
   const actualChain = [...connection.chains].reverse()
   const outlet = match?.policy || actualChain[0] || '未返回出口'
-  const hasApplication = Boolean(processName || match)
+  const hasApplication = Boolean(hasProcess || match)
 
   return (
     <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
@@ -96,6 +101,8 @@ export const ConnectionProjectCard = ({
                 label={attributionLabel(
                   attribution?.source,
                   attribution?.match,
+                  hasProcess,
+                  Boolean(match),
                 )}
               />
               {match?.inferred && (
@@ -134,11 +141,6 @@ export const ConnectionProjectCard = ({
             bgcolor: 'action.hover',
           }}
         >
-          <AppsRounded fontSize="small" color="action" />
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {applicationName}
-          </Typography>
-          <ArrowForwardRounded fontSize="small" color="action" />
           <RuleRounded fontSize="small" color="action" />
           <Typography variant="body2">{ruleName}</Typography>
           <ArrowForwardRounded fontSize="small" color="action" />

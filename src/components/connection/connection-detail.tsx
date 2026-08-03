@@ -359,7 +359,7 @@ const InnerConnectionDetail = ({
             startIcon={<TuneRounded />}
             onClick={onOpenRuleAssistant}
           >
-            设置此应用分流
+            设置分流
           </Button>
           {!closed && (
             <Button

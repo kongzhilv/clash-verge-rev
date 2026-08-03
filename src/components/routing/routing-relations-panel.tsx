@@ -2,7 +2,6 @@ import {
   AccountTreeRounded,
   AppsRounded,
   ArrowForwardRounded,
-  HubRounded,
   LanRounded,
   LinkRounded,
   RuleRounded,
@@ -90,7 +89,7 @@ export const RoutingRelationsPanel = ({
           </Button>
         }
       >
-        尚未建立应用分流关系。
+        尚未建立应用应用分流。
       </Alert>
     )
   }
@@ -123,10 +122,10 @@ export const RoutingRelationsPanel = ({
       >
         <AccountTreeRounded color="primary" fontSize="small" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 700 }}>分流关系</Typography>
+          <Typography sx={{ fontWeight: 700 }}>应用分流</Typography>
           {!compact && (
             <Typography variant="caption" color="text.secondary">
-              应用 → 规则 → 出口
+              应用规则 → 出口策略
             </Typography>
           )}
         </Box>
@@ -186,13 +185,6 @@ export const RoutingRelationsPanel = ({
                 spacing={0.5}
                 sx={{ flex: 1, minWidth: 0, alignItems: 'center' }}
               >
-                <Chip
-                  size="small"
-                  icon={<HubRounded />}
-                  label={project.groupId}
-                  variant="outlined"
-                  sx={{ maxWidth: compact ? 120 : 180 }}
-                />
                 <ArrowForwardRounded fontSize="inherit" color="disabled" />
                 <Chip
                   size="small"
@@ -205,7 +197,7 @@ export const RoutingRelationsPanel = ({
               </Stack>
 
               <Tooltip
-                title={`规则连接 ${matchedConnections} · 出口连接 ${policyConnections}`}
+                title={`此应用规则命中 ${matchedConnections} 条连接 · 该出口共 ${policyConnections} 条`}
               >
                 <Chip size="small" label={matchedConnections} />
               </Tooltip>
@@ -223,7 +215,7 @@ export const RoutingRelationsPanel = ({
                     <LinkRounded fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="规则">
+                <Tooltip title="编辑应用规则">
                   <IconButton
                     size="small"
                     onClick={() =>

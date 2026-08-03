@@ -206,7 +206,7 @@ export const DetectedProgramsPanel = ({
                   {index > 0 && <Divider component="li" />}
                   <ListItem
                     secondaryAction={
-                      <Tooltip title={registered ? '已加入' : '加入分流'}>
+                      <Tooltip title={registered ? '已设置' : '创建应用规则'}>
                         <span>
                           <IconButton
                             edge="end"

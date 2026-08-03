@@ -3,7 +3,6 @@ import {
   AppsRounded,
   DeleteOutlineRounded,
   EditRounded,
-  HubRounded,
   LanRounded,
   LinkRounded,
 } from '@mui/icons-material'
@@ -136,7 +135,7 @@ export const ProjectPanel = ({
               应用规则
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              一个应用规则对应一组识别条件和一个出口。
+              按应用或连接特征匹配流量，并指定出口策略。
             </Typography>
           </Box>
           <Button
@@ -217,10 +216,10 @@ export const ProjectPanel = ({
                         variant="caption"
                         color="text.secondary"
                         noWrap
-                        title={project.description || project.groupId}
+                        title={project.description || project.name}
                         sx={{ display: 'block' }}
                       >
-                        {project.description || project.groupId}
+                        {project.description || '应用规则'}
                       </Typography>
                       <Stack
                         direction="row"
@@ -229,13 +228,7 @@ export const ProjectPanel = ({
                       >
                         <Chip
                           size="small"
-                          label={`${conditionCount(project)} 条件`}
-                        />
-                        <Chip
-                          size="small"
-                          icon={<HubRounded />}
-                          label={project.groupId}
-                          variant="outlined"
+                          label={`${conditionCount(project)} 项匹配`}
                         />
                         <Chip
                           size="small"

@@ -6,7 +6,6 @@ import {
   DnsRounded,
   LanRounded,
   OpenInNewRounded,
-  RefreshRounded,
   RouterRounded,
   SettingsEthernetRounded,
 } from '@mui/icons-material'
@@ -313,8 +312,8 @@ export const ConnectionRuleAssistant = ({
         }
         showNotice.success(
           closed
-            ? '应用规则与分流规则已保存并立即应用'
-            : '应用规则与分流规则已保存；当前连接已关闭，下次连接会重新匹配',
+            ? '分流设置已保存并立即应用'
+            : '分流设置已保存；当前连接已关闭，下次连接会重新匹配',
         )
         return true
       } catch (error) {
@@ -442,10 +441,10 @@ export const ConnectionRuleAssistant = ({
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>连接、应用规则、规则组与出口联动</DialogTitle>
+        <DialogTitle>设置分流</DialogTitle>
         <DialogContent dividers sx={{ p: 0 }}>
           <Alert severity="info" sx={{ borderRadius: 0 }}>
-            可把整条连接保存为应用规则，也可把单个域名、IP、端口或进程条件加入手动规则组。
+            为整个应用设置出口，或把当前连接特征加入通用规则。
           </Alert>
 
           <Box sx={{ p: 2 }}>
@@ -467,12 +466,6 @@ export const ConnectionRuleAssistant = ({
                 >
                   {connection.rule && (
                     <Chip size="small" label={`实际规则：${connection.rule}`} />
-                  )}
-                  {connection.rulePayload && (
-                    <Chip
-                      size="small"
-                      label={`规则内容：${connection.rulePayload}`}
-                    />
                   )}
                   {connection.chains.length > 0 && (
                     <Chip
@@ -496,13 +489,13 @@ export const ConnectionRuleAssistant = ({
                   onClick={openProjectEditor}
                   disabled={loading || savingGroupId !== null}
                 >
-                  {linkedProject ? '编辑关联应用规则' : '添加为应用规则'}
+                  {linkedProject ? '编辑应用规则' : '设置应用规则'}
                 </Button>
                 <Button
                   startIcon={<OpenInNewRounded />}
                   onClick={openRulesPage}
                 >
-                  打开完整规则页
+                  打开分流中心
                 </Button>
               </Stack>
             </Stack>
@@ -522,7 +515,7 @@ export const ConnectionRuleAssistant = ({
               }}
             >
               <Typography variant="subtitle2" sx={{ px: 2, pt: 2 }}>
-                单独选择一个规则条件
+                当前连接特征
               </Typography>
               <List disablePadding>
                 {candidates.map((candidate) => (
@@ -545,7 +538,7 @@ export const ConnectionRuleAssistant = ({
               </List>
               {candidates.length === 0 && (
                 <Typography sx={{ p: 2, color: 'text.secondary' }}>
-                  没有可单独添加的连接条件，仍可通过上方按钮手动建立应用规则。
+                  没有可用的连接特征，仍可为应用创建规则。
                 </Typography>
               )}
             </Box>
@@ -557,20 +550,13 @@ export const ConnectionRuleAssistant = ({
                 sx={{ p: 2, alignItems: { sm: 'center' } }}
               >
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="subtitle2">手动规则组</Typography>
+                  <Typography variant="subtitle2">通用规则</Typography>
                   {selectedCandidate && (
                     <Typography variant="body2" color="text.secondary">
                       {selectedCandidate.description}
                     </Typography>
                   )}
                 </Box>
-                <Button
-                  startIcon={<RefreshRounded />}
-                  onClick={() => void loadProfile()}
-                  disabled={loading || savingGroupId !== null}
-                >
-                  重新读取
-                </Button>
                 <Button
                   variant="contained"
                   startIcon={<AddRounded />}
@@ -579,7 +565,7 @@ export const ConnectionRuleAssistant = ({
                     !selectedCandidate || loading || savingGroupId !== null
                   }
                 >
-                  新建规则组
+                  新建通用规则
                 </Button>
               </Stack>
 
@@ -640,7 +626,7 @@ export const ConnectionRuleAssistant = ({
               ) : (
                 <Box sx={{ p: 3 }}>
                   <Typography color="text.secondary">
-                    没有额外的手动规则组。优先使用“应用规则”，它会同时维护多项识别条件、规则组和出口。
+                    没有额外的通用规则。优先使用“应用规则”，它会同时维护多项识别条件、规则组和出口。
                   </Typography>
                 </Box>
               )}
