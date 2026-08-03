@@ -3,7 +3,6 @@ import {
   Alert,
   AppBar,
   Box,
-  Button,
   Chip,
   Dialog,
   IconButton,
@@ -236,148 +235,96 @@ export const DiversionDetector = () => {
 
   return (
     <>
-      <Tooltip title="检测域名命中的自定义和内置分流组">
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<SearchRounded />}
-          onClick={openDetector}
-        >
-          分流检测
-        </Button>
+      <Tooltip title="测试域名分流">
+        <IconButton size="small" onClick={openDetector}>
+          <SearchRounded fontSize="small" />
+        </IconButton>
       </Tooltip>
       <Dialog fullScreen open={open} onClose={() => setOpen(false)}>
-        <AppBar position="sticky" color="default" elevation={1}>
+        <AppBar
+          position="sticky"
+          color="default"
+          elevation={0}
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
+        >
           <Toolbar sx={{ gap: 1 }}>
             <IconButton edge="start" onClick={() => setOpen(false)}>
               <CloseRounded />
             </IconButton>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h6">分流规则检测</Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: 'text.secondary',
-                }}
-              >
-                仅按域名检测；IP、端口、进程和规则集内容需要 Mihomo 核心判定
-              </Typography>
-            </Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              域名测试
+            </Typography>
           </Toolbar>
         </AppBar>
 
-        <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto', p: 2 }}>
-          <Stack spacing={2}>
-            <Alert severity="info">
-              与 Karing 一样，这里是域名规则预览；真实连接还会受
-              IP、端口、进程、规则集下载状态和运行时规则影响。
-            </Alert>
+        <Box sx={{ width: '100%', maxWidth: 840, mx: 'auto', p: 2 }}>
+          <Stack spacing={1.5}>
             <TextField
               autoFocus
               fullWidth
               label="域名或网址"
-              placeholder="openai.com 或 https://chatgpt.com/"
+              placeholder="openai.com"
               value={input}
               onChange={(event) => setInput(event.target.value)}
               disabled={loading}
             />
 
             {loading ? (
-              <Typography
-                sx={{
-                  color: 'text.secondary',
-                }}
-              >
-                正在读取全局 Merge 配置…
-              </Typography>
-            ) : !host ? (
-              <Typography
-                sx={{
-                  color: 'text.secondary',
-                }}
-              >
-                输入域名后开始检测。
-              </Typography>
-            ) : config.enabled !== true ? (
-              <Alert severity="warning">Karing 风格分流当前未启用。</Alert>
+              <Typography color="text.secondary">读取配置中…</Typography>
+            ) : !host ? null : config.enabled !== true ? (
+              <Alert severity="warning">分流当前未启用。</Alert>
             ) : (
-              <Stack spacing={2}>
+              <Stack spacing={1.5}>
                 {result.hits.length ? (
-                  <Stack spacing={1.5}>
+                  <Stack spacing={0.75}>
                     {result.hits.map((hit, index) => (
-                      <Paper key={hit.id} variant="outlined" sx={{ p: 2 }}>
+                      <Paper
+                        key={hit.id}
+                        variant="outlined"
+                        sx={{ px: 1.5, py: 1.25, borderRadius: 2 }}
+                      >
                         <Stack
                           direction="row"
                           spacing={1}
-                          sx={{
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                          }}
+                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                         >
                           <Chip
                             size="small"
                             color={index === 0 ? 'primary' : 'default'}
-                            label={
-                              index === 0 ? '首个命中' : `后续命中 ${index + 1}`
-                            }
+                            label={index === 0 ? '首个命中' : `候选 ${index + 1}`}
                           />
-                          <Typography
-                            sx={{
-                              fontWeight: 600,
-                            }}
-                          >
+                          <Typography sx={{ fontWeight: 650 }}>
                             {hit.group}
                           </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {`${hit.matcherType} · ${hit.matcherValue} · ${hit.action}`}
+                          </Typography>
                         </Stack>
-                        <Typography sx={{ mt: 1 }}>
-                          {hit.matcherType},{hit.matcherValue}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: 'text.secondary',
-                          }}
-                        >
-                          动作：{hit.action}
-                        </Typography>
                       </Paper>
                     ))}
                   </Stack>
                 ) : (
-                  <Alert severity="warning">
-                    没有命中可在本地判断的域名规则。
-                  </Alert>
+                  <Alert severity="info">未命中本地可判断的域名规则。</Alert>
                 )}
 
-                {result.deferred.length ? (
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography
-                      sx={{
-                        fontWeight: 600,
-                      }}
-                    >
-                      需 Mihomo 核心判定
+                {result.deferred.length > 0 && (
+                  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+                    <Typography sx={{ fontWeight: 650, mb: 0.5 }}>
+                      由 Mihomo 继续判断
                     </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: 'text.secondary',
-                        mb: 1,
-                      }}
-                    >
-                      以下 GeoSite、GeoIP、Rule
-                      Set、进程或端口规则已启用，但本地域名预览不会把它们伪报为命中。
-                    </Typography>
-                    <Stack spacing={0.75}>
+                    <Stack spacing={0.4}>
                       {result.deferred.map((item) => (
-                        <Typography key={item.id} variant="body2">
-                          {item.group}：{item.matcherType},{item.matcherValue}（
-                          {item.action}）
+                        <Typography
+                          key={item.id}
+                          variant="body2"
+                          color="text.secondary"
+                        >
+                          {`${item.group} · ${item.matcherType} · ${item.matcherValue}`}
                         </Typography>
                       ))}
                     </Stack>
                   </Paper>
-                ) : null}
+                )}
               </Stack>
             )}
           </Stack>
