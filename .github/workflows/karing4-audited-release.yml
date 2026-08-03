@@ -1,5 +1,5 @@
 name: Karing 4 Audited Release
-run-name: Build and release v2.5.3-karing.4 (retry 3)
+run-name: Build and release v2.5.3-karing.4 (final application attribution)
 
 on:
   push:
@@ -18,27 +18,27 @@ env:
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
   RELEASE_TAG: v2.5.3-karing.4
-  CANDIDATE_SHA: 09a7351fd220318dfb9222e4d6e487a364cf1b6b
+  CANDIDATE_SHA: 24d7784fd755e1675d23e702f31710fd5dfb5d23
 
 concurrency:
-  group: karing4-audited-release
+  group: karing4-final-audited-release
   cancel-in-progress: false
 
 jobs:
   review:
-    name: Review pinned source
+    name: 审查固定候选源码
     runs-on: ubuntu-22.04
     outputs:
       commit: ${{ steps.meta.outputs.commit }}
       version: ${{ steps.meta.outputs.version }}
     steps:
-      - name: Checkout pinned candidate
+      - name: 检出固定候选
         uses: actions/checkout@v7
         with:
           ref: ${{ env.CANDIDATE_SHA }}
           fetch-depth: 0
 
-      - name: Install Linux dependencies
+      - name: 安装 Linux 构建依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -49,26 +49,26 @@ jobs:
             libssl-dev \
             patchelf
 
-      - name: Install Rust
+      - name: 安装 Rust
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node.js
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Record release metadata
+      - name: 验证候选与版本
         id: meta
         shell: bash
         run: |
@@ -80,7 +80,7 @@ jobs:
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Run frontend quality gates
+      - name: 运行前端质量门禁
         run: |
           pnpm format:check
           pnpm lint
@@ -88,10 +88,10 @@ jobs:
           pnpm knip:report
           pnpm run web:build
 
-      - name: Run Rust Clippy
+      - name: 运行 Rust Clippy
         run: cargo clippy --workspace --all-targets --features clippy -- -D warnings
 
-      - name: Audit application routing and overflow UX
+      - name: 审查应用分流与实时归因
         shell: bash
         run: |
           set -euo pipefail
@@ -99,38 +99,62 @@ jobs:
           from pathlib import Path
 
           checks = [
+              ('live connection details', 'src/components/connection/connection-detail.tsx', 'useConnectionData({ enabled: open })'),
+              ('technical details disclosure', 'src/components/connection/connection-detail.tsx', '技术详情'),
+              ('application attribution subscription', 'src/components/routing/connection-project-card.tsx', 'useConnectionProcessAttribution'),
+              ('Windows TUN label', 'src/components/routing/connection-project-card.tsx', 'Windows TUN 端点识别'),
+              ('local endpoint attribution', 'src/services/process-connections.ts', "'local-endpoint'"),
+              ('recent endpoint attribution', 'src/services/process-connections.ts', "'recent-local-endpoint'"),
+              ('recent endpoint TTL', 'src/services/process-connections.ts', 'RECENT_ENDPOINT_TTL_MS'),
+              ('bounded attribution store', 'src/services/process-connections.ts', 'MAX_ATTRIBUTION_ITEMS'),
+              ('new connection fast sampling', 'src/hooks/use-connection-data.ts', 'PROCESS_CONNECTION_NEW_DELAY_MS'),
+              ('new connection retry', 'src/hooks/use-connection-data.ts', 'requestFastProcessConnectionRefresh'),
+              ('active-only native enrichment', 'src/hooks/use-connection-data.ts', 'activeConnections = enrichConnectionsWithProcesses'),
+              ('Fake-IP guard', 'src/components/connection/connection-rule-assistant.tsx', 'isMihomoFakeIp'),
+              ('connection filters', 'src/components/connection/connection-filter-menu.tsx', 'outbound: string'),
+              ('common routing presets', 'src/components/rule/diversion-manager/settings-panel.tsx', '常用分流'),
               ('overflow component', 'src/components/base/overflow-reveal.tsx', "overflowX: 'auto'"),
               ('resize measurement', 'src/components/base/overflow-reveal.tsx', 'ResizeObserver'),
-              ('deferred measurement', 'src/components/base/overflow-reveal.tsx', 'requestAnimationFrame'),
               ('shared scroll styles', 'src/components/base/scroll-area.ts', 'softScrollAreaSx'),
-              ('detected application scrolling', 'src/components/rule/diversion-manager/detected-programs-panel.tsx', 'softScrollAreaSx'),
-              ('application rule overflow reveal', 'src/components/rule/diversion-manager/project-panel.tsx', 'OverflowReveal'),
-              ('policy picker overflow reveal', 'src/components/rule/diversion-manager/action-picker.tsx', 'OverflowReveal'),
-              ('routing relation overflow reveal', 'src/components/routing/routing-relations-panel.tsx', 'OverflowReveal'),
-              ('proxy node overflow reveal', 'src/components/routing/focused-policy-panel.tsx', 'OverflowReveal'),
-              ('live connection details', 'src/components/connection/connection-detail.tsx', 'useConnectionData({ enabled: open })'),
-              ('Fake-IP guard', 'src/components/connection/connection-rule-assistant.tsx', 'isMihomoFakeIp'),
-              ('bounded attribution cache', 'src/services/process-connections.ts', 'MAX_ATTRIBUTION_ITEMS'),
               ('TCP owner table API', 'src-tauri/src/cmd/process_connections.rs', 'GetExtendedTcpTable'),
               ('UDP owner table API', 'src-tauri/src/cmd/process_connections.rs', 'GetExtendedUdpTable'),
               ('full executable path API', 'src-tauri/src/cmd/process_connections.rs', 'QueryFullProcessImageNameW'),
-              ('native module path', 'src-tauri/src/cmd/network.rs', '#[path = "process_connections.rs"]'),
-              ('native dispatch kind', 'src-tauri/src/cmd/network.rs', 'if kind.as_deref() == Some("process-connections")'),
-              ('native process snapshot dispatch', 'src-tauri/src/cmd/network.rs', 'process_connections::get_process_connections()'),
+              ('native process dispatch', 'src-tauri/src/cmd/network.rs', 'process_connections::get_process_connections()'),
               ('registered Tauri command', 'src-tauri/src/lib.rs', 'cmd::get_network_interfaces_info'),
-              ('frontend Tauri command', 'src/services/process-connections.ts', "invoke<ProcessConnectionSnapshot>('get_network_interfaces_info'"),
-              ('frontend dispatch kind', 'src/services/process-connections.ts', "kind: 'process-connections'"),
           ]
 
           for label, path, needle in checks:
               text = Path(path).read_text(encoding='utf-8')
               if needle not in text:
-                  raise SystemExit(f'[fail] {label}: {needle!r} missing from {path}')
-              print(f'[pass] {label}')
+                  raise SystemExit(f'[失败] {label}: {needle!r} missing from {path}')
+              print(f'[通过] {label}')
+
+          ui_paths = [
+              Path('src/components/connection'),
+              Path('src/components/routing'),
+              Path('src/components/rule/diversion-manager'),
+              Path('src/pages'),
+          ]
+          forbidden = [
+              'Mihomo 进程元数据',
+              '未返回程序信息',
+              '程序项目',
+              '项目档案',
+              '程序档案',
+          ]
+          for root in ui_paths:
+              for path in root.rglob('*'):
+                  if not path.is_file() or path.suffix not in {'.ts', '.tsx'}:
+                      continue
+                  text = path.read_text(encoding='utf-8')
+                  for value in forbidden:
+                      if value in text:
+                          raise SystemExit(f'[失败] obsolete UI text {value!r} in {path}')
+          print('[通过] 用户界面没有旧进程文案或项目档案术语')
           PY
 
   native-builds:
-    name: Build ${{ matrix.name }}
+    name: 构建 ${{ matrix.name }}
     needs: review
     strategy:
       fail-fast: false
@@ -163,21 +187,21 @@ jobs:
             platform: linux
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout pinned candidate
+      - name: 检出固定候选
         uses: actions/checkout@v7
         with:
           ref: ${{ env.CANDIDATE_SHA }}
 
-      - name: Install Rust target
+      - name: 安装 Rust 目标
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
           targets: ${{ matrix.target }}
 
-      - name: Restore Rust cache
+      - name: 恢复 Rust 缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing4-native-v1
+          prefix-key: karing4-final-native-v1
           key: ${{ matrix.os }}-${{ matrix.target }}
           workspaces: |
             . -> target
@@ -185,7 +209,7 @@ jobs:
           cache-all-crates: true
           cache-workspace-crates: true
 
-      - name: Install Linux dependencies
+      - name: 安装 Linux 构建依赖
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
@@ -197,36 +221,36 @@ jobs:
             libssl-dev \
             patchelf
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node.js
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Build matching service
+      - name: 构建匹配服务
         run: node scripts/build-matching-service.mjs ${{ matrix.target }}
 
-      - name: Prepare Mihomo and runtime resources
+      - name: 准备 Mihomo 与运行资源
         run: pnpm run prebuild ${{ matrix.target }}
 
-      - name: Disable updater artifacts
+      - name: 生成无更新签名配置
         shell: bash
         run: |
           mkdir -p .ci
           printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
 
-      - name: Build desktop installer
+      - name: 构建桌面安装包
         run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
 
-      - name: Upload Windows installer
+      - name: 上传 Windows 安装包
         if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v7
         with:
@@ -236,7 +260,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - name: Upload macOS image
+      - name: 上传 macOS 镜像
         if: matrix.platform == 'macos'
         uses: actions/upload-artifact@v7
         with:
@@ -246,7 +270,7 @@ jobs:
           compression-level: 0
           retention-days: 14
 
-      - name: Upload Linux packages
+      - name: 上传 Linux x64 安装包
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v7
         with:
@@ -259,7 +283,7 @@ jobs:
           retention-days: 14
 
   linux-arm-builds:
-    name: Build Linux ${{ matrix.name }}
+    name: 构建 Linux ${{ matrix.name }}
     needs: review
     strategy:
       fail-fast: false
@@ -275,21 +299,21 @@ jobs:
             deb_arch: armhf
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout pinned candidate
+      - name: 检出固定候选
         uses: actions/checkout@v7
         with:
           ref: ${{ env.CANDIDATE_SHA }}
 
-      - name: Install Rust target
+      - name: 安装 Rust 目标
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
           targets: ${{ matrix.target }}
 
-      - name: Restore Rust cache
+      - name: 恢复 Rust 缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing4-linux-arm-v1
+          prefix-key: karing4-final-linux-arm-v1
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -297,7 +321,7 @@ jobs:
           cache-all-crates: true
           cache-workspace-crates: true
 
-      - name: Configure Ubuntu multiarch sources
+      - name: 配置 Ubuntu 多架构源
         shell: bash
         run: |
           set -euo pipefail
@@ -325,7 +349,7 @@ jobs:
             librsvg2-dev:${{ matrix.deb_arch }} \
             patchelf
 
-      - name: Install cross compiler
+      - name: 安装交叉编译器
         shell: bash
         run: |
           set -euo pipefail
@@ -346,36 +370,36 @@ jobs:
           fi
           echo 'PKG_CONFIG_ALLOW_CROSS=1' >> "$GITHUB_ENV"
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node.js
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Build matching service
+      - name: 构建匹配服务
         run: node scripts/build-matching-service.mjs ${{ matrix.target }}
 
-      - name: Prepare Mihomo and runtime resources
+      - name: 准备 Mihomo 与运行资源
         run: pnpm run prebuild ${{ matrix.target }}
 
-      - name: Disable updater artifacts
+      - name: 生成无更新签名配置
         shell: bash
         run: |
           mkdir -p .ci
           printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
 
-      - name: Cross-build Linux packages
+      - name: 交叉编译 Linux 安装包
         run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
 
-      - name: Upload Linux ARM packages
+      - name: 上传 Linux ARM 安装包
         uses: actions/upload-artifact@v7
         with:
           name: karing4-linux-${{ matrix.arch }}
@@ -387,7 +411,7 @@ jobs:
           retention-days: 14
 
   fixed-webview2-builds:
-    name: Build fixed WebView2 ${{ matrix.name }}
+    name: 构建固定 WebView2 ${{ matrix.name }}
     needs: review
     strategy:
       fail-fast: false
@@ -401,21 +425,21 @@ jobs:
             arch: arm64
     runs-on: windows-latest
     steps:
-      - name: Checkout pinned candidate
+      - name: 检出固定候选
         uses: actions/checkout@v7
         with:
           ref: ${{ env.CANDIDATE_SHA }}
 
-      - name: Install Rust target
+      - name: 安装 Rust 目标
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.96.1'
           targets: ${{ matrix.target }}
 
-      - name: Restore Rust cache
+      - name: 恢复 Rust 缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing4-fixed-webview2-v1
+          prefix-key: karing4-final-fixed-webview2-v1
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -423,27 +447,27 @@ jobs:
           cache-all-crates: true
           cache-workspace-crates: true
 
-      - name: Install pnpm
+      - name: 安装 pnpm
         uses: pnpm/action-setup@v6
         with:
           run_install: false
 
-      - name: Install Node.js
+      - name: 安装 Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
           cache: pnpm
 
-      - name: Install dependencies
+      - name: 安装项目依赖
         run: pnpm install --frozen-lockfile
 
-      - name: Build matching service
+      - name: 构建匹配服务
         run: node scripts/build-matching-service.mjs ${{ matrix.target }}
 
-      - name: Prepare Mihomo and runtime resources
+      - name: 准备 Mihomo 与运行资源
         run: pnpm run prebuild ${{ matrix.target }}
 
-      - name: Download fixed WebView2 runtime
+      - name: 下载固定 WebView2 运行库
         shell: pwsh
         run: |
           $version = '133.0.3065.92'
@@ -453,13 +477,13 @@ jobs:
           Remove-Item ./src-tauri/tauri.windows.conf.json
           Rename-Item ./src-tauri/webview2.${{ matrix.arch }}.json tauri.windows.conf.json
 
-      - name: Disable updater artifacts
+      - name: 生成无更新签名配置
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force .ci | Out-Null
           '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding utf8 .ci/tauri-release.conf.json
 
-      - name: Build fixed WebView2 installer
+      - name: 构建固定 WebView2 安装包
         shell: pwsh
         run: |
           pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
@@ -470,7 +494,7 @@ jobs:
             Rename-Item $file.FullName $newName
           }
 
-      - name: Upload fixed WebView2 installer
+      - name: 上传固定 WebView2 安装包
         uses: actions/upload-artifact@v7
         with:
           name: karing4-fixed-webview2-${{ matrix.arch }}
@@ -480,7 +504,7 @@ jobs:
           retention-days: 14
 
   package-release:
-    name: Package and verify 12 installers
+    name: 汇总并验证 12 个安装文件
     needs:
       - review
       - native-builds
@@ -488,14 +512,14 @@ jobs:
       - fixed-webview2-builds
     runs-on: ubuntu-latest
     steps:
-      - name: Download all installers
+      - name: 下载全部安装包
         uses: actions/download-artifact@v8
         with:
           pattern: karing4-*
           path: downloaded-assets
           merge-multiple: true
 
-      - name: Verify and package release assets
+      - name: 校验并整理发行资产
         shell: bash
         run: |
           set -euo pipefail
@@ -508,7 +532,7 @@ jobs:
             \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
             | wc -l)
           if [ "$installer_count" -ne 12 ]; then
-            echo "[fail] expected 12 installers, found $installer_count"
+            echo "[失败] 应有 12 个安装文件，实际为 $installer_count 个"
             find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
             exit 1
           fi
@@ -533,17 +557,23 @@ jobs:
           cat > release-assets/release-notes.md <<EOF
           # Clash Verge Rev Karing v2.5.3-karing.4
 
-          本版本完成应用分流、Windows 进程归因、TUN/Fake-IP 识别和连接工作区的成熟化迭代。
+          本版本继续收敛为现代应用分流工作流，并修复 Windows TUN/Fake-IP 与短连接应用归因。
 
-          ## 主要变化
-          - 当前联网应用可直接创建应用分流并选择出口
-          - Windows 原生枚举 TCP/UDP IPv4/IPv6、PID、应用名称与完整 exe 路径
-          - TUN/Fake-IP 场景仅在源端口归属唯一时回退关联，避免跨应用误判
-          - 连接详情实时更新应用归因、命中规则、预期出口与实际出口
-          - 支持按应用、命中规则和实际出口组合筛选连接
-          - 常用分流预设可直接启用并选择出口
-          - 长应用名、完整路径、规则名、策略组和节点名支持触控/滚轮/键盘滑动、悬停完整提示和柔和滚动提示
-          - 小窗口与高 DPI 下卡片自动重排，正文与操作区不再互相挤压
+          ## 应用归因
+          - 新连接出现后立即采样 Windows TCP/UDP 所属进程，并执行一次短延迟重试
+          - 优先按完整端点匹配，其次按 TUN/Fake-IP 本地端点匹配
+          - 保存最近 20 秒的无冲突端点记录，避免短连接在轮询前结束后无法识别
+          - 只有端点信息不足时才使用唯一源端口兜底；冲突时停止猜测
+          - 历史已关闭连接不再被后续端口复用错误覆盖
+          - 已打开的连接详情持续订阅最新连接与归因结果
+
+          ## 界面与操作
+          - 主视图只保留应用、应用规则、预期出口和当前出口
+          - PID、程序路径、原始命中规则、完整出口链与归因原因移入可展开“技术详情”
+          - 分流中心按应用分流、通用规则和全局设置组织
+          - 支持按应用、命中规则和实际出口筛选连接
+          - 保留常用分流预设，隐藏内部托管规则组实现细节
+          - 修复小窗口、高 DPI 和长文本造成的裁切与挤压
 
           ## 安装包
           - Windows x64 与 ARM64
@@ -556,10 +586,10 @@ jobs:
           Commit: ${{ needs.review.outputs.commit }}
           EOF
 
-          echo '[pass] packaged release assets:'
+          echo '[通过] 12 个安装文件与 SHA256 已验证'
           find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
 
-      - name: Upload audited release assets
+      - name: 上传已审查的完整发行资产
         uses: actions/upload-artifact@v7
         with:
           name: karing4-release-assets
@@ -569,7 +599,7 @@ jobs:
           retention-days: 30
 
   publish-release:
-    name: Publish and verify v2.5.3-karing.4
+    name: 发布并验证 v2.5.3-karing.4
     needs:
       - review
       - package-release
@@ -577,13 +607,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download audited assets
+      - name: 下载已审查资产
         uses: actions/download-artifact@v8
         with:
           name: karing4-release-assets
           path: release-assets
 
-      - name: Publish and verify GitHub Release
+      - name: 发布并复核 GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -633,11 +663,11 @@ jobs:
 
           tag_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha')
           test "$tag_sha" = "$expected_commit"
-          echo '[pass] release tag, commit and 14 assets verified'
+          echo '[通过] Release 标签、最终提交与 14 个资产完全一致'
           jq '{url, tagName, targetCommitish, assets: [.assets[].name]}' <<< "$release_json"
 
   report:
-    name: Report audited release status
+    name: 回报最终审查与发行状态
     if: always()
     needs:
       - review
@@ -652,7 +682,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - name: Post status to PR
+      - name: 更新 PR 状态
         env:
           GH_TOKEN: ${{ github.token }}
           REVIEW: ${{ needs.review.result }}
@@ -675,8 +705,8 @@ jobs:
           fi
 
           cat > /tmp/release-status.md <<EOF
-          <!-- karing4-audited-release-status -->
-          ## Karing 4 审查与发行状态
+          <!-- karing4-final-audited-release-status -->
+          ## Karing 4 最终审查与发行状态
 
           ${status}
 
