@@ -1,9 +1,16 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { MihomoWebSocket } from 'tauri-plugin-mihomo-api'
 
+import {
+  enrichConnectionsWithProcesses,
+  getSystemProcessConnections,
+  type ProcessConnectionSnapshot,
+} from '@/services/process-connections'
+
 const MAX_CLOSED_CONNS_NUM = 500
 const CONNECTION_UPDATE_THROTTLE_MS = 500
 const CONNECTION_RECONNECT_DELAY_MS = 1_000
+const PROCESS_CONNECTION_REFRESH_MS = 2_000
 
 type ConnectionMetadata = IConnectionsItem['metadata']
 type ConnectionListener = () => void
@@ -40,6 +47,9 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 let pendingMessageData: string | null = null
 let lastFlushAt = 0
+let processConnectionSnapshot: ProcessConnectionSnapshot | undefined
+let processConnectionTimer: ReturnType<typeof setTimeout> | null = null
+let processConnectionRefreshing = false
 
 const connectionListeners = new Set<ConnectionListener>()
 const summaryListeners = new Set<ConnectionListener>()
@@ -149,7 +159,10 @@ const mergeConnectionSnapshot = (
   payload: IConnections,
   previous: ConnectionMonitorData = initConnData,
 ): ConnectionMonitorData => {
-  const nextConnections = payload.connections ?? []
+  const nextConnections = enrichConnectionsWithProcesses(
+    payload.connections ?? [],
+    processConnectionSnapshot,
+  )
   const previousActive = previous.activeConnections ?? []
   const previousClosed = previous.closedConnections ?? []
   const previousActiveById = new Map<string, IConnectionsItem>()
@@ -212,6 +225,75 @@ const mergeConnectionSummary = (
 ): ConnectionSummaryData => ({
   activeConnectionCount: payload.connections?.length ?? 0,
 })
+
+const applyProcessConnectionSnapshot = (
+  snapshot: ProcessConnectionSnapshot,
+) => {
+  processConnectionSnapshot = snapshot
+  const activeConnections = enrichConnectionsWithProcesses(
+    connectionData.activeConnections,
+    snapshot,
+  )
+  const closedConnections = enrichConnectionsWithProcesses(
+    connectionData.closedConnections,
+    snapshot,
+  )
+  if (
+    activeConnections === connectionData.activeConnections &&
+    closedConnections === connectionData.closedConnections
+  ) {
+    return
+  }
+
+  connectionData = {
+    ...connectionData,
+    activeConnections,
+    closedConnections,
+  }
+  notifyConnectionListeners()
+}
+
+const clearProcessConnectionTimer = () => {
+  if (!processConnectionTimer) return
+  window.clearTimeout(processConnectionTimer)
+  processConnectionTimer = null
+}
+
+const scheduleProcessConnectionRefresh = () => {
+  if (connectionListeners.size === 0 || processConnectionTimer) return
+  processConnectionTimer = window.setTimeout(() => {
+    processConnectionTimer = null
+    void refreshProcessConnections()
+  }, PROCESS_CONNECTION_REFRESH_MS)
+}
+
+async function refreshProcessConnections() {
+  if (connectionListeners.size === 0 || processConnectionRefreshing) return
+  processConnectionRefreshing = true
+
+  try {
+    const snapshot = await getSystemProcessConnections()
+    if (connectionListeners.size === 0) return
+    applyProcessConnectionSnapshot(snapshot)
+    if (!snapshot.supported) return
+  } catch (error) {
+    console.warn('[Connections] Failed to refresh native process owners', error)
+  } finally {
+    processConnectionRefreshing = false
+    if (connectionListeners.size > 0) scheduleProcessConnectionRefresh()
+  }
+}
+
+const startProcessConnectionMonitor = () => {
+  if (connectionListeners.size === 0) return
+  clearProcessConnectionTimer()
+  void refreshProcessConnections()
+}
+
+const stopProcessConnectionMonitorIfIdle = () => {
+  if (connectionListeners.size > 0) return
+  clearProcessConnectionTimer()
+}
 
 const flushPendingMessage = () => {
   flushTimer = null
@@ -319,9 +401,11 @@ async function connectConnectionSocket() {
 
 const startConnectionMonitor = () => {
   void connectConnectionSocket()
+  startProcessConnectionMonitor()
 }
 
 const stopConnectionMonitorIfIdle = () => {
+  stopProcessConnectionMonitorIfIdle()
   if (hasConnectionSubscribers()) return
 
   clearReconnectTimer()
@@ -362,6 +446,7 @@ const refreshConnectionData = () => {
   }
 
   void reconnectConnectionSocket()
+  startProcessConnectionMonitor()
 }
 
 const clearClosedConnectionData = () => {
