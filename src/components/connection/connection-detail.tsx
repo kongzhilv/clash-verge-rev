@@ -3,7 +3,7 @@ import {
   ArrowUpwardRounded,
   CloseRounded,
   DnsRounded,
-  HubRounded,
+  ExpandMoreRounded,
   LanRounded,
   PowerOffRounded,
   RouteRounded,
@@ -12,6 +12,9 @@ import {
   TuneRounded,
 } from '@mui/icons-material'
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Button,
   Divider,
@@ -101,7 +104,7 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
         slotProps={{
           paper: {
             sx: {
-              width: { xs: '100%', sm: 540 },
+              width: { xs: '100%', sm: 520 },
               maxWidth: '100vw',
               height: '100%',
               bgcolor: 'background.default',
@@ -171,9 +174,7 @@ const InnerConnectionDetail = ({
   onOpenRuleAssistant,
 }: InnerProps) => {
   const { t } = useTranslation()
-  const { metadata, rulePayload } = data
-  const chains = [...data.chains].reverse().join(' / ')
-  const rule = rulePayload ? `${data.rule}(${rulePayload})` : data.rule
+  const { metadata } = data
   const hostAddress =
     metadata.host || metadata.destinationIP || metadata.remoteDestination
   const destination = metadata.destinationIP || metadata.remoteDestination
@@ -297,85 +298,85 @@ const InnerConnectionDetail = ({
           </Box>
         </Paper>
 
-        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
-          <Stack spacing={1}>
-            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-              <HubRounded color="primary" fontSize="small" />
-              <Typography variant="subtitle2">实际路由</Typography>
+        <Accordion
+          disableGutters
+          elevation={0}
+          sx={{
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: '8px !important',
+            overflow: 'hidden',
+            '&::before': { display: 'none' },
+          }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+            <Typography variant="subtitle2">连接参数</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 0 }}>
+            <Stack divider={<Divider flexItem />}>
+              {information.map((item) => (
+                <Stack
+                  key={item.label}
+                  direction="row"
+                  spacing={1}
+                  sx={{ px: 1.5, py: 1, alignItems: 'center' }}
+                >
+                  <Box sx={{ color: 'text.secondary', display: 'flex' }}>
+                    {item.icon}
+                  </Box>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ minWidth: 72 }}
+                  >
+                    {item.label}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ flex: 1, textAlign: 'right', wordBreak: 'break-all' }}
+                  >
+                    {item.value}
+                  </Typography>
+                </Stack>
+              ))}
             </Stack>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                命中规则
-              </Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                {rule || '未返回规则信息'}
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary">
-                出口链
-              </Typography>
-              <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                {chains || '未返回出口信息'}
-              </Typography>
-            </Box>
-          </Stack>
-        </Paper>
+          </AccordionDetails>
+        </Accordion>
+      </Stack>
 
-        <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-          <Stack divider={<Divider flexItem />}>
-            {information.map((item) => (
-              <Stack
-                key={item.label}
-                direction="row"
-                spacing={1}
-                sx={{ px: 1.5, py: 1, alignItems: 'center' }}
-              >
-                <Box sx={{ color: 'text.secondary', display: 'flex' }}>
-                  {item.icon}
-                </Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 72 }}
-                >
-                  {item.label}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{ flex: 1, textAlign: 'right', wordBreak: 'break-all' }}
-                >
-                  {item.value}
-                </Typography>
-              </Stack>
-            ))}
-          </Stack>
-        </Paper>
-
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          p: 1.5,
+          flex: '0 0 auto',
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Button
+          fullWidth
+          variant="contained"
+          startIcon={<TuneRounded />}
+          onClick={onOpenRuleAssistant}
+        >
+          设置分流
+        </Button>
+        {!closed && (
           <Button
             fullWidth
-            variant="contained"
-            startIcon={<TuneRounded />}
-            onClick={onOpenRuleAssistant}
+            variant="outlined"
+            color="error"
+            startIcon={<PowerOffRounded />}
+            onClick={() => {
+              void onDelete()
+              onClose()
+            }}
           >
-            设置分流
+            断开连接
           </Button>
-          {!closed && (
-            <Button
-              fullWidth
-              variant="outlined"
-              color="error"
-              startIcon={<PowerOffRounded />}
-              onClick={() => {
-                void onDelete()
-                onClose()
-              }}
-            >
-              断开此连接
-            </Button>
-          )}
-        </Stack>
+        )}
       </Stack>
     </Stack>
   )
