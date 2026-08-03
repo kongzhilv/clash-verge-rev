@@ -197,7 +197,9 @@ export const DetectedProgramsPanel = ({
                 : registeredNames.has(program.name.toLowerCase())
               const protocolLabel = program.protocols.join(' / ')
               const processLabel =
-                program.pids.length > 1 ? `${program.pids.length} 个进程` : '1 个进程'
+                program.pids.length > 1
+                  ? `${program.pids.length} 个进程`
+                  : '1 个进程'
 
               return (
                 <Box key={program.key}>
@@ -259,7 +261,9 @@ export const DetectedProgramsPanel = ({
                           </Typography>
                         </>
                       }
-                      slotProps={{ primary: { fontWeight: 650, noWrap: true } }}
+                      slotProps={{
+                        primary: { noWrap: true, sx: { fontWeight: 650 } },
+                      }}
                     />
                   </ListItem>
                 </Box>
