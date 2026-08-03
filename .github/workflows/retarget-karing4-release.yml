@@ -1,5 +1,5 @@
 name: Retarget Karing 4 Audited Release
-run-name: Retarget Karing 4 audited release to final application attribution fix
+run-name: Trigger registered Karing 4 retarget workflow
 
 on:
   push:
