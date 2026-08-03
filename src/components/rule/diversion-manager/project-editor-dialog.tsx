@@ -1,5 +1,12 @@
-import { AddRounded, FolderOpenRounded } from '@mui/icons-material'
 import {
+  AddRounded,
+  ExpandMoreRounded,
+  FolderOpenRounded,
+} from '@mui/icons-material'
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -64,42 +71,39 @@ export const ProjectEditorDialog = ({
     })
     if (!selected) return
     const paths = Array.isArray(selected) ? selected : [selected]
-    const processPaths = splitValues(
-      [...draft.processPaths, ...paths].join('\n'),
-    )
-    const processNames = splitValues(
-      [...draft.processNames, ...paths.map(basename)].join('\n'),
-    )
-    patch({ processPaths, processNames })
+    patch({
+      processPaths: splitValues([...draft.processPaths, ...paths].join('\n')),
+      processNames: splitValues(
+        [...draft.processNames, ...paths.map(basename)].join('\n'),
+      ),
+    })
   }
 
   const conditionCount =
     draft.processNames.length +
     draft.processPaths.length +
     draft.domains.length +
-    draft.ipCidrs.length +
-    draft.destinationPorts.length
+    draft.ipCidrs.length
+  const legacyPortCount = draft.destinationPorts.length
   const canSave = Boolean(
     draft.name.trim() &&
-      (!draft.enabled || draft.action === 'none' || conditionCount > 0) &&
+      (!draft.enabled ||
+        draft.action === 'none' ||
+        conditionCount > 0 ||
+        legacyPortCount > 0) &&
       (draft.action !== 'policy' || draft.policy?.trim()),
   )
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>{project ? '编辑应用规则' : '新建应用规则'}</DialogTitle>
+      <DialogTitle>{project ? '编辑应用分流' : '新建应用分流'}</DialogTitle>
       <DialogContent dividers>
-        <Stack spacing={2}>
-          <Alert severity="info">
-            应用规则将识别条件与一个出口策略绑定，并生成真实的 Mihomo
-            规则。应用信息缺失时，仍可使用域名、IP 或端口匹配。
-          </Alert>
-
+        <Stack spacing={1.5}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <TextField
               fullWidth
               size="small"
-              label="规则名称"
+              label="名称"
               value={draft.name}
               onChange={(event) => patch({ name: event.target.value })}
             />
@@ -114,28 +118,22 @@ export const ProjectEditorDialog = ({
             />
           </Stack>
 
-          <TextField
-            fullWidth
-            size="small"
-            label="说明"
-            value={draft.description}
-            onChange={(event) => patch({ description: event.target.value })}
-          />
-
           <Box>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              出口策略
+            <Typography variant="caption" color="text.secondary">
+              出口
             </Typography>
-            <Button
-              variant="outlined"
-              onClick={() => setActionPickerOpen(true)}
-              sx={{ minWidth: 240, justifyContent: 'space-between' }}
-            >
-              {actionLabel(draft.action, draft.policy)}
-            </Button>
+            <Box sx={{ mt: 0.5 }}>
+              <Button
+                variant="outlined"
+                onClick={() => setActionPickerOpen(true)}
+                sx={{ minWidth: 240, justifyContent: 'space-between' }}
+              >
+                {actionLabel(draft.action, draft.policy)}
+              </Button>
+            </Box>
             <ActionPicker
               open={actionPickerOpen}
-              title={`${draft.name || '当前应用规则'}的出口策略`}
+              title={`${draft.name || '当前应用'}的出口`}
               action={draft.action}
               policy={draft.policy}
               allowDrop
@@ -149,99 +147,108 @@ export const ProjectEditorDialog = ({
             />
           </Box>
 
-          {draft.action === 'policy' && (
-            <TextField
-              fullWidth
-              size="small"
-              label="指定代理组或节点名称"
-              value={draft.policy ?? ''}
-              onChange={(event) => patch({ policy: event.target.value })}
-            />
-          )}
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
+            sx={{ alignItems: { sm: 'center' } }}
+          >
             <Button
               variant="contained"
               startIcon={<FolderOpenRounded />}
               onClick={() => void chooseApplications()}
             >
-              选择应用文件
+              选择应用
             </Button>
-            <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-              选择后会同时登记完整路径和应用文件名，也可继续手动修改。
+            <Typography variant="body2" color="text.secondary">
+              已选择 {draft.processPaths.length || draft.processNames.length}{' '}
+              个应用标识
             </Typography>
           </Stack>
 
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
-            <TextField
-              fullWidth
-              multiline
-              minRows={4}
-              label="应用名称"
-              placeholder={'chrome.exe\nDiscord.exe'}
-              value={draft.processNames.join('\n')}
-              onChange={(event) =>
-                patch({ processNames: splitValues(event.target.value) })
-              }
-              helperText="每行一个；代理核心或 Windows 识别成功时优先精确匹配。"
-            />
-            <TextField
-              fullWidth
-              multiline
-              minRows={4}
-              label="应用完整路径"
-              placeholder={'C:\\Program Files\\App\\app.exe\n/opt/app/app'}
-              value={draft.processPaths.join('\n')}
-              onChange={(event) =>
-                patch({ processPaths: splitValues(event.target.value) })
-              }
-              helperText="每行一个；可用上面的系统文件选择器添加。"
-            />
-          </Stack>
+          <Accordion
+            defaultExpanded={!project || conditionCount === 0}
+            disableGutters
+            elevation={0}
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: '8px !important',
+              '&::before': { display: 'none' },
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+              <Box>
+                <Typography variant="subtitle2">识别条件</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  应用名称和路径优先；域名或 IP 用于核心未返回应用信息时补充识别。
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Stack spacing={1.5}>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={3}
+                    label="应用名称"
+                    placeholder={'chrome.exe\nDiscord.exe'}
+                    value={draft.processNames.join('\n')}
+                    onChange={(event) =>
+                      patch({ processNames: splitValues(event.target.value) })
+                    }
+                  />
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={3}
+                    label="应用完整路径"
+                    placeholder={'C:\\Program Files\\App\\app.exe'}
+                    value={draft.processPaths.join('\n')}
+                    onChange={(event) =>
+                      patch({ processPaths: splitValues(event.target.value) })
+                    }
+                  />
+                </Stack>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={3}
+                    label="补充域名"
+                    placeholder={'openai.com\nchatgpt.com'}
+                    value={draft.domains.join('\n')}
+                    onChange={(event) =>
+                      patch({ domains: splitValues(event.target.value) })
+                    }
+                  />
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={3}
+                    label="补充 IP 或 CIDR"
+                    placeholder={'1.1.1.1/32\n2606:4700::/128'}
+                    value={draft.ipCidrs.join('\n')}
+                    onChange={(event) =>
+                      patch({ ipCidrs: splitValues(event.target.value) })
+                    }
+                  />
+                </Stack>
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
 
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
-            <TextField
-              fullWidth
-              multiline
-              minRows={4}
-              label="域名或域名后缀"
-              placeholder={'openai.com\nchatgpt.com'}
-              value={draft.domains.join('\n')}
-              onChange={(event) =>
-                patch({ domains: splitValues(event.target.value) })
-              }
-              helperText="应用信息缺失时，可根据连接域名识别并路由。"
-            />
-            <TextField
-              fullWidth
-              multiline
-              minRows={4}
-              label="目标 IP 或 CIDR"
-              placeholder={'1.1.1.1/32\n2606:4700::/128'}
-              value={draft.ipCidrs.join('\n')}
-              onChange={(event) =>
-                patch({ ipCidrs: splitValues(event.target.value) })
-              }
-              helperText="支持 IPv4 CIDR；IPv6 精确地址建议使用 /128。"
-            />
-            <TextField
-              fullWidth
-              multiline
-              minRows={4}
-              label="目标端口"
-              placeholder={'443\n8000-9000'}
-              value={draft.destinationPorts.join('\n')}
-              onChange={(event) =>
-                patch({ destinationPorts: splitValues(event.target.value) })
-              }
-              helperText="端口只作为辅助特征；支持单端口和范围。"
-            />
-          </Stack>
+          {legacyPortCount > 0 && (
+            <Alert severity="warning">
+              这条规则含有 {legacyPortCount}{' '}
+              个旧版端口条件，保存时会继续保留。端口规则应在“通用规则”中维护。
+            </Alert>
+          )}
 
-          <Alert severity={conditionCount > 0 ? 'success' : 'warning'}>
-            当前应用规则包含 {conditionCount}{' '}
-            个识别条件。至少需要一个条件才能启用并保存。
-          </Alert>
+          {draft.enabled && draft.action !== 'none' && conditionCount === 0 &&
+            legacyPortCount === 0 && (
+              <Alert severity="warning">至少选择一个应用或补充识别条件。</Alert>
+            )}
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -252,7 +259,7 @@ export const ProjectEditorDialog = ({
           disabled={!canSave}
           onClick={() => onSave({ ...draft, name: draft.name.trim() })}
         >
-          保存应用规则
+          保存
         </Button>
       </DialogActions>
     </Dialog>
