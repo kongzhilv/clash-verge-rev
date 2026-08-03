@@ -79,7 +79,9 @@ export const ConnectionFilterMenu = ({
         anchorEl={anchor}
         open={Boolean(anchor)}
         onClose={() => setAnchor(null)}
-        slotProps={{ paper: { sx: { width: 320, maxWidth: 'calc(100vw - 24px)' } } }}
+        slotProps={{
+          paper: { sx: { width: 320, maxWidth: 'calc(100vw - 24px)' } },
+        }}
       >
         <Stack spacing={1.25} sx={{ px: 1.5, py: 1 }}>
           <Typography variant="subtitle2">连接筛选</Typography>
@@ -130,7 +132,10 @@ export const ConnectionFilterMenu = ({
           </FormControl>
         </Stack>
         <Divider />
-        <Stack direction="row" sx={{ px: 1.5, py: 0.75, justifyContent: 'flex-end' }}>
+        <Stack
+          direction="row"
+          sx={{ px: 1.5, py: 0.75, justifyContent: 'flex-end' }}
+        >
           <Button
             size="small"
             disabled={activeCount === 0}
