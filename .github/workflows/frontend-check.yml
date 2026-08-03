@@ -1,5 +1,5 @@
 name: Frontend Check
-run-name: Audit Karing 4 candidate
+run-name: Audit Karing 4 candidate (trigger)
 
 on:
   push:
