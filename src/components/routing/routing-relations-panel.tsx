@@ -89,7 +89,7 @@ export const RoutingRelationsPanel = ({
           </Button>
         }
       >
-        尚未建立应用应用分流。
+        尚未建立应用分流。
       </Alert>
     )
   }
@@ -108,7 +108,7 @@ export const RoutingRelationsPanel = ({
           </Button>
         }
       >
-        没有应用规则使用“{policyFilter}”。
+        没有应用分流使用“{policyFilter}”。
       </Alert>
     )
   }
@@ -122,21 +122,25 @@ export const RoutingRelationsPanel = ({
       >
         <AccountTreeRounded color="primary" fontSize="small" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 700 }}>应用分流</Typography>
+          <Typography sx={{ fontWeight: 700 }}>
+            {policyFilter ? '使用此出口的应用' : '应用分流'}
+          </Typography>
           {!compact && (
             <Typography variant="caption" color="text.secondary">
               应用规则 → 出口策略
             </Typography>
           )}
         </Box>
-        <Tooltip title="管理应用规则">
-          <IconButton
-            size="small"
-            onClick={() => navigate('/rules?manage=projects')}
-          >
-            <AppsRounded fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        {!compact && (
+          <Tooltip title="管理应用分流">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/rules?manage=projects')}
+            >
+              <AppsRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </Stack>
 
       <Divider />
@@ -173,7 +177,7 @@ export const RoutingRelationsPanel = ({
                 fontSize="small"
               />
               <Typography
-                sx={{ width: compact ? 110 : 150, fontWeight: 650 }}
+                sx={{ width: compact ? 150 : 180, fontWeight: 650 }}
                 noWrap
                 title={project.name}
               >
@@ -192,12 +196,12 @@ export const RoutingRelationsPanel = ({
                   label={policy || '无出口'}
                   color={policy ? 'primary' : 'default'}
                   variant="outlined"
-                  sx={{ maxWidth: compact ? 120 : 180 }}
+                  sx={{ maxWidth: compact ? 170 : 220 }}
                 />
               </Stack>
 
               <Tooltip
-                title={`此应用规则命中 ${matchedConnections} 条连接 · 该出口共 ${policyConnections} 条`}
+                title={`应用命中 ${matchedConnections} 条连接 · 此出口共 ${policyConnections} 条`}
               >
                 <Chip size="small" label={matchedConnections} />
               </Tooltip>
@@ -215,7 +219,7 @@ export const RoutingRelationsPanel = ({
                     <LinkRounded fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="编辑应用规则">
+                <Tooltip title="编辑应用分流">
                   <IconButton
                     size="small"
                     onClick={() =>
