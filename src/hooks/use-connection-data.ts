@@ -298,10 +298,7 @@ async function refreshProcessConnections() {
 }
 
 const startProcessConnectionMonitor = () => {
-  if (
-    connectionListeners.size === 0 ||
-    processConnectionSupported === false
-  ) {
+  if (connectionListeners.size === 0 || processConnectionSupported === false) {
     return
   }
   clearProcessConnectionTimer()
