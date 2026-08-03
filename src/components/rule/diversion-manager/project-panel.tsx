@@ -5,16 +5,20 @@ import {
   EditRounded,
   HubRounded,
   LanRounded,
+  LinkRounded,
   WorkspacesRounded,
 } from '@mui/icons-material'
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Chip,
+  IconButton,
   Paper,
   Stack,
   Switch,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { useState } from 'react'
@@ -82,7 +86,7 @@ export const ProjectPanel = ({
       makeProject(config.projects.length, {
         kind: 'program',
         name: processName.replace(/\.exe$/i, '') || processName,
-        description: `由系统连接发现；PID：${program.pids.join(', ')}；当前连接：${program.connectionCount}`,
+        description: `系统发现 · ${program.connectionCount} 条连接`,
         processNames: processName ? [processName] : [],
         processPaths: processPath ? [processPath] : [],
       }),
@@ -116,183 +120,192 @@ export const ProjectPanel = ({
   }
 
   return (
-    <Box>
+    <Stack spacing={2}>
       <DetectedProgramsPanel
         projects={config.projects}
         onImport={importDetectedProgram}
       />
 
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={1}
-        sx={{ mb: 1, alignItems: { sm: 'center' } }}
-      >
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            程序与项目档案
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            将程序路径、域名、IP
-            和端口绑定到同一个规则组与出口；连接、规则和代理组页面会共享这份关系。
-          </Typography>
-        </Box>
-        <Button startIcon={<AddRounded />} onClick={openCreate}>
-          添加程序或项目
-        </Button>
-      </Stack>
+      <Box>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ mb: 1.25, alignItems: 'center' }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              项目
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              一个项目对应一组识别条件和一个出口。
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            startIcon={<AddRounded />}
+            onClick={openCreate}
+          >
+            新建
+          </Button>
+        </Stack>
 
-      {config.projects.length === 0 ? (
-        <Alert severity="info">
-          还没有程序或项目档案。可从上方系统连接直接导入，也可手工添加域名、IP
-          或端口特征。
-        </Alert>
-      ) : (
-        <Stack spacing={1}>
-          {config.projects.map((project) => {
-            const policy = resolveActionPolicy(
-              config,
-              project.action,
-              project.policy,
-            )
-            const focused = project.id === focusProjectId
-            return (
-              <Paper
-                key={project.id}
-                variant="outlined"
-                sx={{
-                  p: 1.5,
-                  borderRadius: 2,
-                  borderColor: focused ? 'primary.main' : 'divider',
-                  bgcolor: focused ? 'action.selected' : undefined,
-                }}
-              >
-                <Stack
-                  direction={{ xs: 'column', md: 'row' }}
-                  spacing={1.5}
-                  sx={{ alignItems: { md: 'center' } }}
+        {config.projects.length === 0 ? (
+          <Alert severity="info">从上方选择程序，或新建一个项目。</Alert>
+        ) : (
+          <Stack spacing={0.75}>
+            {config.projects.map((project) => {
+              const policy = resolveActionPolicy(
+                config,
+                project.action,
+                project.policy,
+              )
+              const focused = project.id === focusProjectId
+              return (
+                <Paper
+                  key={project.id}
+                  variant="outlined"
+                  sx={{
+                    px: 1.25,
+                    py: 1,
+                    borderRadius: 2.5,
+                    borderColor: focused ? 'primary.main' : 'divider',
+                    bgcolor: focused ? 'action.selected' : 'background.paper',
+                    transition: 'border-color 120ms ease, background 120ms ease',
+                  }}
                 >
-                  <Box
-                    sx={{
-                      width: 42,
-                      height: 42,
-                      display: 'grid',
-                      placeItems: 'center',
-                      borderRadius: 2,
-                      bgcolor: project.enabled
-                        ? 'primary.main'
-                        : 'action.hover',
-                      color: project.enabled
-                        ? 'primary.contrastText'
-                        : 'text.secondary',
-                    }}
-                  >
-                    {project.kind === 'program' ? (
-                      <AppsRounded />
-                    ) : (
-                      <WorkspacesRounded />
-                    )}
-                  </Box>
-
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography sx={{ fontWeight: 700 }}>
-                      {project.name}
-                    </Typography>
-                    {project.description && (
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        sx={{ wordBreak: 'break-word' }}
-                      >
-                        {project.description}
-                      </Typography>
-                    )}
-                    <Stack
-                      direction="row"
-                      spacing={0.75}
-                      sx={{ mt: 0.75, flexWrap: 'wrap' }}
-                    >
-                      <Chip
-                        size="small"
-                        label={`${conditionCount(project)} 个识别条件`}
-                      />
-                      <Chip
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                        label={actionLabel(project.action, project.policy)}
-                      />
-                      <Chip
-                        size="small"
-                        icon={<HubRounded />}
-                        label={`规则组：${project.groupId}`}
-                      />
-                      {policy && (
-                        <Chip
-                          size="small"
-                          icon={<LanRounded />}
-                          label={`出口：${policy}`}
-                        />
-                      )}
-                    </Stack>
-                  </Box>
-
-                  <Switch
-                    checked={project.enabled}
-                    onChange={(_, checked) => toggleProject(project, checked)}
-                    slotProps={{
-                      input: { 'aria-label': `启用 ${project.name}` },
-                    }}
-                  />
-
                   <Stack
                     direction="row"
-                    spacing={0.5}
-                    sx={{ flexWrap: 'wrap' }}
+                    spacing={1.25}
+                    sx={{ alignItems: 'center', minWidth: 0 }}
                   >
-                    <Button
-                      size="small"
-                      onClick={() =>
-                        navigate(
-                          `/connections?project=${encodeURIComponent(project.id)}`,
-                        )
-                      }
+                    <Avatar
+                      variant="rounded"
+                      sx={{
+                        width: 38,
+                        height: 38,
+                        bgcolor: project.enabled
+                          ? 'primary.main'
+                          : 'action.hover',
+                        color: project.enabled
+                          ? 'primary.contrastText'
+                          : 'text.secondary',
+                      }}
                     >
-                      查看连接
-                    </Button>
-                    {policy && (
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          navigate(
-                            `/proxies?policy=${encodeURIComponent(policy)}`,
-                          )
-                        }
+                      {project.kind === 'program' ? (
+                        <AppsRounded fontSize="small" />
+                      ) : (
+                        <WorkspacesRounded fontSize="small" />
+                      )}
+                    </Avatar>
+
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        spacing={0.75}
+                        sx={{ alignItems: 'center', minWidth: 0 }}
                       >
-                        查看代理组
-                      </Button>
-                    )}
-                    <Button
+                        <Typography sx={{ fontWeight: 700 }} noWrap>
+                          {project.name}
+                        </Typography>
+                        {!project.enabled && (
+                          <Chip size="small" label="已停用" variant="outlined" />
+                        )}
+                      </Stack>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        noWrap
+                        title={project.description || project.groupId}
+                        sx={{ display: 'block' }}
+                      >
+                        {project.description || project.groupId}
+                      </Typography>
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{ mt: 0.65, flexWrap: 'wrap' }}
+                      >
+                        <Chip
+                          size="small"
+                          label={`${conditionCount(project)} 条件`}
+                        />
+                        <Chip
+                          size="small"
+                          icon={<HubRounded />}
+                          label={project.groupId}
+                          variant="outlined"
+                        />
+                        <Chip
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          icon={<LanRounded />}
+                          label={policy || actionLabel(project.action, project.policy)}
+                        />
+                      </Stack>
+                    </Box>
+
+                    <Switch
                       size="small"
-                      startIcon={<EditRounded />}
-                      onClick={() => openEdit(project)}
-                    >
-                      编辑
-                    </Button>
-                    <Button
-                      size="small"
-                      color="error"
-                      startIcon={<DeleteOutlineRounded />}
-                      onClick={() => deleteProject(project)}
-                    >
-                      删除
-                    </Button>
+                      checked={project.enabled}
+                      onChange={(_, checked) => toggleProject(project, checked)}
+                      slotProps={{
+                        input: { 'aria-label': `启用 ${project.name}` },
+                      }}
+                    />
+
+                    <Stack direction="row" spacing={0.25}>
+                      <Tooltip title="查看连接">
+                        <IconButton
+                          size="small"
+                          onClick={() =>
+                            navigate(
+                              `/connections?project=${encodeURIComponent(project.id)}`,
+                            )
+                          }
+                        >
+                          <LinkRounded fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {policy && (
+                        <Tooltip title={`查看出口：${policy}`}>
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              navigate(
+                                `/proxies?policy=${encodeURIComponent(policy)}`,
+                              )
+                            }
+                          >
+                            <LanRounded fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <Tooltip title="编辑">
+                        <IconButton
+                          size="small"
+                          onClick={() => openEdit(project)}
+                        >
+                          <EditRounded fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="删除">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => deleteProject(project)}
+                        >
+                          <DeleteOutlineRounded fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
                   </Stack>
-                </Stack>
-              </Paper>
-            )
-          })}
-        </Stack>
-      )}
+                </Paper>
+              )
+            })}
+          </Stack>
+        )}
+      </Box>
 
       {editorOpen && (
         <ProjectEditorDialog
@@ -307,7 +320,7 @@ export const ProjectPanel = ({
           onSave={saveProject}
         />
       )}
-    </Box>
+    </Stack>
   )
 }
 
