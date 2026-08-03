@@ -50,6 +50,7 @@ let lastFlushAt = 0
 let processConnectionSnapshot: ProcessConnectionSnapshot | undefined
 let processConnectionTimer: ReturnType<typeof setTimeout> | null = null
 let processConnectionRefreshing = false
+let processConnectionSupported: boolean | undefined
 
 const connectionListeners = new Set<ConnectionListener>()
 const summaryListeners = new Set<ConnectionListener>()
@@ -260,7 +261,13 @@ const clearProcessConnectionTimer = () => {
 }
 
 const scheduleProcessConnectionRefresh = () => {
-  if (connectionListeners.size === 0 || processConnectionTimer) return
+  if (
+    connectionListeners.size === 0 ||
+    processConnectionTimer ||
+    processConnectionSupported === false
+  ) {
+    return
+  }
   processConnectionTimer = window.setTimeout(() => {
     processConnectionTimer = null
     void refreshProcessConnections()
@@ -268,14 +275,20 @@ const scheduleProcessConnectionRefresh = () => {
 }
 
 async function refreshProcessConnections() {
-  if (connectionListeners.size === 0 || processConnectionRefreshing) return
+  if (
+    connectionListeners.size === 0 ||
+    processConnectionRefreshing ||
+    processConnectionSupported === false
+  ) {
+    return
+  }
   processConnectionRefreshing = true
 
   try {
     const snapshot = await getSystemProcessConnections()
+    processConnectionSupported = snapshot.supported
     if (connectionListeners.size === 0) return
     applyProcessConnectionSnapshot(snapshot)
-    if (!snapshot.supported) return
   } catch (error) {
     console.warn('[Connections] Failed to refresh native process owners', error)
   } finally {
@@ -285,7 +298,12 @@ async function refreshProcessConnections() {
 }
 
 const startProcessConnectionMonitor = () => {
-  if (connectionListeners.size === 0) return
+  if (
+    connectionListeners.size === 0 ||
+    processConnectionSupported === false
+  ) {
+    return
+  }
   clearProcessConnectionTimer()
   void refreshProcessConnections()
 }
