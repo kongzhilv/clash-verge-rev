@@ -1,5 +1,5 @@
 name: Karing 4 Run Probe
-run-name: Inspect candidate build and release runs
+run-name: Report retry 3 audited release run
 
 on:
   push:
@@ -19,56 +19,24 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect candidate workflows
+      - name: Query audited release workflow
         env:
           GH_TOKEN: ${{ github.token }}
-          CANDIDATE_SHA: 09a7351fd220318dfb9222e4d6e487a364cf1b6b
         shell: bash
         run: |
           set -euo pipefail
-          release_runs=$(gh run list \
+          json=$(gh run list \
             --repo "$GITHUB_REPOSITORY" \
             --workflow karing4-audited-release.yml \
-            --limit 5 \
+            --limit 4 \
             --json databaseId,status,conclusion,headSha,event,createdAt,updatedAt,url)
-          diagnostic_runs=$(gh run list \
-            --repo "$GITHUB_REPOSITORY" \
-            --workflow karing-diagnostics-once.yml \
-            --limit 12 \
-            --json databaseId,status,conclusion,headSha,event,createdAt,updatedAt,url)
-          candidate_run=$(jq -r --arg sha "$CANDIDATE_SHA" \
-            '[.[] | select(.headSha == $sha)] | sort_by(.createdAt) | reverse | .[0].databaseId // empty' \
-            <<< "$diagnostic_runs")
-          artifacts='[]'
-          if [ -n "$candidate_run" ]; then
-            artifacts=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate_run/artifacts" \
-              --jq '[.artifacts[] | {id, name, size_in_bytes, expired, created_at}]')
-          fi
-
           cat > /tmp/probe.md <<EOF
           <!-- karing4-run-probe -->
-          ## Karing 4 构建与发行运行探针
-
-          候选提交：${CANDIDATE_SHA}
-
-          ### 独立 .4 发行运行
-          \
-          \`\`\`json
-          ${release_runs}
-          \`\`\`
-
-          ### 原完整构建运行
-          \
-          \`\`\`json
-          ${diagnostic_runs}
-          \`\`\`
-
-          ### 同候选最新完整构建 Artifact
-          Run ID：${candidate_run:-未找到}
+          ## Karing 4 发行运行探针
 
           \
           \`\`\`json
-          ${artifacts}
+          ${json}
           \`\`\`
           EOF
           gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/probe.md
