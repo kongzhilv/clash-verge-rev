@@ -1,5 +1,5 @@
 name: Karing 4 Run Probe
-run-name: Report retry 3 audited release run
+run-name: Report final application attribution release run
 
 on:
   push:
@@ -25,14 +25,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sleep 8
           json=$(gh run list \
             --repo "$GITHUB_REPOSITORY" \
             --workflow karing4-audited-release.yml \
-            --limit 4 \
+            --limit 5 \
             --json databaseId,status,conclusion,headSha,event,createdAt,updatedAt,url)
           cat > /tmp/probe.md <<EOF
           <!-- karing4-run-probe -->
-          ## Karing 4 发行运行探针
+          ## Karing 4 最终发行运行探针
 
           \
           \`\`\`json
