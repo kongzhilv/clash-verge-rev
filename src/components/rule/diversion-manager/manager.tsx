@@ -298,7 +298,12 @@ export const DiversionManager = ({
                 onChange={updateConfig}
               />
             ) : activeTab === 'settings' ? (
-              <SettingsPanel config={config} onChange={updateConfig} />
+              <SettingsPanel
+                config={config}
+                builtinGroups={builtinGroups}
+                onChange={updateConfig}
+                onBuiltinGroupsChange={setBuiltinGroups}
+              />
             ) : (
               <Box>
                 <Stack
