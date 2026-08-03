@@ -10,6 +10,10 @@ import { useNavigate } from 'react-router'
 
 import { useConnectionProcessAttribution } from '@/hooks/use-connection-data'
 import { useDiversionProfile } from '@/hooks/use-diversion-profile'
+import type {
+  ProcessAttributionMatch,
+  ProcessAttributionSource,
+} from '@/services/process-connections'
 
 import { resolveConnectionProject } from './connection-project'
 
@@ -24,17 +28,24 @@ const processNameFrom = (process: string, processPath: string) => {
 }
 
 const attributionLabel = (
-  source: 'mihomo' | 'windows' | 'unresolved' | undefined,
-  match: 'core' | 'tuple' | 'local-port' | 'none' | undefined,
+  source: ProcessAttributionSource | undefined,
+  match: ProcessAttributionMatch | undefined,
 ) => {
-  if (source === 'mihomo') return '由代理核心识别'
-  if (source === 'windows' && match === 'tuple') {
-    return '由 Windows 连接端点精确识别'
+  if (source === 'mihomo') return '代理核心识别'
+  if (source === 'windows' && match === 'tuple') return 'Windows 精确识别'
+  if (source === 'windows' && match === 'local-endpoint') {
+    return 'Windows TUN 端点识别'
   }
   if (source === 'windows' && match === 'local-port') {
-    return '由 Windows 唯一源端口识别（TUN）'
+    return 'Windows 源端口识别'
   }
-  return '暂未识别应用'
+  if (source === 'windows' && match === 'recent-tuple') {
+    return 'Windows 短连接记录识别'
+  }
+  if (source === 'windows' && match === 'recent-local-endpoint') {
+    return 'Windows TUN 短连接识别'
+  }
+  return '等待应用识别'
 }
 
 interface RelationRowProps {
@@ -47,7 +58,7 @@ const RelationRow = ({ label, value }: RelationRowProps) => (
     <Typography
       variant="caption"
       color="text.secondary"
-      sx={{ width: 68, flex: '0 0 auto' }}
+      sx={{ width: 64, flex: '0 0 auto' }}
     >
       {label}
     </Typography>
@@ -74,14 +85,7 @@ export const ConnectionProjectCard = ({
     processPath,
   )
   const applicationName = processName || match?.project.name || '未识别应用'
-  const applicationDetail =
-    processPath ||
-    attribution?.detail ||
-    (match
-      ? `依据 ${match.reasons.join('、')} 识别`
-      : '当前连接没有可用的应用信息')
   const expectedPolicy = match?.policy || '未设置'
-  const actualRule = connection.rule || '未返回'
   const actualOutbound =
     [...connection.chains].reverse().join(' / ') || '未返回'
   const routeDiffers =
@@ -117,16 +121,8 @@ export const ConnectionProjectCard = ({
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
             {applicationName}
           </Typography>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: 'block', wordBreak: 'break-all' }}
-          >
-            {applicationDetail}
-          </Typography>
           <Typography variant="caption" color="text.secondary">
             {attributionLabel(attribution?.source, attribution?.match)}
-            {attribution?.pid !== undefined ? ` · PID ${attribution.pid}` : ''}
           </Typography>
         </Box>
       </Stack>
@@ -136,11 +132,10 @@ export const ConnectionProjectCard = ({
       <Stack spacing={0.75} sx={{ px: 1.5, py: 1.25 }}>
         <RelationRow label="应用规则" value={match?.project.name || '未设置'} />
         <RelationRow label="预期出口" value={expectedPolicy} />
-        <RelationRow label="命中规则" value={actualRule} />
-        <RelationRow label="实际出口" value={actualOutbound} />
+        <RelationRow label="当前出口" value={actualOutbound} />
         {routeDiffers && (
           <Typography variant="caption" color="warning.main">
-            当前连接未经过预期出口；保存后需重新建立连接才能重新匹配。
+            该连接尚未经过预期出口；重新建立连接后会按新规则匹配。
           </Typography>
         )}
       </Stack>
