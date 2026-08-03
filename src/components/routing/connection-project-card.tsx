@@ -93,7 +93,11 @@ export const ConnectionProjectCard = ({
 
   return (
     <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-      <Stack direction="row" spacing={1.25} sx={{ p: 1.5, alignItems: 'center' }}>
+      <Stack
+        direction="row"
+        spacing={1.25}
+        sx={{ p: 1.5, alignItems: 'center' }}
+      >
         <Box
           sx={{
             width: 38,
@@ -130,10 +134,7 @@ export const ConnectionProjectCard = ({
       <Divider />
 
       <Stack spacing={0.75} sx={{ px: 1.5, py: 1.25 }}>
-        <RelationRow
-          label="应用规则"
-          value={match?.project.name || '未设置'}
-        />
+        <RelationRow label="应用规则" value={match?.project.name || '未设置'} />
         <RelationRow label="预期出口" value={expectedPolicy} />
         <RelationRow label="命中规则" value={actualRule} />
         <RelationRow label="实际出口" value={actualOutbound} />
