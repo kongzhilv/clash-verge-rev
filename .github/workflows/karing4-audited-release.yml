@@ -1,5 +1,5 @@
 name: Karing 4 Audited Release
-run-name: Build and release v2.5.3-karing.4 (retry 2)
+run-name: Build and release v2.5.3-karing.4 (retry 3)
 
 on:
   push:
@@ -95,27 +95,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f src/components/base/overflow-reveal.tsx
-          test -f src/components/base/scroll-area.ts
-          grep -q "overflowX: 'auto'" src/components/base/overflow-reveal.tsx
-          grep -q 'ResizeObserver' src/components/base/overflow-reveal.tsx
-          grep -q 'requestAnimationFrame' src/components/base/overflow-reveal.tsx
-          grep -q 'softScrollAreaSx' src/components/rule/diversion-manager/detected-programs-panel.tsx
-          grep -q 'OverflowReveal' src/components/rule/diversion-manager/project-panel.tsx
-          grep -q 'OverflowReveal' src/components/rule/diversion-manager/action-picker.tsx
-          grep -q 'OverflowReveal' src/components/routing/routing-relations-panel.tsx
-          grep -q 'OverflowReveal' src/components/routing/focused-policy-panel.tsx
-          grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
-          grep -q 'isMihomoFakeIp' src/components/connection/connection-rule-assistant.tsx
-          grep -q 'MAX_ATTRIBUTION_ITEMS' src/services/process-connections.ts
-          grep -q 'GetExtendedTcpTable' src-tauri/src/cmd/process_connections.rs
-          grep -q 'GetExtendedUdpTable' src-tauri/src/cmd/process_connections.rs
-          grep -q 'QueryFullProcessImageNameW' src-tauri/src/cmd/process_connections.rs
-          grep -q 'mod process_connections' src-tauri/src/cmd/mod.rs
-          grep -Fq '"process-connections" => process_connections::get_process_connections()' src-tauri/src/cmd/network.rs
-          grep -q 'network::get_network_interfaces_info' src-tauri/src/lib.rs
-          grep -q "kind: 'process-connections'" src/services/process-connections.ts
-          echo '[pass] source and product audit completed'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          checks = [
+              ('overflow component', 'src/components/base/overflow-reveal.tsx', "overflowX: 'auto'"),
+              ('resize measurement', 'src/components/base/overflow-reveal.tsx', 'ResizeObserver'),
+              ('deferred measurement', 'src/components/base/overflow-reveal.tsx', 'requestAnimationFrame'),
+              ('shared scroll styles', 'src/components/base/scroll-area.ts', 'softScrollAreaSx'),
+              ('detected application scrolling', 'src/components/rule/diversion-manager/detected-programs-panel.tsx', 'softScrollAreaSx'),
+              ('application rule overflow reveal', 'src/components/rule/diversion-manager/project-panel.tsx', 'OverflowReveal'),
+              ('policy picker overflow reveal', 'src/components/rule/diversion-manager/action-picker.tsx', 'OverflowReveal'),
+              ('routing relation overflow reveal', 'src/components/routing/routing-relations-panel.tsx', 'OverflowReveal'),
+              ('proxy node overflow reveal', 'src/components/routing/focused-policy-panel.tsx', 'OverflowReveal'),
+              ('live connection details', 'src/components/connection/connection-detail.tsx', 'useConnectionData({ enabled: open })'),
+              ('Fake-IP guard', 'src/components/connection/connection-rule-assistant.tsx', 'isMihomoFakeIp'),
+              ('bounded attribution cache', 'src/services/process-connections.ts', 'MAX_ATTRIBUTION_ITEMS'),
+              ('TCP owner table API', 'src-tauri/src/cmd/process_connections.rs', 'GetExtendedTcpTable'),
+              ('UDP owner table API', 'src-tauri/src/cmd/process_connections.rs', 'GetExtendedUdpTable'),
+              ('full executable path API', 'src-tauri/src/cmd/process_connections.rs', 'QueryFullProcessImageNameW'),
+              ('native module path', 'src-tauri/src/cmd/network.rs', '#[path = "process_connections.rs"]'),
+              ('native dispatch kind', 'src-tauri/src/cmd/network.rs', 'if kind.as_deref() == Some("process-connections")'),
+              ('native process snapshot dispatch', 'src-tauri/src/cmd/network.rs', 'process_connections::get_process_connections()'),
+              ('registered Tauri command', 'src-tauri/src/lib.rs', 'cmd::get_network_interfaces_info'),
+              ('frontend Tauri command', 'src/services/process-connections.ts', "invoke<ProcessConnectionSnapshot>('get_network_interfaces_info'"),
+              ('frontend dispatch kind', 'src/services/process-connections.ts', "kind: 'process-connections'"),
+          ]
+
+          for label, path, needle in checks:
+              text = Path(path).read_text(encoding='utf-8')
+              if needle not in text:
+                  raise SystemExit(f'[fail] {label}: {needle!r} missing from {path}')
+              print(f'[pass] {label}')
+          PY
 
   native-builds:
     name: Build ${{ matrix.name }}
