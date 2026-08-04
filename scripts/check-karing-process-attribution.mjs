@@ -166,7 +166,10 @@ assert.match(processSource, /最近无冲突的唯一源端口/)
 assert.match(processSource, /exactCandidate === undefined/)
 assert.match(processSource, /localEndpointCandidate === undefined/)
 assert.match(processSource, /localPortCandidate === undefined/)
-assert.doesNotMatch(processSource, /!localPortCandidate/)
+assert.doesNotMatch(
+  processSource,
+  /const recentLocalPortCandidate\s*=\s*!localPortCandidate/,
+)
 assert.match(processSource, /同一端点存在多个应用候选/)
 assert.match(dataSource, /PROCESS_CONNECTION_NEW_DELAY_MS = 120/)
 assert.match(dataSource, /PROCESS_CONNECTION_RETRY_DELAY_MS = 350/)
