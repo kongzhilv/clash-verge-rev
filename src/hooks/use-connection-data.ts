@@ -242,11 +242,21 @@ const applyProcessConnectionSnapshot = (
     connectionData.activeConnections,
     snapshot,
   )
-  if (activeConnections === connectionData.activeConnections) return
+  const closedConnections = enrichConnectionsWithProcesses(
+    connectionData.closedConnections,
+    snapshot,
+  )
+  if (
+    activeConnections === connectionData.activeConnections &&
+    closedConnections === connectionData.closedConnections
+  ) {
+    return
+  }
 
   connectionData = {
     ...connectionData,
     activeConnections,
+    closedConnections,
   }
   notifyConnectionListeners()
 }
