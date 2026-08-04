@@ -474,8 +474,7 @@ export const enrichConnectionsWithProcesses = (
       'recent-tuple': '短连接已结束，使用最近的精确端点记录识别应用',
       'recent-local-endpoint':
         '短连接已结束，使用最近的 TUN/Fake-IP 本地端点记录识别应用',
-      'recent-local-port':
-        '短连接已结束，使用最近无冲突的唯一源端口识别应用',
+      'recent-local-port': '短连接已结束，使用最近无冲突的唯一源端口识别应用',
     }
     const attribution: ProcessAttribution = {
       connectionId: connection.id,
