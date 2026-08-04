@@ -209,8 +209,16 @@ const InnerConnectionDetail = ({
     ? `${data.rule} (${data.rulePayload})`
     : data.rule || '未返回'
   const outbound = [...data.chains].reverse().join(' / ') || '未返回'
+  const attributionSource =
+    attribution?.source === 'mihomo'
+      ? '代理核心'
+      : attribution?.source === 'windows'
+        ? 'Windows 系统'
+        : '未识别'
   const attributionDetail = attribution
-    ? `${attribution.detail}${attribution.pid === undefined ? '' : ` · PID ${attribution.pid}`}`
+    ? `${attributionSource} · ${attribution.detail}${
+        attribution.pid === undefined ? '' : ` · PID ${attribution.pid}`
+      }`
     : '正在等待应用识别'
   const headerMeta = [
     targetLabel,
@@ -223,7 +231,7 @@ const InnerConnectionDetail = ({
 
   const information: InformationItem[] = [
     {
-      label: '应用识别',
+      label: '归因状态',
       value: attributionDetail,
       icon: <AppsRounded fontSize="small" />,
     },
@@ -420,7 +428,7 @@ const InnerConnectionDetail = ({
           onClick={onOpenRuleAssistant}
           sx={{ flex: 1 }}
         >
-          调整分流
+          {projectMatch ? '调整分流' : '创建应用规则'}
         </Button>
         {!closed && (
           <Button

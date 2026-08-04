@@ -1,12 +1,13 @@
 import {
-  AppsRounded,
-  ArrowForwardRounded,
   CheckCircleRounded,
+  HourglassTopRounded,
+  RouteRounded,
   WarningAmberRounded,
 } from '@mui/icons-material'
 import { Box, Divider, Paper, Stack, Typography } from '@mui/material'
 import { useMemo } from 'react'
 
+import { useConnectionProcessAttribution } from '@/hooks/use-connection-data'
 import { useDiversionProfile } from '@/hooks/use-diversion-profile'
 
 import { resolveConnectionProject } from './connection-project'
@@ -15,48 +16,31 @@ interface ConnectionProjectCardProps {
   connection: IConnectionsItem
 }
 
-const processNameFrom = (process: string, processPath: string) => {
-  const preferred = process.trim()
-  if (preferred) return preferred
-  return processPath.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+const attributionLabel = (
+  attribution: ReturnType<typeof useConnectionProcessAttribution>,
+  inferred: boolean,
+) => {
+  if (attribution?.source === 'mihomo') return '代理核心识别应用'
+  if (attribution?.source === 'windows') {
+    if (attribution.match === 'tuple') return 'Windows 精确端点识别'
+    if (attribution.match === 'local-endpoint') return 'Windows TUN 端点识别'
+    if (attribution.match === 'local-port') return 'Windows 唯一端口识别'
+    return 'Windows 最近连接记录识别'
+  }
+  if (inferred) return '应用规则特征识别'
+  return '尚未识别应用'
 }
-
-interface RouteStageProps {
-  label: string
-  value: string
-}
-
-const RouteStage = ({ label, value }: RouteStageProps) => (
-  <Box sx={{ flex: 1, minWidth: 0 }}>
-    <Typography variant="caption" color="text.secondary">
-      {label}
-    </Typography>
-    <Typography
-      variant="body2"
-      sx={{ mt: 0.2, fontWeight: 650, wordBreak: 'break-word' }}
-      title={value}
-    >
-      {value}
-    </Typography>
-  </Box>
-)
 
 export const ConnectionProjectCard = ({
   connection,
 }: ConnectionProjectCardProps) => {
   const { profile } = useDiversionProfile()
+  const attribution = useConnectionProcessAttribution(connection.id)
   const match = useMemo(
     () => resolveConnectionProject(connection, profile?.config),
     [connection, profile?.config],
   )
 
-  const processPath = String(connection.metadata.processPath ?? '').trim()
-  const processName = processNameFrom(
-    String(connection.metadata.process ?? ''),
-    processPath,
-  )
-  const applicationName = processName || match?.project.name || '未识别应用'
-  const applicationRule = match?.project.name || '未设置'
   const expectedPolicy = match?.policy || ''
   const currentPolicy = connection.chains.at(-1)?.trim() || '未返回'
   const routeDiffers =
@@ -65,11 +49,19 @@ export const ConnectionProjectCard = ({
     !connection.chains.some(
       (item) => item.trim().toLowerCase() === expectedPolicy.toLowerCase(),
     )
-  const status = !match
-    ? '未设置应用规则'
-    : routeDiffers
-      ? '等待新连接应用规则'
-      : '按应用规则运行'
+  const ruleLabel = match
+    ? `${match.project.name}${
+        match.reasons.length > 0 ? ` · ${match.reasons.join(' + ')}` : ''
+      }`
+    : connection.rulePayload
+      ? `${connection.rule} · ${connection.rulePayload}`
+      : connection.rule || '未返回'
+  const status = routeDiffers
+    ? '当前连接仍在使用旧出口'
+    : match
+      ? '应用规则已生效'
+      : '当前按通用规则处理'
+  const recognition = attributionLabel(attribution, Boolean(match?.inferred))
 
   return (
     <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
@@ -86,45 +78,77 @@ export const ConnectionProjectCard = ({
             display: 'grid',
             placeItems: 'center',
             borderRadius: 1.5,
-            bgcolor: match ? 'success.main' : 'action.hover',
-            color: match ? 'success.contrastText' : 'text.secondary',
+            bgcolor: routeDiffers
+              ? 'warning.main'
+              : match
+                ? 'success.main'
+                : 'action.hover',
+            color:
+              routeDiffers || match ? 'primary.contrastText' : 'text.secondary',
           }}
         >
-          <AppsRounded fontSize="small" />
+          <RouteRounded fontSize="small" />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>
-            {applicationName}
-          </Typography>
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
             {routeDiffers ? (
-              <WarningAmberRounded color="warning" sx={{ fontSize: 15 }} />
+              <WarningAmberRounded color="warning" sx={{ fontSize: 16 }} />
             ) : match ? (
-              <CheckCircleRounded color="success" sx={{ fontSize: 15 }} />
-            ) : null}
-            <Typography
-              variant="caption"
-              color={routeDiffers ? 'warning.main' : 'text.secondary'}
-            >
+              <CheckCircleRounded color="success" sx={{ fontSize: 16 }} />
+            ) : (
+              <HourglassTopRounded color="disabled" sx={{ fontSize: 16 }} />
+            )}
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               {status}
             </Typography>
           </Stack>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {recognition}
+          </Typography>
         </Box>
       </Stack>
 
       <Divider />
 
-      <Stack
-        direction="row"
-        spacing={0.75}
-        sx={{ px: 1.5, py: 1.25, alignItems: 'center' }}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)',
+        }}
       >
-        <RouteStage label="应用" value={applicationName} />
-        <ArrowForwardRounded sx={{ color: 'text.disabled', fontSize: 18 }} />
-        <RouteStage label="应用规则" value={applicationRule} />
-        <ArrowForwardRounded sx={{ color: 'text.disabled', fontSize: 18 }} />
-        <RouteStage label="当前出口" value={currentPolicy} />
-      </Stack>
+        <Box sx={{ minWidth: 0, px: 1.5, py: 1.25 }}>
+          <Typography variant="caption" color="text.secondary">
+            {match ? '应用规则' : '通用规则'}
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{ mt: 0.2, fontWeight: 650, wordBreak: 'break-word' }}
+            title={ruleLabel}
+          >
+            {ruleLabel}
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            minWidth: 0,
+            px: 1.5,
+            py: 1.25,
+            borderLeft: 1,
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            当前出口
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{ mt: 0.2, fontWeight: 650, wordBreak: 'break-word' }}
+            title={currentPolicy}
+          >
+            {currentPolicy}
+          </Typography>
+        </Box>
+      </Box>
 
       {routeDiffers && (
         <Typography
@@ -132,7 +156,7 @@ export const ConnectionProjectCard = ({
           color="warning.main"
           sx={{ display: 'block', px: 1.5, pb: 1.2 }}
         >
-          预期出口为 {expectedPolicy}。断开并重新建立连接后会按新规则匹配。
+          预期出口为 {expectedPolicy}。重新建立连接后会按新规则匹配。
         </Typography>
       )}
     </Paper>
