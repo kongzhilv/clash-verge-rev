@@ -63,6 +63,13 @@ type AttributionListener = () => void
 
 const MAX_ATTRIBUTION_ITEMS = 2_000
 const RECENT_ENDPOINT_TTL_MS = 20_000
+const PID_PLACEHOLDER_PATTERN = /^PID\s+\d+$/i
+const INACTIVE_TCP_STATES = new Set([
+  'CLOSED',
+  'LISTEN',
+  'TIME-WAIT',
+  'DELETE-TCB',
+])
 const attributionListeners = new Set<AttributionListener>()
 const recentExactCandidates = new Map<string, RecentCandidate>()
 const recentLocalEndpointCandidates = new Map<string, RecentCandidate>()
@@ -102,6 +109,31 @@ const parseEndpoint = (value?: string | null): Endpoint | null => {
 
 const processNameFromPath = (processPath: string) =>
   processPath.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+
+const hasResolvedProcessDetails = (processName: string, processPath: string) =>
+  Boolean(
+    processPath.trim() ||
+      (processName.trim() && !PID_PLACEHOLDER_PATTERN.test(processName.trim())),
+  )
+
+const snapshotIdentity = (
+  connection: ProcessConnectionInfo,
+): ProcessIdentity | undefined => {
+  if (connection.pid <= 0) return undefined
+  const processPath = connection.processPath.trim()
+  const reportedName = connection.processName.trim()
+  const processName =
+    (PID_PLACEHOLDER_PATTERN.test(reportedName) ? '' : reportedName) ||
+    processNameFromPath(processPath)
+  if (!hasResolvedProcessDetails(processName, processPath)) return undefined
+  return { pid: connection.pid, processName, processPath }
+}
+
+const isUsableEndpointOwner = (connection: ProcessConnectionInfo) => {
+  const protocol = connection.protocol.trim().toUpperCase()
+  const state = connection.state?.trim().toUpperCase()
+  return !(protocol === 'TCP' && state && INACTIVE_TCP_STATES.has(state))
+}
 
 const identityKey = (identity: ProcessIdentity) =>
   `${identity.pid}|${identity.processPath.toLowerCase()}|${identity.processName.toLowerCase()}`
@@ -243,22 +275,28 @@ export const enrichConnectionsWithProcesses = (
   purgeRecentCandidates(recentLocalEndpointCandidates, now)
 
   if (snapshot?.supported) {
+    const resolvedIdentitiesByPid = new Map<number, ProcessIdentity>()
     for (const processConnection of snapshot.connections) {
+      const identity = snapshotIdentity(processConnection)
+      if (!identity) continue
+      const current = resolvedIdentitiesByPid.get(identity.pid)
+      if (!current || (!current.processPath && identity.processPath)) {
+        resolvedIdentitiesByPid.set(identity.pid, identity)
+      }
+    }
+
+    for (const processConnection of snapshot.connections) {
+      if (!isUsableEndpointOwner(processConnection)) continue
       const local = parseEndpoint(processConnection.localAddress)
       if (!local?.port) continue
 
       const protocol = processConnection.protocol.trim().toUpperCase()
       if (!protocol) continue
 
-      const processPath = processConnection.processPath.trim()
-      const identity: ProcessIdentity = {
-        pid: processConnection.pid,
-        processName:
-          processConnection.processName.trim() ||
-          processNameFromPath(processPath),
-        processPath,
-      }
-      if (!identity.processName && !identity.processPath) continue
+      const identity =
+        resolvedIdentitiesByPid.get(processConnection.pid) ??
+        snapshotIdentity(processConnection)
+      if (!identity) continue
 
       const localKey = localEndpointKey(protocol, local.host, local.port)
       insertCandidate(localEndpoint, localKey, identity)
@@ -294,7 +332,12 @@ export const enrichConnectionsWithProcesses = (
       currentProcess === previousAttribution.processName &&
       currentPath === previousAttribution.processPath
 
-    if ((currentProcess || currentPath) && !wasInjectedByWindows) {
+    const currentIdentityResolved = hasResolvedProcessDetails(
+      currentProcess,
+      currentPath,
+    )
+
+    if (currentIdentityResolved && !wasInjectedByWindows) {
       attributionUpdates.set(connection.id, {
         connectionId: connection.id,
         source: 'mihomo',
@@ -322,8 +365,8 @@ export const enrichConnectionsWithProcesses = (
         connectionId: connection.id,
         source: 'unresolved',
         match: 'none',
-        processName: currentProcess,
-        processPath: currentPath,
+        processName: currentIdentityResolved ? currentProcess : '',
+        processPath: currentIdentityResolved ? currentPath : '',
         detail: '连接缺少协议或源端口，无法与系统连接表关联',
         updatedAt: now,
       })
@@ -374,11 +417,6 @@ export const enrichConnectionsWithProcesses = (
     else if (localPortCandidate) match = 'local-port'
 
     if (!identity) {
-      if (wasInjectedByWindows && previousAttribution) {
-        attributionUpdates.set(connection.id, previousAttribution)
-        return connection
-      }
-
       const errors = snapshot?.errors.filter(Boolean).join('；')
       let detail = 'Windows 连接表中未找到对应应用'
       if (!snapshot) detail = '正在等待 Windows 连接表采样'
@@ -395,11 +433,18 @@ export const enrichConnectionsWithProcesses = (
         connectionId: connection.id,
         source: 'unresolved',
         match: 'none',
-        processName: currentProcess,
-        processPath: currentPath,
+        processName: currentIdentityResolved ? currentProcess : '',
+        processPath: currentIdentityResolved ? currentPath : '',
         detail,
         updatedAt: now,
       })
+      if (!currentIdentityResolved && (currentProcess || currentPath)) {
+        changed = true
+        return {
+          ...connection,
+          metadata: { ...metadata, process: '', processPath: '' },
+        }
+      }
       return connection
     }
 

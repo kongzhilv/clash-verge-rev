@@ -173,7 +173,7 @@ mod windows_impl {
                 .rsplit(['\\', '/'])
                 .next()
                 .filter(|value| !value.is_empty())
-                .map_or_else(|| format!("PID {pid}"), ToString::to_string);
+                .map_or_else(String::new, ToString::to_string);
 
             ProcessIdentity { name, path }
         }
@@ -181,11 +181,7 @@ mod windows_impl {
 
     fn fallback_identity(pid: u32) -> ProcessIdentity {
         ProcessIdentity {
-            name: if pid == 4 {
-                "System".to_string()
-            } else {
-                format!("PID {pid}")
-            },
+            name: if pid == 4 { "System".to_string() } else { String::new() },
             path: String::new(),
         }
     }

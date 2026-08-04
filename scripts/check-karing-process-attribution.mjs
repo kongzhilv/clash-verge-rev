@@ -137,6 +137,10 @@ const rowSource = readFileSync(
   ),
   'utf8',
 )
+const rustSource = readFileSync(
+  new URL('../src-tauri/src/cmd/process_connections.rs', import.meta.url),
+  'utf8',
+)
 const routeSource = readFileSync(
   new URL(
     '../src/components/routing/connection-project-card.tsx',
@@ -145,6 +149,14 @@ const routeSource = readFileSync(
   'utf8',
 )
 
+assert.match(processSource, /resolvedIdentitiesByPid/)
+assert.match(processSource, /PID_PLACEHOLDER_PATTERN/)
+assert.match(processSource, /INACTIVE_TCP_STATES/)
+assert.match(processSource, /TIME-WAIT/)
+assert.doesNotMatch(rustSource, /format!\("PID \{pid\}"\)/)
+assert.match(detailSource, /height: '100dvh'/)
+assert.match(detailSource, /flex: '1 1 0'/)
+assert.match(detailSource, /scrollbarGutter: 'stable'/)
 assert.match(processSource, /localEndpointCandidate/)
 assert.match(processSource, /recentLocalEndpointCandidates/)
 assert.match(processSource, /同一端点存在多个应用候选/)
@@ -158,6 +170,9 @@ assert.match(routeSource, /当前出口/)
 assert.doesNotMatch(routeSource, /useNavigate/)
 assert.doesNotMatch(routeSource, /<Button/)
 
+console.log('[通过] PID 占位值不会再冒充已识别程序')
+console.log('[通过] 同 PID 的完整路径会修复占位连接记录')
+console.log('[通过] 详情抽屉使用独立滚动区和固定操作栏')
 console.log('[通过] Fake-IP IPv6 TCP 本地端点可归属到 Nstbrowser.exe')
 console.log('[通过] Fake-IP UDP 可在端点地址变化时按唯一源端口归属')
 console.log('[通过] 同一源端口存在多个应用时停止猜测')

@@ -53,9 +53,11 @@ export interface ConnectionDetailRef {
   close: () => void
 }
 
+const PID_PLACEHOLDER_PATTERN = /^PID\s+\d+$/i
+
 const processNameFrom = (process: string, processPath: string) => {
   const preferred = process.trim()
-  if (preferred) return preferred
+  if (preferred && !PID_PLACEHOLDER_PATTERN.test(preferred)) return preferred
   return processPath.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
 }
 
@@ -117,7 +119,11 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
             sx: {
               width: { xs: '100%', sm: 520 },
               maxWidth: '100vw',
-              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100dvh',
+              maxHeight: '100dvh',
+              overflow: 'hidden',
               bgcolor: 'background.default',
             },
           },
@@ -274,7 +280,15 @@ const InnerConnectionDetail = ({
   const onDelete = useLockFn(async () => closeConnection(data.id))
 
   return (
-    <Stack sx={{ height: '100%', minHeight: 0 }}>
+    <Stack
+      sx={{
+        flex: '1 1 auto',
+        height: '100dvh',
+        maxHeight: '100dvh',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
       <Stack
         direction="row"
         spacing={1}
@@ -318,10 +332,13 @@ const InnerConnectionDetail = ({
         spacing={1.25}
         sx={{
           p: 1.5,
-          flex: 1,
+          flex: '1 1 0',
           minHeight: 0,
+          overflowX: 'hidden',
           overflowY: 'auto',
           overscrollBehavior: 'contain',
+          scrollbarGutter: 'stable',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         <ConnectionProjectCard connection={data} />
@@ -415,6 +432,9 @@ const InnerConnectionDetail = ({
         spacing={1}
         sx={{
           p: 1.5,
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 2,
           flex: '0 0 auto',
           alignItems: 'center',
           borderTop: 1,
