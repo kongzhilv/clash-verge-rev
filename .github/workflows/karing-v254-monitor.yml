@@ -8,28 +8,30 @@ on:
 permissions:
   actions: read
   issues: write
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   inspect:
-    name: 查询最终候选审查状态
+    name: 查询最新候选审查状态
     if: >-
       github.event.issue.number == 1 &&
-      github.event.comment.body == '/inspect-karing-v254-0bd79ddd'
+      github.event.comment.body == '/inspect-karing-v254-latest'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      EXPECTED_SHA: 0bd79ddd914d569e3783b8ac3434fbf2523160a3
       MARKER: '<!-- karing-v254-monitor -->'
+      RELEASE_TAG: v2.5.4-karing.6
     steps:
       - name: 查询并回写主发行状态
         shell: bash
         run: |
           set -euo pipefail
-          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/karing-diagnostics-once.yml/runs?per_page=50" \
-            --jq ".workflow_runs[] | select(.head_sha == \"${EXPECTED_SHA}\")" | head -n1 || true)
+          expected_sha=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/1" --jq '.head.sha')
+          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/karing-diagnostics-once.yml/runs?per_page=100" \
+            --jq ".workflow_runs[] | select(.head_sha == \"${expected_sha}\")" | head -n1 || true)
+
           if [ -z "$run_json" ]; then
-            summary='尚未找到新候选对应的主发行运行。'
+            summary='尚未找到最新候选对应的主发行运行。'
           else
             run_id=$(jq -r '.id' <<<"$run_json")
             status=$(jq -r '.status' <<<"$run_json")
@@ -62,11 +64,18 @@ jobs:
           )
           fi
 
+          release_summary='尚未发现目标 Release。'
+          if release_json=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json url,tagName,targetCommitish,isDraft,isPrerelease,isLatest,assets 2>/dev/null); then
+            release_summary=$(jq -r '"Release：" + .url + "；target=" + .targetCommitish + "；assets=" + ((.assets | length) | tostring) + "；draft=" + (.isDraft | tostring) + "；prerelease=" + (.isPrerelease | tostring) + "；latest=" + (.isLatest | tostring)' <<<"$release_json")
+          fi
+
           body=$(cat <<EOF
           ${MARKER}
           ## Karing 2.5.4 最终候选实时状态
 
-          - 候选：\`${EXPECTED_SHA}\`
+          - 候选：\`${expected_sha}\`
+          - ${release_summary}
           ${summary}
           EOF
           )
