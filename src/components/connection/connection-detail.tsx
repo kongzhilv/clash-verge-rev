@@ -1,8 +1,8 @@
 import {
+  AppsRounded,
   ArrowDownwardRounded,
   ArrowUpwardRounded,
   CloseRounded,
-  DnsRounded,
   ExpandMoreRounded,
   LanRounded,
   PowerOffRounded,
@@ -38,10 +38,12 @@ import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
 import ConnectionProjectCard from '@/components/routing/connection-project-card'
+import { resolveConnectionProject } from '@/components/routing/connection-project'
 import {
   useConnectionData,
   useConnectionProcessAttribution,
 } from '@/hooks/use-connection-data'
+import { useDiversionProfile } from '@/hooks/use-diversion-profile'
 import parseTraffic from '@/utils/parse-traffic'
 
 import ConnectionRuleAssistant from './connection-rule-assistant'
@@ -49,6 +51,12 @@ import ConnectionRuleAssistant from './connection-rule-assistant'
 export interface ConnectionDetailRef {
   open: (detail: IConnectionsItem, closed: boolean) => void
   close: () => void
+}
+
+const processNameFrom = (process: string, processPath: string) => {
+  const preferred = process.trim()
+  if (preferred) return preferred
+  return processPath.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
 }
 
 export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
@@ -177,29 +185,57 @@ const InnerConnectionDetail = ({
   onOpenRuleAssistant,
 }: InnerProps) => {
   const { t } = useTranslation()
+  const { profile } = useDiversionProfile()
   const attribution = useConnectionProcessAttribution(data.id)
+  const projectMatch = useMemo(
+    () => resolveConnectionProject(data, profile?.config),
+    [data, profile?.config],
+  )
   const { metadata } = data
   const hostAddress =
     metadata.host || metadata.destinationIP || metadata.remoteDestination
   const destination = metadata.destinationIP || metadata.remoteDestination
   const processPath = String(metadata.processPath ?? '').trim()
+  const processName = processNameFrom(
+    String(metadata.process ?? ''),
+    processPath,
+  )
+  const applicationName =
+    processName || projectMatch?.project.name || '未识别应用'
+  const targetLabel = hostAddress
+    ? `${hostAddress}:${metadata.destinationPort}`
+    : '未知目标'
   const rule = data.rulePayload
     ? `${data.rule} (${data.rulePayload})`
     : data.rule || '未返回'
   const outbound = [...data.chains].reverse().join(' / ') || '未返回'
   const attributionDetail = attribution
     ? `${attribution.detail}${attribution.pid === undefined ? '' : ` · PID ${attribution.pid}`}`
-    : '正在识别应用'
+    : '正在等待应用识别'
   const headerMeta = [
+    targetLabel,
     String(metadata.network || '').toUpperCase(),
     metadata.type,
-    metadata.destinationPort ? `:${metadata.destinationPort}` : '',
     closed ? '已结束' : '',
   ]
     .filter(Boolean)
     .join(' · ')
 
   const information: InformationItem[] = [
+    {
+      label: '应用识别',
+      value: attributionDetail,
+      icon: <AppsRounded fontSize="small" />,
+    },
+    ...(processPath
+      ? [
+          {
+            label: '程序路径',
+            value: processPath,
+            icon: <AppsRounded fontSize="small" />,
+          },
+        ]
+      : []),
     {
       label: t('connections.components.fields.source'),
       value: `${metadata.sourceIP}:${metadata.sourcePort}`,
@@ -210,20 +246,6 @@ const InnerConnectionDetail = ({
       value: `${destination}:${metadata.destinationPort}`,
       icon: <RouteRounded fontSize="small" />,
     },
-    {
-      label: '应用识别',
-      value: attributionDetail,
-      icon: <RouteRounded fontSize="small" />,
-    },
-    ...(processPath
-      ? [
-          {
-            label: '程序路径',
-            value: processPath,
-            icon: <RouteRounded fontSize="small" />,
-          },
-        ]
-      : []),
     {
       label: '命中规则',
       value: rule,
@@ -269,14 +291,14 @@ const InnerConnectionDetail = ({
             color: 'primary.contrastText',
           }}
         >
-          <DnsRounded />
+          <AppsRounded />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
-            {hostAddress || '未知目标'}
+            {applicationName}
           </Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
-            {headerMeta || '连接详情'}
+            {headerMeta}
           </Typography>
         </Box>
         <IconButton onClick={onClose} aria-label="关闭连接详情">
@@ -386,23 +408,23 @@ const InnerConnectionDetail = ({
         sx={{
           p: 1.5,
           flex: '0 0 auto',
+          alignItems: 'center',
           borderTop: 1,
           borderColor: 'divider',
           bgcolor: 'background.paper',
         }}
       >
         <Button
-          fullWidth
           variant="contained"
           startIcon={<TuneRounded />}
           onClick={onOpenRuleAssistant}
+          sx={{ flex: 1 }}
         >
-          设置分流
+          调整分流
         </Button>
         {!closed && (
           <Button
-            fullWidth
-            variant="outlined"
+            variant="text"
             color="error"
             startIcon={<PowerOffRounded />}
             onClick={() => {
@@ -410,7 +432,7 @@ const InnerConnectionDetail = ({
               onClose()
             }}
           >
-            断开连接
+            断开
           </Button>
         )}
       </Stack>
