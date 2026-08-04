@@ -26,6 +26,7 @@ jobs:
           filters: |
             frontend:
               - 'src/**'
+              - 'scripts/**/*.mjs'
               - '**/*.js'
               - '**/*.ts'
               - '**/*.tsx'
@@ -75,6 +76,10 @@ jobs:
         if: steps.check_frontend.outputs.frontend == 'true'
         run: pnpm format:check
 
+      - name: 运行 Fake-IP 与连接界面回归
+        if: steps.check_frontend.outputs.frontend == 'true'
+        run: node scripts/check-karing-process-attribution.mjs
+
       - name: 审查成熟化分流交互
         if: steps.check_frontend.outputs.frontend == 'true'
         shell: bash
@@ -105,9 +110,16 @@ jobs:
           grep -q 'rule: string' src/components/connection/connection-filter-menu.tsx
           grep -q 'outbound: string' src/components/connection/connection-filter-menu.tsx
           grep -q 'useConnectionData({ enabled: open })' src/components/connection/connection-detail.tsx
+          grep -q 'activeConnections.find' src/components/connection/connection-detail.tsx
           grep -q '技术详情' src/components/connection/connection-detail.tsx
-          grep -q 'useConnectionProcessAttribution' src/components/routing/connection-project-card.tsx
-          grep -q 'Windows TUN 端点识别' src/components/routing/connection-project-card.tsx
+          grep -q '调整分流' src/components/connection/connection-detail.tsx
+          grep -q 'identifiedApplication ? application : row.host' src/components/connection/connection-row-item.tsx
+          grep -q '应用规则' src/components/routing/connection-project-card.tsx
+          grep -q '当前出口' src/components/routing/connection-project-card.tsx
+          if grep -q 'useNavigate\|<Button\|Windows TUN' src/components/routing/connection-project-card.tsx; then
+            echo '[失败] 路由摘要仍包含重复跳转按钮或暴露技术归因术语'
+            exit 1
+          fi
           grep -q "'local-endpoint'" src/services/process-connections.ts
           grep -q "'recent-local-endpoint'" src/services/process-connections.ts
           grep -q 'RECENT_ENDPOINT_TTL_MS' src/services/process-connections.ts
@@ -134,7 +146,7 @@ jobs:
             exit 1
           fi
           grep -q '{policyFilter && (' src/pages/proxies.tsx
-          echo '[通过] 连接筛选、实时归因、短连接缓存、滚动展示、常用预设和页面职责检查完成'
+          echo '[通过] 应用优先列表、单一路由摘要、实时归因、短连接缓存、滚动展示和页面职责检查完成'
 
       - name: 运行 ESLint
         if: steps.check_frontend.outputs.frontend == 'true'
