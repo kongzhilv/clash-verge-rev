@@ -20,14 +20,9 @@ const attributionLabel = (
   attribution: ReturnType<typeof useConnectionProcessAttribution>,
   inferred: boolean,
 ) => {
-  if (attribution?.source === 'mihomo') return '代理核心识别应用'
-  if (attribution?.source === 'windows') {
-    if (attribution.match === 'tuple') return 'Windows 精确端点识别'
-    if (attribution.match === 'local-endpoint') return 'Windows TUN 端点识别'
-    if (attribution.match === 'local-port') return 'Windows 唯一端口识别'
-    return 'Windows 最近连接记录识别'
-  }
-  if (inferred) return '应用规则特征识别'
+  if (attribution?.source === 'mihomo') return '应用已由代理核心识别'
+  if (attribution?.source === 'windows') return '应用已由系统识别'
+  if (inferred) return '应用已由规则特征识别'
   return '尚未识别应用'
 }
 
