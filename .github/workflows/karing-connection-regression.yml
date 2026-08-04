@@ -1,0 +1,62 @@
+name: Karing 连接归因回归
+run-name: Karing 连接归因与交互回归
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - 'src/components/connection/**'
+      - 'src/components/routing/**'
+      - 'src/hooks/use-connection-data.ts'
+      - 'src/services/process-connections.ts'
+      - 'scripts/check-karing-process-attribution.mjs'
+      - '.github/workflows/karing-connection-regression.yml'
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - 'src/components/connection/**'
+      - 'src/components/routing/**'
+      - 'src/hooks/use-connection-data.ts'
+      - 'src/services/process-connections.ts'
+      - 'scripts/check-karing-process-attribution.mjs'
+      - '.github/workflows/karing-connection-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: 验证 Fake-IP 归因与应用优先交互
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+
+      - name: 运行诊断包回归场景
+        run: node scripts/check-karing-process-attribution.mjs
+
+      - name: 检查普通界面未暴露内部归因术语
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'Windows TUN\|精确识别\|源端口识别' \
+            src/components/routing/connection-project-card.tsx; then
+            echo '[失败] 普通路由摘要暴露了内部归因术语'
+            exit 1
+          fi
+          if grep -q 'useNavigate\|<Button' \
+            src/components/routing/connection-project-card.tsx; then
+            echo '[失败] 路由摘要仍有重复跳转操作'
+            exit 1
+          fi
+          grep -q '调整分流' src/components/connection/connection-detail.tsx
+          grep -q '技术详情' src/components/connection/connection-detail.tsx
+          echo '[通过] 普通视图只保留应用、规则、出口和单一分流操作'
