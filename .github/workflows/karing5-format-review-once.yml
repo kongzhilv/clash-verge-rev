@@ -18,6 +18,10 @@ env:
   HUSKY: 0
   FEATURE_BRANCH: feature/karing-style-diversion
 
+concurrency:
+  group: karing5-format-review
+  cancel-in-progress: true
+
 jobs:
   review:
     name: 格式化并审查功能分支
@@ -69,14 +73,15 @@ jobs:
           changed=$(git diff --name-only)
           if [ -n "$changed" ]; then
             echo "$changed"
-            if echo "$changed" | grep -Ev '^(src/components/connection/connection-detail\.tsx|src/components/connection/connection-row-item\.tsx|src/components/routing/connection-project-card\.tsx|scripts/check-karing-process-attribution\.mjs|\.github/workflows/frontend-check\.yml|\.github/workflows/karing-connection-regression\.yml)$'; then
+            unexpected=$(echo "$changed" | grep -Ev '^(src/components/connection/connection-detail\.tsx|src/components/connection/connection-row-item\.tsx|src/components/routing/connection-project-card\.tsx|scripts/check-karing-process-attribution\.mjs|\.github/workflows/frontend-check\.yml|\.github/workflows/karing-connection-regression\.yml)$' || true)
+            if [ -n "$unexpected" ]; then
               echo '[失败] 自动整理修改了本轮范围之外的文件'
+              echo "$unexpected"
               exit 1
             fi
           fi
 
       - name: 提交整理结果
-        id: candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -93,24 +98,66 @@ jobs:
             git commit -m 'style: finalize Karing 5 application-first UX'
             git push origin "HEAD:$FEATURE_BRANCH"
           fi
-          candidate=$(git rev-parse HEAD)
-          echo "sha=$candidate" >> "$GITHUB_OUTPUT"
-          echo "候选提交：$candidate"
+          echo "候选提交：$(git rev-parse HEAD)"
 
-      - name: 回报候选审查结果
+  report:
+    name: 回写候选审查状态
+    if: always()
+    needs: review
+    runs-on: ubuntu-latest
+    steps:
+      - name: 获取功能分支头
+        id: meta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
         shell: bash
         run: |
+          set -euo pipefail
+          candidate=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$FEATURE_BRANCH" --jq '.object.sha')
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+
+      - name: 回报 PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ steps.meta.outputs.candidate }}
+          REVIEW_RESULT: ${{ needs.review.result }}
+        shell: bash
+        run: |
+          if [ "$REVIEW_RESULT" = 'success' ]; then
+            status='✅ 前端质量、应用优先交互和 Fake-IP 回归全部通过。'
+          else
+            status="❌ 候选整理失败，结果：$REVIEW_RESULT。请查看 Action 失败步骤。"
+          fi
           cat > /tmp/status.md <<EOF
           <!-- karing5-format-review-status -->
           ## Karing 5 候选整理与前端审查
 
-          ✅ 应用优先连接视图、单一路由摘要和 Fake-IP 回归已通过前端门禁。
+          $status
 
-          - 候选提交：\`$CANDIDATE_SHA\`
+          - 当前功能分支头：\`$CANDIDATE_SHA\`
           - Action：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          - 下一步：固定该提交运行 Rust、多平台安装包与正式 Release 审查
           EOF
           gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/status.md
+
+      - name: 写入可读取状态文件
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ steps.meta.outputs.candidate }}
+          REVIEW_RESULT: ${{ needs.review.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          path='.ci/karing5-format-review-status.json'
+          content=$(jq -n \
+            --arg result "$REVIEW_RESULT" \
+            --arg candidate "$CANDIDATE_SHA" \
+            --arg run_id '${{ github.run_id }}' \
+            --arg url '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' \
+            '{result:$result,candidate:$candidate,run_id:$run_id,url:$url}')
+          encoded=$(printf '%s\n' "$content" | base64 -w0)
+          current=$(gh api "repos/$GITHUB_REPOSITORY/contents/$path?ref=dev" --jq '.sha' 2>/dev/null || true)
+          args=(--method PUT "repos/$GITHUB_REPOSITORY/contents/$path" -f message='ci: record Karing 5 candidate review status' -f content="$encoded" -f branch=dev)
+          if [ -n "$current" ]; then
+            args+=(-f sha="$current")
+          fi
+          gh api "${args[@]}" >/dev/null
