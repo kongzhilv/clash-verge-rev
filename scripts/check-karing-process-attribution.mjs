@@ -94,9 +94,7 @@ const udpOwners = [
 ]
 const udpIndexes = buildIndexes(udpOwners)
 assert.equal(
-  udpIndexes.localEndpoints.get(
-    localEndpointKey('UDP', '198.18.0.1', '50575'),
-  ),
+  udpIndexes.localEndpoints.get(localEndpointKey('UDP', '198.18.0.1', '50575')),
   undefined,
 )
 assert.equal(udpIndexes.localPorts.get('UDP|50575')?.pid, 17292)
@@ -126,11 +124,17 @@ const dataSource = readFileSync(
   'utf8',
 )
 const detailSource = readFileSync(
-  new URL('../src/components/connection/connection-detail.tsx', import.meta.url),
+  new URL(
+    '../src/components/connection/connection-detail.tsx',
+    import.meta.url,
+  ),
   'utf8',
 )
 const rowSource = readFileSync(
-  new URL('../src/components/connection/connection-row-item.tsx', import.meta.url),
+  new URL(
+    '../src/components/connection/connection-row-item.tsx',
+    import.meta.url,
+  ),
   'utf8',
 )
 const routeSource = readFileSync(

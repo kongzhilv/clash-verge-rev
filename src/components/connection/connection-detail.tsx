@@ -37,8 +37,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
-import ConnectionProjectCard from '@/components/routing/connection-project-card'
 import { resolveConnectionProject } from '@/components/routing/connection-project'
+import ConnectionProjectCard from '@/components/routing/connection-project-card'
 import {
   useConnectionData,
   useConnectionProcessAttribution,
