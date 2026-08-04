@@ -19,11 +19,11 @@ interface Props {
 
 const itemStyle = {
   boxSizing: 'border-box',
-  minHeight: 58,
+  minHeight: 62,
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  padding: '7px 44px 7px 12px',
+  padding: '8px 44px 8px 12px',
   borderBottom: '1px solid var(--divider-color)',
   position: 'relative',
   overflow: 'hidden',
@@ -95,26 +95,29 @@ export const ConnectionRowItem = memo(
       [onShowDetail, row.id],
     )
     const application = row.process || projectName || '未识别应用'
+    const identifiedApplication = application !== '未识别应用'
+    const title = identifiedApplication ? application : row.host
+    const destination = identifiedApplication ? row.host : '等待应用识别'
     const route = row.chains || projectPolicy || ''
-    const type = [row.network.toUpperCase(), row.type]
-      .filter(Boolean)
-      .join(' · ')
     const showTraffic = row.uploadSpeed >= 100 || row.downloadSpeed >= 100
 
     return (
       <div style={itemStyle}>
         <div style={contentStyle} onClick={handleShowDetail}>
-          <div style={primaryStyle}>{row.host}</div>
+          <div
+            style={primaryStyle}
+            title={row.processPath || projectName || row.host}
+          >
+            {title}
+          </div>
           <div style={secondaryStyle}>
             <span
-              style={{ ...secondaryItemStyle, maxWidth: '32%' }}
-              title={row.processPath || application}
+              style={{ ...secondaryItemStyle, maxWidth: '46%' }}
+              title={destination}
             >
-              {application}
+              {destination}
               {projectInferred && !row.process ? '（规则识别）' : ''}
             </span>
-            {type && <span>·</span>}
-            {type && <span style={secondaryItemStyle}>{type}</span>}
             {route && <span>·</span>}
             {route && (
               <span
