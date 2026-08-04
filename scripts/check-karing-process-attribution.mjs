@@ -1,3 +1,4 @@
+// Release-gating regression suite for application attribution and connection details.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
