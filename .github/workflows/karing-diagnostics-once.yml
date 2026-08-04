@@ -40,7 +40,7 @@ env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
-  RELEASE_TAG: v2.5.3-karing
+  RELEASE_TAG: v2.5.4-karing.6
   RELEASE_BRANCH: feature/karing-style-diversion
 
 concurrency:
@@ -97,7 +97,9 @@ jobs:
           set -euo pipefail
           version=$(jq -r .version package.json)
           commit=$(git rev-parse HEAD)
-          test "$version" = '2.5.3'
+          test "$version" = '2.5.4'
+          test "$(jq -r .version src-tauri/tauri.conf.json)" = '2.5.4'
+          grep -Fq 'version = "2.5.4"' src-tauri/Cargo.toml
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
@@ -115,6 +117,9 @@ jobs:
 
       - name: 构建前端
         run: pnpm run web:build
+
+      - name: 运行程序归因专项回归
+        run: node scripts/check-karing-process-attribution.mjs
 
       - name: 运行 Rust Clippy
         run: cargo clippy --workspace --all-targets --features clippy -- -D warnings
@@ -136,6 +141,17 @@ jobs:
             fi
           }
 
+          check_not_contains() {
+            local file="$1"
+            local text="$2"
+            local label="$3"
+            if grep -Fq "$text" "$file"; then
+              echo "[失败] $label：$file 中仍包含 $text"
+              exit 1
+            fi
+            echo "[通过] $label"
+          }
+
           if [ -e mobile/android/upstream.env ]; then
             echo '[失败] 本桌面发行不应包含 Android 上游环境文件'
             exit 1
@@ -149,6 +165,14 @@ jobs:
           check_contains src/components/home/proxy-tun-card.tsx "value ? 'start_proxy' : 'stop_proxy'" '前端主开关已连接后端命令'
           check_contains src-tauri/src/enhance/field/diversion.rs 'const CONFIG_KEY: &str = "x-karing-diversion";' 'Karing 分流编译器使用正确配置键'
           check_contains src-tauri/src/cmd/save_profile.rs 'Global Merge and Script are always collected' '全局 Merge 与 Script 保存后会刷新运行时'
+          check_contains src/services/process-connections.ts 'resolvedIdentitiesByPid' '同 PID 完整身份会修复占位连接记录'
+          check_contains src/services/process-connections.ts 'PID_PLACEHOLDER_PATTERN' 'PID 占位值不会被当成程序名'
+          check_contains src/services/process-connections.ts 'INACTIVE_TCP_STATES' '失效 TCP 状态不会污染程序归因'
+          check_not_contains src-tauri/src/cmd/process_connections.rs 'format!("PID {pid}")' '后端不再制造 PID 假程序名'
+          check_contains src/components/connection/connection-detail.tsx "height: '100dvh'" '详情抽屉使用完整动态视口高度'
+          check_contains src/components/connection/connection-detail.tsx "flex: '1 1 0'" '详情正文拥有独立可收缩滚动区'
+          check_contains src/components/connection/connection-detail.tsx "scrollbarGutter: 'stable'" '详情滚动条不会挤压内容'
+          check_contains src/components/connection/connection-detail.tsx "position: 'sticky'" '详情底部操作栏固定可见'
 
   native-builds:
     name: 构建 ${{ matrix.name }}
@@ -196,7 +220,7 @@ jobs:
       - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-native-v4
+          prefix-key: karing-desktop-native-v5
           key: ${{ matrix.os }}-${{ matrix.target }}
           workspaces: |
             . -> target
@@ -306,7 +330,7 @@ jobs:
       - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-linux-arm-v4
+          prefix-key: karing-desktop-linux-arm-v5
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -430,7 +454,7 @@ jobs:
       - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-fixed-webview2-v4
+          prefix-key: karing-desktop-fixed-webview2-v5
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -526,6 +550,12 @@ jobs:
             exit 1
           fi
 
+          if find release-assets -maxdepth 1 -type f ! -name '*2.5.4*' -print -quit | grep -q .; then
+            echo '发现没有 2.5.4 版本号的安装文件'
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
+
           (
             cd release-assets
             sha256sum * > SHA256SUMS.txt
@@ -545,15 +575,15 @@ jobs:
           cat > release-assets/release-notes.md <<EOF
           # Clash Verge Rev Karing v${{ needs.review.outputs.version }}
 
-          本桌面发行版加入 Karing 风格分流管理、全局 Merge/Script 保存后即时应用，以及经过审查的主代理开关链路。
+          修复以下用户可见问题：
 
-          ## 安装包
-          - Windows x64 与 ARM64
-          - Windows x64 与 ARM64 固定 WebView2 版本
-          - macOS Apple Silicon 与 Intel
-          - Linux x64、ARM64 与 ARMv7 的 DEB/RPM
+          - Windows 无法查询 exe 路径时，`PID xxxx` 不再冒充已识别程序。
+          - 同一个 PID 的其他连接已拿到完整名称/路径时，会回填到占位连接记录。
+          - TIME-WAIT、LISTEN、CLOSED 与 PID 0 不再污染端点候选。
+          - 连接详情使用完整动态视口、独立滚动正文和固定底部操作栏，不再裁切规则、出口或按钮。
+          - 安装包内部版本升级为 2.5.4，避免与旧 2.5.3 安装包混淆。
 
-          Android 不在本次发行范围内。本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
+          本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
 
           Commit: `${{ needs.review.outputs.commit }}`
           EOF
@@ -609,4 +639,8 @@ jobs:
             --notes-file release-assets/release-notes.md \
             --latest
 
-          gh release view "${RELEASE_TAG}" --json url,assets --jq '{url: .url, assets: [.assets[].name]}'
+          asset_count=$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets | length')
+          test "$asset_count" -eq 14
+          tag_sha=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/${RELEASE_TAG}" | awk '{print $1}')
+          test "$tag_sha" = "${{ needs.review.outputs.commit }}"
+          gh release view "${RELEASE_TAG}" --json url,tagName,targetCommitish,isDraft,isPrerelease,assets --jq '{url: .url, tag: .tagName, target: .targetCommitish, draft: .isDraft, prerelease: .isPrerelease, assets: [.assets[].name]}'
