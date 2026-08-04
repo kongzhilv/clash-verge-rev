@@ -1,0 +1,71 @@
+name: Karing 2.5.4 有效发布检查器
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  inspect:
+    if: >-
+      github.event.issue.number == 1 &&
+      github.event.comment.body == '/inspect-karing-v254-publish-active'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      INSPECTOR_PATH: .github/workflows/karing-v254-publish-inspector.yml
+      MARKER: '<!-- karing-v254-active-publish-inspector -->'
+    steps:
+      - name: 读取最新有效发布运行
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/karing-v254-release-retry.yml/runs?per_page=30")
+          run_id=$(jq -r '.workflow_runs[] | select(.status != "completed" or .conclusion != "skipped") | .id' <<<"$runs" | head -n1)
+          test -n "$run_id"
+          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")
+          jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" \
+            --jq '[.jobs[] | {id, name, status, conclusion, steps: [.steps[]? | {name, status, conclusion}]}]')
+          status=$(jq -r '.status' <<<"$run_json")
+          conclusion=$(jq -r '.conclusion // ""' <<<"$run_json")
+          url=$(jq -r '.html_url' <<<"$run_json")
+          failed_log=''
+          if [ "$status" = completed ] && [ "$conclusion" != success ]; then
+            failed_log=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --log-failed 2>&1 | tail -n 240 || true)
+          fi
+          body=$(cat <<EOF
+          ${MARKER}
+          ## Karing 2.5.4 有效发布运行
+
+          - Run：${url}
+          - Run ID：\`${run_id}\`
+          - 状态：\`${status}\`
+          - 结论：\`${conclusion:-尚未结束}\`
+
+          \`\`\`json
+          ${jobs}
+          \`\`\`
+
+          \`\`\`text
+          ${failed_log}
+          \`\`\`
+          EOF
+          )
+          jq -n --arg body "$body" '{body: $body}' | \
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/1/comments" --input - >/dev/null
+
+      - name: 清理检查器
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha=$(gh api "repos/${GITHUB_REPOSITORY}/contents/${INSPECTOR_PATH}?ref=dev" --jq '.sha')
+          jq -n --arg message 'chore: remove active publish inspector' --arg sha "$sha" --arg branch dev \
+            '{message: $message, sha: $sha, branch: $branch}' | \
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/contents/${INSPECTOR_PATH}" --input - >/dev/null
