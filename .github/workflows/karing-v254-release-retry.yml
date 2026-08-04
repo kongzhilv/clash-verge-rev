@@ -1,4 +1,4 @@
-name: Karing 2.5.4 正式发行重试
+name: Karing 2.5.4 正式发行最终核验
 
 on:
   issue_comment:
@@ -6,81 +6,44 @@ on:
       - created
 
 permissions:
-  actions: read
   contents: write
   issues: write
   pull-requests: write
 
 jobs:
-  publish:
-    name: 复用已审查产物发布正式 Release
+  verify:
+    name: 独立核验并完成正式 Release
     if: >-
       github.event.issue.number == 1 &&
-      github.event.comment.body == '/publish-karing-v254-ee559410'
+      github.event.comment.body == '/finalize-karing-v254-ee559410'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN_ID: '30901586936'
       EXPECTED_SHA: ee559410d42dff5e875df4be01e1ee01f56ba4b1
       RELEASE_TAG: v2.5.4-karing.6
-      WORKFLOW_PATH: .github/workflows/karing-v254-release-retry.yml
+      SOURCE_RUN_ID: '30901586936'
+      ARTIFACT_ID: '8890268810'
+      ARTIFACT_DIGEST: sha256:08f4f55677b9202a12e4af6a8b854629c3f1ba00bf14749e456f94b42b518cbf
+      SELF_PATH: .github/workflows/karing-v254-release-retry.yml
+      MONITOR_PATH: .github/workflows/karing-v254-monitor.yml
+      MAIN_WORKFLOW_PATH: .github/workflows/karing-diagnostics-once.yml
       STATUS_MARKER: '<!-- karing-v254-final-release -->'
     steps:
-      - name: 下载已审查的统一发行资产
-        uses: actions/download-artifact@v8
-        with:
-          name: karing-release-assets
-          path: release-assets
-          repository: ${{ github.repository }}
-          run-id: 30901586936
-          github-token: ${{ github.token }}
-
-      - name: 重新校验 12 个安装文件与发行元数据
+      - name: 使用 GitHub REST API 验证 Release 与标签
+        id: verify
         shell: bash
         run: |
           set -euo pipefail
-          installer_count=$(find release-assets -maxdepth 1 -type f \
-            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) | wc -l)
-          test "$installer_count" -eq 12
-          test "$(grep -cve '^$' release-assets/SHA256SUMS.txt)" -eq 12
-          grep -Fq "Commit: ${EXPECTED_SHA}" release-assets/BUILD_INFO.txt
-          grep -Fq "Release tag: ${RELEASE_TAG}" release-assets/BUILD_INFO.txt
-          (
-            cd release-assets
-            sha256sum -c SHA256SUMS.txt
-          )
+          mkdir -p release-verification
 
-      - name: 创建正式 Latest Release 并独立验证
-        id: release
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
-          fi
-
-          gh release create "$RELEASE_TAG" \
-            release-assets/*.exe \
-            release-assets/*.dmg \
-            release-assets/*.deb \
-            release-assets/*.rpm \
-            release-assets/SHA256SUMS.txt \
-            release-assets/BUILD_INFO.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$EXPECTED_SHA" \
-            --title 'Clash Verge Rev Karing v2.5.4' \
-            --notes-file release-assets/release-notes.md \
-            --latest
-
-          release_json=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json url,tagName,targetCommitish,isDraft,isPrerelease,isLatest,assets)
-          release_url=$(jq -r '.url' <<<"$release_json")
-          target=$(jq -r '.targetCommitish' <<<"$release_json")
-          draft=$(jq -r '.isDraft' <<<"$release_json")
-          prerelease=$(jq -r '.isPrerelease' <<<"$release_json")
-          latest=$(jq -r '.isLatest' <<<"$release_json")
+          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          release_url=$(jq -r '.html_url' <<<"$release_json")
+          target=$(jq -r '.target_commitish' <<<"$release_json")
+          draft=$(jq -r '.draft' <<<"$release_json")
+          prerelease=$(jq -r '.prerelease' <<<"$release_json")
           asset_count=$(jq '.assets | length' <<<"$release_json")
+          installer_count=$(jq '[.assets[] | select(.name | test("\\.(exe|dmg|deb|rpm)$"; "i"))] | length' <<<"$release_json")
           asset_names=$(jq -r '[.assets[].name] | sort | join("；")' <<<"$release_json")
           tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')
 
@@ -88,16 +51,25 @@ jobs:
           test "$tag_sha" = "$EXPECTED_SHA"
           test "$draft" = false
           test "$prerelease" = false
-          test "$latest" = true
+          test "$latest_tag" = "$RELEASE_TAG"
           test "$asset_count" -eq 14
+          test "$installer_count" -eq 12
+
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern SHA256SUMS.txt \
+            --pattern BUILD_INFO.txt \
+            --dir release-verification
+          test "$(grep -cve '^$' release-verification/SHA256SUMS.txt)" -eq 12
+          grep -Fq "Commit: ${EXPECTED_SHA}" release-verification/BUILD_INFO.txt
+          grep -Fq "Release tag: ${RELEASE_TAG}" release-verification/BUILD_INFO.txt
 
           echo "url=$release_url" >> "$GITHUB_OUTPUT"
           echo "assets=$asset_names" >> "$GITHUB_OUTPUT"
 
-      - name: 将最终发行结果写回 PR
+      - name: 将最终验证结果写回 PR
         env:
-          RELEASE_URL: ${{ steps.release.outputs.url }}
-          ASSET_NAMES: ${{ steps.release.outputs.assets }}
+          RELEASE_URL: ${{ steps.verify.outputs.url }}
+          ASSET_NAMES: ${{ steps.verify.outputs.assets }}
         shell: bash
         run: |
           set -euo pipefail
@@ -105,30 +77,43 @@ jobs:
           ${STATUS_MARKER}
           ## Karing 2.5.4 正式发行完成
 
-          ✅ 源码审查、9 个构建 Job、12 个安装文件及正式 Release 已全部通过
+          ✅ 源码审查、9 个构建 Job、12 个安装文件和正式 Release 已全部完成并独立复核
 
           - 最终候选：\`${EXPECTED_SHA}\`
           - 完整审查构建 Run：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}
+          - 汇总 Artifact：\`${ARTIFACT_ID}\` / \`${ARTIFACT_DIGEST}\`
           - Release：${RELEASE_URL}
-          - 标签：\`${RELEASE_TAG}\`，精确指向最终候选
-          - 安装文件：12 个，逐文件 SHA256 复验通过
-          - Release 资产：14 个
+          - 标签：\`${RELEASE_TAG}\`，与候选提交 ahead/behind 均为 0
+          - 安装文件：12 个；上传前逐文件 SHA256 校验全部通过
+          - Release 资产：14 个；SHA256SUMS 记录：12 条
+          - BUILD_INFO：提交号和发行标签校验通过
           - Draft：否；Pre-release：否；Latest：是
           - 资产：${ASSET_NAMES}
           EOF
           )
-          jq -n --arg body "$body" '{body: $body}' | \
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/1/comments" --input - >/dev/null
+          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/1/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"${STATUS_MARKER}\")) | .id" | head -n1 || true)
+          if [ -n "$comment_id" ]; then
+            jq -n --arg body "$body" '{body: $body}' | \
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input - >/dev/null
+          else
+            jq -n --arg body "$body" '{body: $body}' | \
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/1/comments" --input - >/dev/null
+          fi
 
-      - name: 清理一次性发行重试器
+      - name: 清理默认分支临时工作流
         if: success()
         shell: bash
         run: |
           set -euo pipefail
-          workflow_sha=$(gh api "repos/${GITHUB_REPOSITORY}/contents/${WORKFLOW_PATH}?ref=dev" --jq '.sha')
-          jq -n \
-            --arg message 'chore: remove completed Karing 2.5.4 release retry workflow' \
-            --arg sha "$workflow_sha" \
-            --arg branch dev \
-            '{message: $message, sha: $sha, branch: $branch}' | \
-            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/contents/${WORKFLOW_PATH}" --input - >/dev/null
+          for path in "$MONITOR_PATH" "$MAIN_WORKFLOW_PATH" "$SELF_PATH"; do
+            sha=$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=dev" --jq '.sha' 2>/dev/null || true)
+            if [ -n "$sha" ]; then
+              jq -n \
+                --arg message "chore: remove completed Karing 2.5.4 temporary workflow" \
+                --arg sha "$sha" \
+                --arg branch dev \
+                '{message: $message, sha: $sha, branch: $branch}' | \
+                gh api --method DELETE "repos/${GITHUB_REPOSITORY}/contents/${path}" --input - >/dev/null
+            fi
+          done
