@@ -162,6 +162,8 @@ interface InformationItem {
   label: string
   value: string
   icon: ReactNode
+  wide?: boolean
+  monospace?: boolean
 }
 
 interface MetricProps {
@@ -206,8 +208,9 @@ const InnerConnectionDetail = ({
     String(metadata.process ?? ''),
     processPath,
   )
-  const applicationName =
-    processName || projectMatch?.project.name || '未识别应用'
+  const recognizedApplication = processName || projectMatch?.project.name || ''
+  const hasApplication = Boolean(recognizedApplication)
+  const applicationName = recognizedApplication || hostAddress || '未知连接'
   const targetLabel = hostAddress
     ? `${hostAddress}:${metadata.destinationPort}`
     : '未知目标'
@@ -227,7 +230,7 @@ const InnerConnectionDetail = ({
       }`
     : '正在等待应用识别'
   const headerMeta = [
-    targetLabel,
+    hasApplication ? targetLabel : '应用未识别',
     String(metadata.network || '').toUpperCase(),
     metadata.type,
     closed ? '已结束' : '',
@@ -240,6 +243,7 @@ const InnerConnectionDetail = ({
       label: '归因状态',
       value: attributionDetail,
       icon: <AppsRounded fontSize="small" />,
+      wide: true,
     },
     ...(processPath
       ? [
@@ -247,6 +251,8 @@ const InnerConnectionDetail = ({
             label: '程序路径',
             value: processPath,
             icon: <AppsRounded fontSize="small" />,
+            wide: true,
+            monospace: true,
           },
         ]
       : []),
@@ -313,7 +319,7 @@ const InnerConnectionDetail = ({
             color: 'primary.contrastText',
           }}
         >
-          <AppsRounded />
+          {hasApplication ? <AppsRounded /> : <RouteRounded />}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
@@ -400,23 +406,40 @@ const InnerConnectionDetail = ({
               {information.map((item) => (
                 <Stack
                   key={item.label}
-                  direction="row"
-                  spacing={1}
-                  sx={{ px: 1.5, py: 1, alignItems: 'center' }}
+                  direction={item.wide ? 'column' : 'row'}
+                  spacing={item.wide ? 0.5 : 1}
+                  sx={{
+                    px: 1.5,
+                    py: 1,
+                    alignItems: item.wide ? 'stretch' : 'center',
+                  }}
                 >
-                  <Box sx={{ color: 'text.secondary', display: 'flex' }}>
-                    {item.icon}
-                  </Box>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ minWidth: 72 }}
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center' }}
                   >
-                    {item.label}
-                  </Typography>
+                    <Box sx={{ color: 'text.secondary', display: 'flex' }}>
+                      {item.icon}
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ minWidth: item.wide ? 0 : 72 }}
+                    >
+                      {item.label}
+                    </Typography>
+                  </Stack>
                   <Typography
                     variant="body2"
-                    sx={{ flex: 1, textAlign: 'right', wordBreak: 'break-all' }}
+                    sx={{
+                      flex: 1,
+                      textAlign: item.wide ? 'left' : 'right',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                      fontFamily: item.monospace ? 'monospace' : 'inherit',
+                      fontSize: item.monospace ? 12 : undefined,
+                    }}
                   >
                     {item.value}
                   </Typography>
@@ -448,7 +471,11 @@ const InnerConnectionDetail = ({
           onClick={onOpenRuleAssistant}
           sx={{ flex: 1 }}
         >
-          {projectMatch ? '调整分流' : '创建应用规则'}
+          {projectMatch
+            ? '调整分流'
+            : hasApplication
+              ? '为此应用设置分流'
+              : '按目标设置分流'}
         </Button>
         {!closed && (
           <Button
