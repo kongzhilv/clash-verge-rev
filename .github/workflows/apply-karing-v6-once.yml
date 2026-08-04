@@ -1,0 +1,427 @@
+name: 应用 Karing v6 成熟化迭代
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/apply-karing-v6-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-karing-v6-once
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: 写入连接体验与归因修正
+    runs-on: ubuntu-24.04
+    steps:
+      - name: 检出功能分支
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: 配置提交身份
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: 应用成熟化改动
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > src/components/connection/connection-row-item.tsx <<'EOF'
+          import { memo, useCallback } from 'react'
+
+          import { RelativeTime } from './connection-relative-time'
+          import type { ConnectionRowView } from './connection-row-view'
+
+          interface Props {
+            row: ConnectionRowView
+            closed: boolean
+            onShowDetail: (id: string) => void
+            projectName?: string
+            projectPolicy?: string
+            projectInferred?: boolean
+          }
+
+          const itemStyle = {
+            boxSizing: 'border-box',
+            minHeight: 62,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 12px',
+            borderBottom: '1px solid var(--divider-color)',
+            overflow: 'hidden',
+          } as const
+
+          const contentStyle = {
+            minWidth: 0,
+            flex: 1,
+            cursor: 'pointer',
+            userSelect: 'text',
+          } as const
+
+          const primaryStyle = {
+            fontSize: 14,
+            fontWeight: 650,
+            lineHeight: 1.4,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          } as const
+
+          const secondaryStyle = {
+            marginTop: 3,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            color: 'var(--text-secondary)',
+            fontSize: 11,
+            lineHeight: 1.4,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+          } as const
+
+          const secondaryItemStyle = {
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          } as const
+
+          const speedStyle = {
+            flex: '0 0 auto',
+            color: 'var(--text-secondary)',
+            fontSize: 11,
+            lineHeight: 1.45,
+            textAlign: 'right',
+            whiteSpace: 'nowrap',
+          } as const
+
+          export const ConnectionRowItem = memo(
+            function ConnectionRowItem({
+              row,
+              closed,
+              onShowDetail,
+              projectName,
+              projectPolicy,
+              projectInferred = false,
+            }: Props) {
+              const handleShowDetail = useCallback(
+                () => onShowDetail(row.id),
+                [onShowDetail, row.id],
+              )
+              const application = row.process || projectName || '未识别应用'
+              const identifiedApplication = application !== '未识别应用'
+              const title = identifiedApplication ? application : row.host
+              const destination = identifiedApplication ? row.host : '等待应用识别'
+              const route = row.chains || projectPolicy || '出口未知'
+              const showTraffic = row.uploadSpeed >= 100 || row.downloadSpeed >= 100
+
+              return (
+                <div style={itemStyle}>
+                  <div style={contentStyle} onClick={handleShowDetail}>
+                    <div
+                      style={primaryStyle}
+                      title={row.processPath || projectName || row.host}
+                    >
+                      {title}
+                    </div>
+                    <div style={secondaryStyle}>
+                      <span
+                        style={{ ...secondaryItemStyle, maxWidth: '46%' }}
+                        title={destination}
+                      >
+                        {destination}
+                        {projectInferred && !row.process ? '（规则识别）' : ''}
+                      </span>
+                      <span>·</span>
+                      <span
+                        style={{ ...secondaryItemStyle, maxWidth: '34%' }}
+                        title={route}
+                      >
+                        {route}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        {closed ? '已结束' : <RelativeTime start={row.time} />}
+                      </span>
+                    </div>
+                  </div>
+                  {showTraffic && (
+                    <div style={speedStyle}>
+                      <div>↓ {row.downloadSpeedText}</div>
+                      <div>↑ {row.uploadSpeedText}</div>
+                    </div>
+                  )}
+                </div>
+              )
+            },
+            (prev, next) =>
+              prev.row === next.row &&
+              prev.closed === next.closed &&
+              prev.onShowDetail === next.onShowDetail &&
+              prev.projectName === next.projectName &&
+              prev.projectPolicy === next.projectPolicy &&
+              prev.projectInferred === next.projectInferred,
+          )
+          EOF
+
+          cat > src/components/routing/connection-project-card.tsx <<'EOF'
+          import {
+            CheckCircleRounded,
+            HourglassTopRounded,
+            RouteRounded,
+            WarningAmberRounded,
+          } from '@mui/icons-material'
+          import { Box, Divider, Paper, Stack, Typography } from '@mui/material'
+          import { useMemo } from 'react'
+
+          import { useConnectionProcessAttribution } from '@/hooks/use-connection-data'
+          import { useDiversionProfile } from '@/hooks/use-diversion-profile'
+
+          import { resolveConnectionProject } from './connection-project'
+
+          interface ConnectionProjectCardProps {
+            connection: IConnectionsItem
+          }
+
+          const attributionLabel = (
+            attribution: ReturnType<typeof useConnectionProcessAttribution>,
+            inferred: boolean,
+          ) => {
+            if (attribution?.source === 'mihomo') return '代理核心识别应用'
+            if (attribution?.source === 'windows') {
+              if (attribution.match === 'tuple') return 'Windows 精确端点识别'
+              if (attribution.match === 'local-endpoint') return 'Windows TUN 端点识别'
+              if (attribution.match === 'local-port') return 'Windows 唯一端口识别'
+              return 'Windows 最近连接记录识别'
+            }
+            if (inferred) return '应用规则特征识别'
+            return '尚未识别应用'
+          }
+
+          export const ConnectionProjectCard = ({
+            connection,
+          }: ConnectionProjectCardProps) => {
+            const { profile } = useDiversionProfile()
+            const attribution = useConnectionProcessAttribution(connection.id)
+            const match = useMemo(
+              () => resolveConnectionProject(connection, profile?.config),
+              [connection, profile?.config],
+            )
+
+            const expectedPolicy = match?.policy || ''
+            const currentPolicy = connection.chains.at(-1)?.trim() || '未返回'
+            const routeDiffers =
+              Boolean(expectedPolicy) &&
+              currentPolicy !== '未返回' &&
+              !connection.chains.some(
+                (item) =>
+                  item.trim().toLowerCase() === expectedPolicy.toLowerCase(),
+              )
+            const ruleLabel = match
+              ? `${match.project.name}${
+                  match.reasons.length > 0
+                    ? ` · ${match.reasons.join(' + ')}`
+                    : ''
+                }`
+              : connection.rulePayload
+                ? `${connection.rule} · ${connection.rulePayload}`
+                : connection.rule || '未返回'
+            const status = routeDiffers
+              ? '当前连接仍在使用旧出口'
+              : match
+                ? '应用规则已生效'
+                : '当前按通用规则处理'
+            const recognition = attributionLabel(
+              attribution,
+              Boolean(match?.inferred),
+            )
+
+            return (
+              <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ px: 1.5, py: 1.1, alignItems: 'center' }}
+                >
+                  <Box
+                    sx={{
+                      width: 34,
+                      height: 34,
+                      flex: '0 0 auto',
+                      display: 'grid',
+                      placeItems: 'center',
+                      borderRadius: 1.5,
+                      bgcolor: routeDiffers
+                        ? 'warning.main'
+                        : match
+                          ? 'success.main'
+                          : 'action.hover',
+                      color:
+                        routeDiffers || match
+                          ? 'primary.contrastText'
+                          : 'text.secondary',
+                    }}
+                  >
+                    <RouteRounded fontSize="small" />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
+                      {routeDiffers ? (
+                        <WarningAmberRounded color="warning" sx={{ fontSize: 16 }} />
+                      ) : match ? (
+                        <CheckCircleRounded color="success" sx={{ fontSize: 16 }} />
+                      ) : (
+                        <HourglassTopRounded
+                          color="disabled"
+                          sx={{ fontSize: 16 }}
+                        />
+                      )}
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                        {status}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {recognition}
+                    </Typography>
+                  </Box>
+                </Stack>
+
+                <Divider />
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)',
+                  }}
+                >
+                  <Box sx={{ minWidth: 0, px: 1.5, py: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {match ? '应用规则' : '通用规则'}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ mt: 0.2, fontWeight: 650, wordBreak: 'break-word' }}
+                      title={ruleLabel}
+                    >
+                      {ruleLabel}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      minWidth: 0,
+                      px: 1.5,
+                      py: 1.25,
+                      borderLeft: 1,
+                      borderColor: 'divider',
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      当前出口
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ mt: 0.2, fontWeight: 650, wordBreak: 'break-word' }}
+                      title={currentPolicy}
+                    >
+                      {currentPolicy}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {routeDiffers && (
+                  <Typography
+                    variant="caption"
+                    color="warning.main"
+                    sx={{ display: 'block', px: 1.5, pb: 1.2 }}
+                  >
+                    预期出口为 {expectedPolicy}。重新建立连接后会按新规则匹配。
+                  </Typography>
+                )}
+              </Paper>
+            )
+          }
+
+          export default ConnectionProjectCard
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          process_path = Path('src/services/process-connections.ts')
+          process_text = process_path.read_text(encoding='utf-8')
+          marker = "const readRecentCandidate = (\n  map: Map<string, RecentCandidate>,\n  key: string,\n  now: number,\n) => {\n  const candidate = map.get(key)\n  if (!candidate || now - candidate.seenAt > RECENT_ENDPOINT_TTL_MS) {\n    return undefined\n  }\n  return candidate.identity ?? undefined\n}\n"
+          insertion = marker + "\nconst INACTIVE_TCP_STATES = new Set([\n  'CLOSED',\n  'LISTEN',\n  'TIME-WAIT',\n  'DELETE-TCB',\n])\n\nconst isUsableProcessConnection = (connection: ProcessConnectionInfo) => {\n  if (connection.pid <= 0) return false\n\n  const protocol = connection.protocol.trim().toUpperCase()\n  const state = connection.state?.trim().toUpperCase()\n  if (protocol === 'TCP' && state && INACTIVE_TCP_STATES.has(state)) {\n    return false\n  }\n\n  const processName = connection.processName.trim()\n  const processPath = connection.processPath.trim()\n  return Boolean(\n    processPath || (processName && !/^PID\\s+\\d+$/i.test(processName)),\n  )\n}\n"
+          if marker not in process_text:
+              raise SystemExit('process candidate marker not found')
+          process_text = process_text.replace(marker, insertion, 1)
+          loop = "    for (const processConnection of snapshot.connections) {\n      const local = parseEndpoint(processConnection.localAddress)"
+          replacement = "    for (const processConnection of snapshot.connections) {\n      if (!isUsableProcessConnection(processConnection)) continue\n\n      const local = parseEndpoint(processConnection.localAddress)"
+          if loop not in process_text:
+              raise SystemExit('process loop marker not found')
+          process_text = process_text.replace(loop, replacement, 1)
+          process_path.write_text(process_text, encoding='utf-8')
+
+          detail_path = Path('src/components/connection/connection-detail.tsx')
+          detail_text = detail_path.read_text(encoding='utf-8')
+          old = "  const attributionDetail = attribution\n    ? `${attribution.detail}${attribution.pid === undefined ? '' : ` · PID ${attribution.pid}`}`\n    : '正在等待应用识别'"
+          new = "  const attributionSource =\n    attribution?.source === 'mihomo'\n      ? '代理核心'\n      : attribution?.source === 'windows'\n        ? 'Windows 系统'\n        : '未识别'\n  const attributionDetail = attribution\n    ? `${attributionSource} · ${attribution.detail}${\n        attribution.pid === undefined ? '' : ` · PID ${attribution.pid}`\n      }`\n    : '正在等待应用识别'"
+          if old not in detail_text:
+              raise SystemExit('detail attribution marker not found')
+          detail_text = detail_text.replace(old, new, 1)
+          detail_text = detail_text.replace("      label: '应用识别',", "      label: '归因状态',", 1)
+          detail_text = detail_text.replace(
+              "          调整分流\n",
+              "          {projectMatch ? '调整分流' : '创建应用规则'}\n",
+              1,
+          )
+          detail_path.write_text(detail_text, encoding='utf-8')
+
+          workflow_path = Path('.github/workflows/karing-diagnostics-once.yml')
+          workflow_text = workflow_path.read_text(encoding='utf-8')
+          function_marker = "          check_contains() {\n            local file=\"$1\"\n            local text=\"$2\"\n            local label=\"$3\"\n            if grep -Fq \"$text\" \"$file\"; then\n              echo \"[通过] $label\"\n            else\n              echo \"[失败] $label：$file 中未找到 $text\"\n              exit 1\n            fi\n          }\n"
+          function_insertion = function_marker + "\n          check_not_contains() {\n            local file=\"$1\"\n            local text=\"$2\"\n            local label=\"$3\"\n            if grep -Fq \"$text\" \"$file\"; then\n              echo \"[失败] $label：$file 中仍包含 $text\"\n              exit 1\n            fi\n            echo \"[通过] $label\"\n          }\n"
+          if function_marker not in workflow_text:
+              raise SystemExit('workflow function marker not found')
+          workflow_text = workflow_text.replace(function_marker, function_insertion, 1)
+          check_marker = "          check_contains src-tauri/src/cmd/save_profile.rs 'Global Merge and Script are always collected' '全局 Merge 与 Script 保存后会刷新运行时'\n"
+          checks = check_marker + "          check_contains src/services/process-connections.ts 'INACTIVE_TCP_STATES' '应用归因会过滤无效 TCP 状态'\n          check_not_contains src/components/connection/connection-row-item.tsx 'closeConnection' '连接列表不再放置逐行断开按钮'\n          check_contains src/components/routing/connection-project-card.tsx '当前按通用规则处理' '路由摘要区分应用规则和通用规则'\n          check_contains src/components/connection/connection-detail.tsx \"projectMatch ? '调整分流' : '创建应用规则'\" '连接详情根据状态提供单一分流入口'\n"
+          if check_marker not in workflow_text:
+              raise SystemExit('workflow check marker not found')
+          workflow_text = workflow_text.replace(check_marker, checks, 1)
+          workflow_path.write_text(workflow_text, encoding='utf-8')
+          PY
+
+      - name: 安装并格式化前端文件
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec biome format --write \
+            src/components/connection/connection-row-item.tsx \
+            src/components/connection/connection-detail.tsx \
+            src/components/routing/connection-project-card.tsx \
+            src/services/process-connections.ts
+
+      - name: 提交到功能分支
+        run: |
+          set -euo pipefail
+          git add \
+            src/components/connection/connection-row-item.tsx \
+            src/components/connection/connection-detail.tsx \
+            src/components/routing/connection-project-card.tsx \
+            src/services/process-connections.ts \
+            .github/workflows/karing-diagnostics-once.yml
+          if git diff --cached --quiet; then
+            echo '没有需要提交的变化'
+            exit 0
+          fi
+          git commit -m 'feat: streamline live connection routing experience'
+          git push origin HEAD:feature/karing-style-diversion
