@@ -1,0 +1,81 @@
+name: Karing 2.5.4 发行监视器
+
+on:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  inspect:
+    name: 查询最终候选审查状态
+    if: >-
+      github.event.issue.number == 1 &&
+      github.event.comment.body == '/inspect-karing-v254-0bd79ddd'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: 0bd79ddd914d569e3783b8ac3434fbf2523160a3
+      MARKER: '<!-- karing-v254-monitor -->'
+    steps:
+      - name: 查询并回写主发行状态
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/karing-diagnostics-once.yml/runs?per_page=50" \
+            --jq ".workflow_runs[] | select(.head_sha == \"${EXPECTED_SHA}\")" | head -n1 || true)
+          if [ -z "$run_json" ]; then
+            summary='尚未找到新候选对应的主发行运行。'
+          else
+            run_id=$(jq -r '.id' <<<"$run_json")
+            status=$(jq -r '.status' <<<"$run_json")
+            conclusion=$(jq -r '.conclusion // ""' <<<"$run_json")
+            run_url=$(jq -r '.html_url' <<<"$run_json")
+            jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" \
+              --jq '[.jobs[] | {id, name, status, conclusion, failed_steps: [.steps[]? | select(.conclusion == "failure") | .name]}]')
+            failed_log=''
+            if [ "$status" = completed ] && [ "$conclusion" != success ]; then
+              failed_log=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --log-failed 2>&1 | tail -n 160 || true)
+            fi
+            summary=$(cat <<EOF
+          - Run：${run_url}
+          - Run ID：\`${run_id}\`
+          - 状态：\`${status}\`
+          - 结论：\`${conclusion:-尚未结束}\`
+
+          **作业状态**
+
+          \`\`\`json
+          ${jobs}
+          \`\`\`
+
+          **失败日志尾部**
+
+          \`\`\`text
+          ${failed_log}
+          \`\`\`
+          EOF
+          )
+          fi
+
+          body=$(cat <<EOF
+          ${MARKER}
+          ## Karing 2.5.4 最终候选实时状态
+
+          - 候选：\`${EXPECTED_SHA}\`
+          ${summary}
+          EOF
+          )
+          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/1/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"${MARKER}\")) | .id" | head -n1 || true)
+          if [ -n "$comment_id" ]; then
+            jq -n --arg body "$body" '{body: $body}' | \
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input - >/dev/null
+          else
+            jq -n --arg body "$body" '{body: $body}' | \
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/1/comments" --input - >/dev/null
+          fi
