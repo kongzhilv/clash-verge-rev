@@ -399,16 +399,17 @@ export const enrichConnectionsWithProcesses = (
       : undefined
     const localPortCandidate = localPort.get(portKey)
     const recentExactCandidate =
-      !exactCandidate && exactKey
+      exactCandidate === undefined && exactKey
         ? readRecentCandidate(recentExactCandidates, exactKey, now)
         : undefined
     const recentLocalCandidate =
-      !localEndpointCandidate && localKey
+      localEndpointCandidate === undefined && localKey
         ? readRecentCandidate(recentLocalEndpointCandidates, localKey, now)
         : undefined
-    const recentLocalPortCandidate = !localPortCandidate
-      ? readRecentCandidate(recentLocalPortCandidates, portKey, now)
-      : undefined
+    const recentLocalPortCandidate =
+      localPortCandidate === undefined
+        ? readRecentCandidate(recentLocalPortCandidates, portKey, now)
+        : undefined
 
     const identity =
       exactCandidate ||
