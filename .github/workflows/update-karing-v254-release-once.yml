@@ -1,0 +1,45 @@
+name: 准备 Karing 2.5.4 发行门禁
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/update-karing-v254-release-once.yml'
+
+permissions:
+  contents: write
+
+env:
+  HUSKY: 0
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+      - name: 更新发行版本与标签
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('RELEASE_TAG: v2.5.3-karing', 'RELEASE_TAG: v2.5.4-karing.6', 1)
+          text = text.replace('test "$version" = \'2.5.3\'', 'test "$version" = \'2.5.4\'', 1)
+          text = text.replace(
+              '本桌面发行版加入 Karing 风格分流管理、全局 Merge/Script 保存后即时应用，以及经过审查的主代理开关链路。',
+              '本桌面发行版修复 PID 占位值冒充程序识别、同 PID 完整路径未回填，以及高 DPI/小窗口下连接详情内容被裁切的问题；同时保留应用优先分流、实时连接归因与即时应用链路。',
+              1,
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/karing-diagnostics-once.yml
+          git commit --no-verify -m 'chore: prepare Karing 2.5.4 release gate'
+          git push origin HEAD:feature/karing-style-diversion
