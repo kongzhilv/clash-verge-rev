@@ -1,0 +1,240 @@
+name: 应用 Karing v7 程序识别与抽屉修复
+
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/apply-karing-v7-fix-once.yml']
+
+permissions:
+  contents: write
+
+env:
+  HUSKY: 0
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: 修复程序身份和抽屉布局
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          service = Path('src/services/process-connections.ts')
+          text = service.read_text(encoding='utf-8')
+          text = text.replace(
+              "const RECENT_ENDPOINT_TTL_MS = 20_000\n",
+              "const RECENT_ENDPOINT_TTL_MS = 20_000\nconst PID_PLACEHOLDER_PATTERN = /^PID\\s+\\d+$/i\nconst INACTIVE_TCP_STATES = new Set([\n  'CLOSED',\n  'LISTEN',\n  'TIME-WAIT',\n  'DELETE-TCB',\n])\n",
+              1,
+          )
+          marker = "const processNameFromPath = (processPath: string) =>\n  processPath.split(/[\\\\/]/).filter(Boolean).at(-1) ?? ''\n"
+          helper = marker + "\nconst hasResolvedProcessDetails = (processName: string, processPath: string) =>\n  Boolean(\n    processPath.trim() ||\n      (processName.trim() && !PID_PLACEHOLDER_PATTERN.test(processName.trim())),\n  )\n\nconst snapshotIdentity = (\n  connection: ProcessConnectionInfo,\n): ProcessIdentity | undefined => {\n  if (connection.pid <= 0) return undefined\n  const processPath = connection.processPath.trim()\n  const reportedName = connection.processName.trim()\n  const processName =\n    (PID_PLACEHOLDER_PATTERN.test(reportedName) ? '' : reportedName) ||\n    processNameFromPath(processPath)\n  if (!hasResolvedProcessDetails(processName, processPath)) return undefined\n  return { pid: connection.pid, processName, processPath }\n}\n\nconst isUsableEndpointOwner = (connection: ProcessConnectionInfo) => {\n  const protocol = connection.protocol.trim().toUpperCase()\n  const state = connection.state?.trim().toUpperCase()\n  return !(\n    protocol === 'TCP' &&\n    state &&\n    INACTIVE_TCP_STATES.has(state)\n  )\n}\n"
+          if marker not in text:
+              raise SystemExit('service helper marker missing')
+          text = text.replace(marker, helper, 1)
+
+          start = text.index("  if (snapshot?.supported) {\n")
+          end = text.index("\n  const attributionUpdates", start)
+          block = """  if (snapshot?.supported) {
+    const resolvedIdentitiesByPid = new Map<number, ProcessIdentity>()
+    for (const processConnection of snapshot.connections) {
+      const identity = snapshotIdentity(processConnection)
+      if (!identity) continue
+      const current = resolvedIdentitiesByPid.get(identity.pid)
+      if (!current || (!current.processPath && identity.processPath)) {
+        resolvedIdentitiesByPid.set(identity.pid, identity)
+      }
+    }
+
+    for (const processConnection of snapshot.connections) {
+      if (!isUsableEndpointOwner(processConnection)) continue
+      const local = parseEndpoint(processConnection.localAddress)
+      if (!local?.port) continue
+
+      const protocol = processConnection.protocol.trim().toUpperCase()
+      if (!protocol) continue
+
+      const identity =
+        resolvedIdentitiesByPid.get(processConnection.pid) ??
+        snapshotIdentity(processConnection)
+      if (!identity) continue
+
+      const localKey = localEndpointKey(protocol, local.host, local.port)
+      insertCandidate(localEndpoint, localKey, identity)
+      insertCandidate(localPort, `${protocol}|${local.port}`, identity)
+      rememberCandidate(recentLocalEndpointCandidates, localKey, identity, now)
+
+      const remote = parseEndpoint(processConnection.remoteAddress)
+      if (remote?.host && remote.port) {
+        const exactKey = exactEndpointKey(
+          protocol,
+          local.host,
+          local.port,
+          remote.host,
+          remote.port,
+        )
+        insertCandidate(exact, exactKey, identity)
+        rememberCandidate(recentExactCandidates, exactKey, identity, now)
+      }
+    }
+  }
+"""
+          text = text[:start] + block + text[end:]
+          text = text.replace(
+              "    if ((currentProcess || currentPath) && !wasInjectedByWindows) {",
+              "    const currentIdentityResolved = hasResolvedProcessDetails(\n      currentProcess,\n      currentPath,\n    )\n\n    if (currentIdentityResolved && !wasInjectedByWindows) {",
+              1,
+          )
+          text = text.replace(
+              "        processName: currentProcess,\n        processPath: currentPath,\n        detail: '连接缺少协议或源端口，无法与系统连接表关联',",
+              "        processName: currentIdentityResolved ? currentProcess : '',\n        processPath: currentIdentityResolved ? currentPath : '',\n        detail: '连接缺少协议或源端口，无法与系统连接表关联',",
+              1,
+          )
+          old = """      if (wasInjectedByWindows && previousAttribution) {
+        attributionUpdates.set(connection.id, previousAttribution)
+        return connection
+      }
+
+      const errors"""
+          if old not in text:
+              raise SystemExit('stale attribution block missing')
+          text = text.replace(old, "      const errors", 1)
+          text = text.replace(
+              "        processName: currentProcess,\n        processPath: currentPath,\n        detail,",
+              "        processName: currentIdentityResolved ? currentProcess : '',\n        processPath: currentIdentityResolved ? currentPath : '',\n        detail,",
+              1,
+          )
+          unresolved_return = """      })
+      return connection
+    }
+
+    const detailByMatch"""
+          replacement = """      })
+      if (!currentIdentityResolved && (currentProcess || currentPath)) {
+        changed = true
+        return {
+          ...connection,
+          metadata: { ...metadata, process: '', processPath: '' },
+        }
+      }
+      return connection
+    }
+
+    const detailByMatch"""
+          if unresolved_return not in text:
+              raise SystemExit('unresolved return marker missing')
+          text = text.replace(unresolved_return, replacement, 1)
+          service.write_text(text, encoding='utf-8')
+
+          rust = Path('src-tauri/src/cmd/process_connections.rs')
+          text = rust.read_text(encoding='utf-8')
+          text = text.replace(
+              '.map_or_else(|| format!("PID {pid}"), ToString::to_string);',
+              '.map_or_else(String::new, ToString::to_string);',
+              1,
+          )
+          text = text.replace(
+              '            name: if pid == 4 {\n                "System".to_string()\n            } else {\n                format!("PID {pid}")\n            },',
+              '            name: if pid == 4 {\n                "System".to_string()\n            } else {\n                String::new()\n            },',
+              1,
+          )
+          rust.write_text(text, encoding='utf-8')
+
+          detail = Path('src/components/connection/connection-detail.tsx')
+          text = detail.read_text(encoding='utf-8')
+          text = text.replace(
+              "const processNameFrom = (process: string, processPath: string) => {\n  const preferred = process.trim()\n  if (preferred) return preferred",
+              "const PID_PLACEHOLDER_PATTERN = /^PID\\s+\\d+$/i\n\nconst processNameFrom = (process: string, processPath: string) => {\n  const preferred = process.trim()\n  if (preferred && !PID_PLACEHOLDER_PATTERN.test(preferred)) return preferred",
+              1,
+          )
+          text = text.replace(
+              "              height: '100%',\n              bgcolor: 'background.default',",
+              "              display: 'flex',\n              flexDirection: 'column',\n              height: '100dvh',\n              maxHeight: '100dvh',\n              overflow: 'hidden',\n              bgcolor: 'background.default',",
+              1,
+          )
+          text = text.replace(
+              "    <Stack sx={{ height: '100%', minHeight: 0 }}>",
+              "    <Stack\n      sx={{\n        flex: '1 1 auto',\n        height: '100dvh',\n        maxHeight: '100dvh',\n        minHeight: 0,\n        overflow: 'hidden',\n      }}\n    >",
+              1,
+          )
+          text = text.replace(
+              "          flex: 1,\n          minHeight: 0,\n          overflowY: 'auto',\n          overscrollBehavior: 'contain',",
+              "          flex: '1 1 0',\n          minHeight: 0,\n          overflowX: 'hidden',\n          overflowY: 'auto',\n          overscrollBehavior: 'contain',\n          scrollbarGutter: 'stable',\n          WebkitOverflowScrolling: 'touch',",
+              1,
+          )
+          text = text.replace(
+              "          flex: '0 0 auto',\n          alignItems: 'center',",
+              "          position: 'sticky',\n          bottom: 0,\n          zIndex: 2,\n          flex: '0 0 auto',\n          alignItems: 'center',",
+              1,
+          )
+          detail.write_text(text, encoding='utf-8')
+
+          test = Path('scripts/check-karing-process-attribution.mjs')
+          text = test.read_text(encoding='utf-8')
+          text = text.replace(
+              "const routeSource = readFileSync(",
+              "const rustSource = readFileSync(\n  new URL('../src-tauri/src/cmd/process_connections.rs', import.meta.url),\n  'utf8',\n)\nconst routeSource = readFileSync(",
+              1,
+          )
+          text = text.replace(
+              "assert.match(processSource, /localEndpointCandidate/)",
+              "assert.match(processSource, /resolvedIdentitiesByPid/)\nassert.match(processSource, /PID_PLACEHOLDER_PATTERN/)\nassert.match(processSource, /INACTIVE_TCP_STATES/)\nassert.match(processSource, /TIME-WAIT/)\nassert.doesNotMatch(rustSource, /format!\\(\"PID \\{pid\\}\"\\)/)\nassert.match(detailSource, /height: '100dvh'/)\nassert.match(detailSource, /flex: '1 1 0'/)\nassert.match(detailSource, /scrollbarGutter: 'stable'/)\nassert.match(processSource, /localEndpointCandidate/)",
+              1,
+          )
+          text = text.replace(
+              "console.log('[通过] Fake-IP IPv6 TCP 本地端点可归属到 Nstbrowser.exe')",
+              "console.log('[通过] PID 占位值不会再冒充已识别程序')\nconsole.log('[通过] 同 PID 的完整路径会修复占位连接记录')\nconsole.log('[通过] 详情抽屉使用独立滚动区和固定操作栏')\nconsole.log('[通过] Fake-IP IPv6 TCP 本地端点可归属到 Nstbrowser.exe')",
+              1,
+          )
+          test.write_text(text, encoding='utf-8')
+
+          for path in ('package.json', 'src-tauri/tauri.conf.json', 'src-tauri/Cargo.toml'):
+              p = Path(path)
+              value = p.read_text(encoding='utf-8')
+              value = value.replace('2.5.3', '2.5.4', 1)
+              p.write_text(value, encoding='utf-8')
+
+          lock = Path('Cargo.lock')
+          value = lock.read_text(encoding='utf-8')
+          old = 'name = "clash-verge"\nversion = "2.5.3"'
+          if old not in value:
+              raise SystemExit('Cargo.lock root package missing')
+          lock.write_text(value.replace(old, 'name = "clash-verge"\nversion = "2.5.4"', 1), encoding='utf-8')
+          PY
+
+      - name: 格式化并运行专项回归
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm exec biome format --write \
+            src/services/process-connections.ts \
+            src/components/connection/connection-detail.tsx \
+            scripts/check-karing-process-attribution.mjs \
+            package.json \
+            src-tauri/tauri.conf.json
+          cargo fmt --all
+          node scripts/check-karing-process-attribution.mjs
+
+      - name: 推送功能分支
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add \
+            src/services/process-connections.ts \
+            src-tauri/src/cmd/process_connections.rs \
+            src/components/connection/connection-detail.tsx \
+            scripts/check-karing-process-attribution.mjs \
+            package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml Cargo.lock
+          git commit --no-verify -m 'fix: resolve program identity and clipped connection details'
+          git push origin HEAD:feature/karing-style-diversion
