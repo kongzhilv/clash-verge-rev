@@ -1,4 +1,4 @@
-import { memo, useCallback } from 'react'
+import { memo, useCallback, type KeyboardEvent } from 'react'
 
 import { RelativeTime } from './connection-relative-time'
 import type { ConnectionRowView } from './connection-row-view'
@@ -28,6 +28,7 @@ const contentStyle = {
   flex: 1,
   cursor: 'pointer',
   userSelect: 'text',
+  outlineOffset: 3,
 } as const
 
 const primaryStyle = {
@@ -79,6 +80,14 @@ export const ConnectionRowItem = memo(
       () => onShowDetail(row.id),
       [onShowDetail, row.id],
     )
+    const handleKeyDown = useCallback(
+      (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        handleShowDetail()
+      },
+      [handleShowDetail],
+    )
     const application = row.process || projectName || '未识别应用'
     const identifiedApplication = application !== '未识别应用'
     const title = identifiedApplication ? application : row.host
@@ -88,7 +97,14 @@ export const ConnectionRowItem = memo(
 
     return (
       <div style={itemStyle}>
-        <div style={contentStyle} onClick={handleShowDetail}>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={`查看连接详情：${title}`}
+          style={contentStyle}
+          onClick={handleShowDetail}
+          onKeyDown={handleKeyDown}
+        >
           <div
             style={primaryStyle}
             title={row.processPath || projectName || row.host}
