@@ -1,0 +1,116 @@
+name: Karing 5 候选整理与前端审查
+run-name: 整理并审查 Karing 5 应用优先交互
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/karing5-format-review-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  HUSKY: 0
+  FEATURE_BRANCH: feature/karing-style-diversion
+
+jobs:
+  review:
+    name: 格式化并审查功能分支
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出功能分支
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.FEATURE_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 应用官方格式化与可修复 lint
+        run: |
+          pnpm format
+          pnpm lint:fix
+          pnpm format
+
+      - name: 运行诊断包回归
+        run: node scripts/check-karing-process-attribution.mjs
+
+      - name: 运行前端质量门禁
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm knip:report
+          pnpm run web:build
+
+      - name: 验证变更范围
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          changed=$(git diff --name-only)
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            if echo "$changed" | grep -Ev '^(src/components/connection/connection-detail\.tsx|src/components/connection/connection-row-item\.tsx|src/components/routing/connection-project-card\.tsx|scripts/check-karing-process-attribution\.mjs|\.github/workflows/frontend-check\.yml|\.github/workflows/karing-connection-regression\.yml)$'; then
+              echo '[失败] 自动整理修改了本轮范围之外的文件'
+              exit 1
+            fi
+          fi
+
+      - name: 提交整理结果
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet; then
+            git add \
+              src/components/connection/connection-detail.tsx \
+              src/components/connection/connection-row-item.tsx \
+              src/components/routing/connection-project-card.tsx \
+              scripts/check-karing-process-attribution.mjs \
+              .github/workflows/frontend-check.yml \
+              .github/workflows/karing-connection-regression.yml
+            git commit -m 'style: finalize Karing 5 application-first UX'
+            git push origin "HEAD:$FEATURE_BRANCH"
+          fi
+          candidate=$(git rev-parse HEAD)
+          echo "sha=$candidate" >> "$GITHUB_OUTPUT"
+          echo "候选提交：$candidate"
+
+      - name: 回报候选审查结果
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+        shell: bash
+        run: |
+          cat > /tmp/status.md <<EOF
+          <!-- karing5-format-review-status -->
+          ## Karing 5 候选整理与前端审查
+
+          ✅ 应用优先连接视图、单一路由摘要和 Fake-IP 回归已通过前端门禁。
+
+          - 候选提交：\`$CANDIDATE_SHA\`
+          - Action：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - 下一步：固定该提交运行 Rust、多平台安装包与正式 Release 审查
+          EOF
+          gh pr comment 1 --repo "$GITHUB_REPOSITORY" --body-file /tmp/status.md
