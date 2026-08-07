@@ -13,7 +13,6 @@ import {
 import {
   Box,
   Button,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -29,7 +28,7 @@ import {
 } from '@mui/material'
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { OverflowReveal, softScrollAreaSx } from '@/components/base'
+import { AdaptiveDialog, OverflowReveal, softScrollAreaSx } from '@/components/base'
 import { useProxiesData } from '@/providers/app-data-context'
 
 import type { Action } from './model'
@@ -159,16 +158,22 @@ export const ActionPicker = ({
   )
 
   return (
-    <Dialog open={open} onClose={resetAndClose} fullWidth maxWidth="sm">
-      <DialogTitle>
+    <AdaptiveDialog
+      open={open}
+      onClose={resetAndClose}
+      maxWidth="sm"
+      aria-labelledby="outlet-picker-title"
+    >
+      <DialogTitle id="outlet-picker-title">
         <OverflowReveal value={title} variant="h6" fontWeight={700} />
       </DialogTitle>
       <DialogContent
         dividers
         sx={{
           p: 0,
-          maxHeight: 'min(78vh, 760px)',
+          minHeight: 0,
           overflowY: 'auto',
+          overflowX: 'hidden',
           ...softScrollAreaSx,
         }}
       >
@@ -178,11 +183,15 @@ export const ActionPicker = ({
               key={option.action}
               selected={action === option.action}
               onClick={() => choose(option.action)}
+              sx={{ alignItems: 'flex-start' }}
             >
-              <ListItemIcon>{option.icon}</ListItemIcon>
+              <ListItemIcon sx={{ mt: 0.25 }}>{option.icon}</ListItemIcon>
               <ListItemText
                 primary={option.label}
                 secondary={option.description}
+                slotProps={{
+                  secondary: { sx: { overflowWrap: 'anywhere' } },
+                }}
               />
               {action === option.action ? (
                 <CheckRounded color="primary" />
@@ -195,8 +204,9 @@ export const ActionPicker = ({
             <ListItemButton
               selected={action === 'reject-drop'}
               onClick={() => choose('reject-drop')}
+              sx={{ alignItems: 'flex-start' }}
             >
-              <ListItemIcon>
+              <ListItemIcon sx={{ mt: 0.25 }}>
                 <DeleteSweepRounded />
               </ListItemIcon>
               <ListItemText
@@ -218,12 +228,15 @@ export const ActionPicker = ({
           <Stack
             direction="row"
             spacing={1}
-            sx={{ alignItems: 'center', mb: 1 }}
+            sx={{ alignItems: 'flex-start', mb: 1 }}
           >
-            <AccountTreeRounded color="action" />
+            <AccountTreeRounded color="action" sx={{ mt: 0.15 }} />
             <Box sx={{ minWidth: 0 }}>
               <Typography sx={{ fontWeight: 700 }}>现有策略组</Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              <Typography
+                variant="body2"
+                sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}
+              >
                 选择现有代理组，或手动填写一个出口名称。
               </Typography>
             </Box>
@@ -274,11 +287,12 @@ export const ActionPicker = ({
                   <ListItemText
                     disableTypography
                     primary={
-                      <OverflowReveal
-                        value={name}
+                      <Typography
                         variant="body2"
-                        fontWeight={600}
-                      />
+                        sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}
+                      >
+                        {name}
+                      </Typography>
                     }
                   />
                   {action === 'policy' && policy === name && (
@@ -288,7 +302,10 @@ export const ActionPicker = ({
               ))}
             </List>
           ) : (
-            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+            <Typography
+              variant="body2"
+              sx={{ color: 'text.secondary', mb: 1, overflowWrap: 'anywhere' }}
+            >
               当前核心没有返回可选策略组，仍可在下方手动输入名称。
             </Typography>
           )}
@@ -310,6 +327,7 @@ export const ActionPicker = ({
               variant="outlined"
               disabled={!manualPolicy.trim()}
               onClick={() => choose('policy', manualPolicy.trim())}
+              sx={{ flex: '0 0 auto' }}
             >
               选择
             </Button>
@@ -319,7 +337,7 @@ export const ActionPicker = ({
       <DialogActions>
         <Button onClick={resetAndClose}>取消</Button>
       </DialogActions>
-    </Dialog>
+    </AdaptiveDialog>
   )
 }
 
