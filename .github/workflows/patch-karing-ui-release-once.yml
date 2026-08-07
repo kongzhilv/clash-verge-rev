@@ -20,12 +20,15 @@ jobs:
           fetch-depth: 0
 
       - name: Patch permanent release workflow
-        shell: python {0}
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           path = Path('.github/workflows/karing-diagnostics-once.yml')
           text = path.read_text()
+          commit_expr = '$' + '{{ needs.review.outputs.commit }}'
+          version_expr = '$' + '{{ needs.review.outputs.version }}'
 
           def replace_once(old: str, new: str, label: str) -> None:
               global text
@@ -71,7 +74,7 @@ jobs:
 """
           replace_once(old_notes, new_notes, 'release notes')
 
-          old_publish = """          if gh release view \"${RELEASE_TAG}\" >/dev/null 2>&1; then
+          old_publish_template = """          if gh release view \"${RELEASE_TAG}\" >/dev/null 2>&1; then
             gh release delete \"${RELEASE_TAG}\" --yes --cleanup-tag
           fi
 
@@ -82,18 +85,20 @@ jobs:
             release-assets/*.rpm \\
             release-assets/SHA256SUMS.txt \\
             release-assets/BUILD_INFO.txt \\
-            --target \"${{ needs.review.outputs.commit }}\" \\
-            --title \"Clash Verge Rev Karing v${{ needs.review.outputs.version }}\" \\
+            --target \"__COMMIT__\" \\
+            --title \"Clash Verge Rev Karing v__VERSION__\" \\
             --notes-file release-assets/release-notes.md \\
             --latest
 
           asset_count=$(gh release view \"${RELEASE_TAG}\" --json assets --jq '.assets | length')
           test \"$asset_count\" -eq 14
           tag_sha=$(git ls-remote \"https://github.com/${GITHUB_REPOSITORY}.git\" \"refs/tags/${RELEASE_TAG}\" | awk '{print $1}')
-          test \"$tag_sha\" = \"${{ needs.review.outputs.commit }}\"
+          test \"$tag_sha\" = \"__COMMIT__\"
           gh release view \"${RELEASE_TAG}\" --json url,tagName,targetCommitish,isDraft,isPrerelease,assets --jq '{url: .url, tag: .tagName, target: .targetCommitish, draft: .isDraft, prerelease: .isPrerelease, assets: [.assets[].name]}'
 """
-          new_publish = """          if gh release view \"${RELEASE_TAG}\" --repo \"${GITHUB_REPOSITORY}\" >/dev/null 2>&1; then
+          old_publish = old_publish_template.replace('__COMMIT__', commit_expr).replace('__VERSION__', version_expr)
+
+          new_publish_template = """          if gh release view \"${RELEASE_TAG}\" --repo \"${GITHUB_REPOSITORY}\" >/dev/null 2>&1; then
             gh release delete \"${RELEASE_TAG}\" --repo \"${GITHUB_REPOSITORY}\" --yes --cleanup-tag
           fi
 
@@ -105,8 +110,8 @@ jobs:
             release-assets/SHA256SUMS.txt \\
             release-assets/BUILD_INFO.txt \\
             --repo \"${GITHUB_REPOSITORY}\" \\
-            --target \"${{ needs.review.outputs.commit }}\" \\
-            --title \"Clash Verge Rev Karing v${{ needs.review.outputs.version }}\" \\
+            --target \"__COMMIT__\" \\
+            --title \"Clash Verge Rev Karing v__VERSION__\" \\
             --notes-file release-assets/release-notes.md \\
             --latest
 
@@ -119,17 +124,19 @@ jobs:
           tag_sha=$(gh api \"repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}\" --jq '.object.sha')
 
           test \"$asset_count\" -eq 14
-          test \"$target\" = \"${{ needs.review.outputs.commit }}\"
+          test \"$target\" = \"__COMMIT__\"
           test \"$draft\" = false
           test \"$prerelease\" = false
           test \"$latest_tag\" = \"${RELEASE_TAG}\"
-          test \"$tag_sha\" = \"${{ needs.review.outputs.commit }}\"
+          test \"$tag_sha\" = \"__COMMIT__\"
 
           jq '{url: .html_url, tag: .tag_name, target: .target_commitish, draft: .draft, prerelease: .prerelease, assets: [.assets[].name]}' <<<\"$release_json\"
 """
+          new_publish = new_publish_template.replace('__COMMIT__', commit_expr).replace('__VERSION__', version_expr)
           replace_once(old_publish, new_publish, 'publish verification')
 
           path.write_text(text)
+          PY
 
       - name: Commit permanent workflow and remove bootstrap
         shell: bash
