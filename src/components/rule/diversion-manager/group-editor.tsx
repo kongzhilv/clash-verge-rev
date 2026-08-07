@@ -83,8 +83,9 @@ export const GroupEditor = ({
           direction="row"
           spacing={1}
           sx={{
-            alignItems: 'center',
+            alignItems: 'flex-start',
             width: '100%',
+            minWidth: 0,
             pr: 1,
           }}
         >
@@ -93,19 +94,27 @@ export const GroupEditor = ({
             checked={group.enabled}
             onClick={(event) => event.stopPropagation()}
             onChange={(_, checked) => onChange({ enabled: checked })}
+            sx={{ mt: -0.25 }}
           />
-          <Typography sx={{ flex: 1, fontWeight: 600 }}>
-            {group.name || '未命名分流组'}
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {actionLabel(group.action, group.policy)} · {group.matchers.length}{' '}
-            项
-          </Typography>
+          <Stack sx={{ flex: 1, minWidth: 0 }} spacing={0.15}>
+            <Typography
+              sx={{ fontWeight: 600, overflowWrap: 'anywhere', lineHeight: 1.35 }}
+            >
+              {group.name || '未命名分流组'}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}
+            >
+              {actionLabel(group.action, group.policy)} · {group.matchers.length}{' '}
+              项条件
+            </Typography>
+          </Stack>
         </Stack>
       </AccordionSummary>
       <AccordionDetails>
         <Stack spacing={1.5}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
             <TextField
               fullWidth
               size="small"
@@ -114,7 +123,11 @@ export const GroupEditor = ({
               onChange={(event) => onChange({ name: event.target.value })}
             />
 
-            <FormControl size="small" sx={{ minWidth: 170 }}>
+            <FormControl
+              fullWidth
+              size="small"
+              sx={{ width: { md: 190 }, flex: { md: '0 0 190px' } }}
+            >
               <InputLabel>条件逻辑</InputLabel>
               <Select
                 label="条件逻辑"
@@ -132,7 +145,14 @@ export const GroupEditor = ({
               variant="outlined"
               endIcon={<ChevronRightRounded />}
               onClick={() => setActionPickerOpen(true)}
-              sx={{ minWidth: 210, justifyContent: 'space-between' }}
+              sx={{
+                width: { xs: '100%', md: 250 },
+                flex: { md: '0 0 250px' },
+                justifyContent: 'space-between',
+                whiteSpace: 'normal',
+                textAlign: 'left',
+                overflowWrap: 'anywhere',
+              }}
             >
               {actionLabel(group.action, group.policy)}
             </Button>
@@ -186,6 +206,7 @@ export const GroupEditor = ({
             variant="text"
             startIcon={<AddRounded />}
             onClick={() => setMatcherPickerOpen(true)}
+            sx={{ alignSelf: 'flex-start' }}
           >
             添加匹配条件
           </Button>
@@ -199,10 +220,11 @@ export const GroupEditor = ({
           <Divider />
 
           <Stack
-            direction="row"
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
             sx={{
               justifyContent: 'space-between',
-              alignItems: 'center',
+              alignItems: { xs: 'stretch', sm: 'center' },
             }}
           >
             <Stack direction="row">
@@ -226,6 +248,7 @@ export const GroupEditor = ({
               color="error"
               startIcon={<DeleteOutlineRounded />}
               onClick={onDelete}
+              sx={{ alignSelf: { xs: 'flex-start', sm: 'auto' } }}
             >
               删除分流组
             </Button>
