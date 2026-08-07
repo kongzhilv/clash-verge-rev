@@ -70,7 +70,11 @@ const RulesPage = () => {
         overflow: 'hidden',
       }}
       header={
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+        <Stack
+          direction="row"
+          spacing={0.75}
+          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.75 }}
+        >
           <DiversionManager
             initialOpen={manageProjects || Boolean(focusProjectId)}
             focusProjectId={focusProjectId}
