@@ -9,7 +9,7 @@ import {
   TuneRounded,
 } from '@mui/icons-material'
 import {
-  Dialog,
+  Button,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -19,10 +19,11 @@ import {
   ListItemIcon,
   ListItemText,
   ListSubheader,
-  Button,
   TextField,
 } from '@mui/material'
 import { useMemo, useState } from 'react'
+
+import { AdaptiveDialog } from '@/components/base'
 
 import { MATCHER_TYPE_GROUPS } from './matcher-catalog'
 import type { MatcherType } from './model'
@@ -85,9 +86,12 @@ export const MatcherTypePicker = ({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <AdaptiveDialog open={open} onClose={onClose} maxWidth="sm">
       <DialogTitle>{title}</DialogTitle>
-      <DialogContent dividers sx={{ p: 0 }}>
+      <DialogContent
+        dividers
+        sx={{ p: 0, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+      >
         <TextField
           fullWidth
           size="small"
@@ -115,11 +119,18 @@ export const MatcherTypePicker = ({
                   <ListItemButton
                     key={option.type}
                     onClick={() => choose(option.type)}
+                    sx={{ alignItems: 'flex-start' }}
                   >
-                    <ListItemIcon>{typeIcon(option.type)}</ListItemIcon>
+                    <ListItemIcon sx={{ mt: 0.25 }}>
+                      {typeIcon(option.type)}
+                    </ListItemIcon>
                     <ListItemText
                       primary={option.label}
                       secondary={option.description}
+                      slotProps={{
+                        primary: { sx: { overflowWrap: 'anywhere' } },
+                        secondary: { sx: { overflowWrap: 'anywhere' } },
+                      }}
                     />
                     <ChevronRightRounded color="disabled" />
                   </ListItemButton>
@@ -132,7 +143,7 @@ export const MatcherTypePicker = ({
       <DialogActions>
         <Button onClick={onClose}>取消</Button>
       </DialogActions>
-    </Dialog>
+    </AdaptiveDialog>
   )
 }
 
