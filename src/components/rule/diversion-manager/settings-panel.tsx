@@ -129,11 +129,15 @@ export const SettingsPanel = ({
       <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}>
         <Stack direction="row" spacing={1} sx={{ px: 2, py: 1.5 }}>
           <PublicRounded color="primary" />
-          <Box>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               常用分流
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ overflowWrap: 'anywhere' }}
+            >
               开启后直接生成对应规则；出口可随时调整。
             </Typography>
           </Box>
@@ -148,36 +152,56 @@ export const SettingsPanel = ({
               sx={{ px: 2, py: 1.25, alignItems: { sm: 'center' } }}
             >
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 650 }}>{group.name}</Typography>
+                <Typography sx={{ fontWeight: 650, overflowWrap: 'anywhere' }}>
+                  {group.name}
+                </Typography>
                 {group.description && (
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', overflowWrap: 'anywhere' }}
+                  >
                     {group.description}
                   </Typography>
                 )}
               </Box>
-              <Button
-                size="small"
-                variant="outlined"
-                disabled={!group.enabled}
-                onClick={() => setEditingBuiltinId(group.id)}
-                sx={{ minWidth: 120 }}
+              <Stack
+                direction="row"
+                spacing={0.75}
+                sx={{
+                  alignItems: 'center',
+                  justifyContent: { xs: 'space-between', sm: 'flex-end' },
+                }}
               >
-                {actionLabel(getBuiltinAction(group), group.policy)}
-              </Button>
-              <Switch
-                checked={group.enabled}
-                onChange={(_, checked) =>
-                  patchBuiltin(group.id, (current) => ({
-                    ...current,
-                    enabled: checked,
-                    action:
-                      checked && current.action === 'none'
-                        ? 'current'
-                        : current.action,
-                  }))
-                }
-                slotProps={{ input: { 'aria-label': `启用 ${group.name}` } }}
-              />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={!group.enabled}
+                  onClick={() => setEditingBuiltinId(group.id)}
+                  sx={{
+                    maxWidth: { xs: 'calc(100% - 56px)', sm: 260 },
+                    whiteSpace: 'normal',
+                    textAlign: 'left',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {actionLabel(getBuiltinAction(group), group.policy)}
+                </Button>
+                <Switch
+                  checked={group.enabled}
+                  onChange={(_, checked) =>
+                    patchBuiltin(group.id, (current) => ({
+                      ...current,
+                      enabled: checked,
+                      action:
+                        checked && current.action === 'none'
+                          ? 'current'
+                          : current.action,
+                    }))
+                  }
+                  slotProps={{ input: { 'aria-label': `启用 ${group.name}` } }}
+                />
+              </Stack>
             </Stack>
           ))}
         </Stack>
@@ -207,15 +231,20 @@ export const SettingsPanel = ({
           border: 1,
           borderColor: 'divider',
           borderRadius: '8px !important',
+          overflow: 'hidden',
           '&::before': { display: 'none' },
         }}
       >
         <AccordionSummary expandIcon={<ExpandMoreRounded />}>
-          <Box>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               高级策略
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', overflowWrap: 'anywhere' }}
+            >
               托管组名称、自动测速和最终兜底。
             </Typography>
           </Box>
