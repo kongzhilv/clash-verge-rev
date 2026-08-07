@@ -44,13 +44,12 @@ export const ConnectionProjectCard = ({
     !connection.chains.some(
       (item) => item.trim().toLowerCase() === expectedPolicy.toLowerCase(),
     )
-  const ruleLabel = match
+  const routingLabel = match ? '应用规则' : '处理方式'
+  const routingValue = match
     ? `${match.project.name}${
         match.reasons.length > 0 ? ` · ${match.reasons.join(' + ')}` : ''
       }`
-    : connection.rulePayload
-      ? `${connection.rule} · ${connection.rulePayload}`
-      : connection.rule || '未返回'
+    : '通用规则'
   const status = routeDiffers
     ? '当前连接仍在使用旧出口'
     : match
@@ -59,11 +58,14 @@ export const ConnectionProjectCard = ({
   const recognition = attributionLabel(attribution, Boolean(match?.inferred))
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+    <Paper
+      variant="outlined"
+      sx={{ borderRadius: 2, minWidth: 0, overflow: 'visible' }}
+    >
       <Stack
         direction="row"
         spacing={1}
-        sx={{ px: 1.5, py: 1.1, alignItems: 'flex-start' }}
+        sx={{ px: 1.5, py: 1.25, alignItems: 'flex-start' }}
       >
         <Box
           sx={{
@@ -86,17 +88,27 @@ export const ConnectionProjectCard = ({
           <RouteRounded fontSize="small" />
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack direction="row" spacing={0.6} sx={{ alignItems: 'center' }}>
+          <Stack
+            direction="row"
+            spacing={0.6}
+            sx={{ alignItems: 'flex-start' }}
+          >
             {routeDiffers ? (
-              <WarningAmberRounded color="warning" sx={{ fontSize: 16 }} />
+              <WarningAmberRounded color="warning" sx={{ mt: 0.15, fontSize: 16 }} />
             ) : match ? (
-              <CheckCircleRounded color="success" sx={{ fontSize: 16 }} />
+              <CheckCircleRounded color="success" sx={{ mt: 0.15, fontSize: 16 }} />
             ) : (
-              <HourglassTopRounded color="disabled" sx={{ fontSize: 16 }} />
+              <HourglassTopRounded color="disabled" sx={{ mt: 0.15, fontSize: 16 }} />
             )}
             <Typography
               variant="subtitle2"
-              sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}
+              sx={{
+                minWidth: 0,
+                fontWeight: 700,
+                lineHeight: 1.45,
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
+              }}
             >
               {status}
             </Typography>
@@ -104,7 +116,13 @@ export const ConnectionProjectCard = ({
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ display: 'block', mt: 0.15, overflowWrap: 'anywhere' }}
+            sx={{
+              display: 'block',
+              mt: 0.2,
+              lineHeight: 1.45,
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+            }}
           >
             {recognition}
           </Typography>
@@ -113,49 +131,42 @@ export const ConnectionProjectCard = ({
 
       <Divider />
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'minmax(0, 1.45fr) minmax(0, 1fr)',
-          },
-        }}
-      >
-        <Box sx={{ minWidth: 0, px: 1.5, py: 1.25 }}>
-          <Typography variant="caption" color="text.secondary">
-            {match ? '应用规则' : '通用规则'}
+      <Stack divider={<Divider flexItem />}>
+        <Box sx={{ minWidth: 0, px: 1.5, py: 1.15 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', lineHeight: 1.35 }}
+          >
+            {routingLabel}
           </Typography>
           <Typography
             variant="body2"
             sx={{
-              mt: 0.2,
+              mt: 0.35,
               fontWeight: 650,
+              lineHeight: 1.5,
               wordBreak: 'break-word',
               overflowWrap: 'anywhere',
             }}
           >
-            {ruleLabel}
+            {routingValue}
           </Typography>
         </Box>
-        <Box
-          sx={{
-            minWidth: 0,
-            px: 1.5,
-            py: 1.25,
-            borderLeft: { sm: 1 },
-            borderTop: { xs: 1, sm: 0 },
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="caption" color="text.secondary">
+        <Box sx={{ minWidth: 0, px: 1.5, py: 1.15 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', lineHeight: 1.35 }}
+          >
             当前出口
           </Typography>
           <Typography
             variant="body2"
             sx={{
-              mt: 0.2,
+              mt: 0.35,
               fontWeight: 650,
+              lineHeight: 1.5,
               wordBreak: 'break-word',
               overflowWrap: 'anywhere',
             }}
@@ -163,7 +174,7 @@ export const ConnectionProjectCard = ({
             {currentPolicy}
           </Typography>
         </Box>
-      </Box>
+      </Stack>
 
       {routeDiffers && (
         <Typography
@@ -172,7 +183,10 @@ export const ConnectionProjectCard = ({
           sx={{
             display: 'block',
             px: 1.5,
+            pt: 0.2,
             pb: 1.2,
+            lineHeight: 1.45,
+            wordBreak: 'break-word',
             overflowWrap: 'anywhere',
           }}
         >
