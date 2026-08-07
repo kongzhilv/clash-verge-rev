@@ -94,11 +94,20 @@ export const ConnectionProjectCard = ({
             sx={{ alignItems: 'flex-start' }}
           >
             {routeDiffers ? (
-              <WarningAmberRounded color="warning" sx={{ mt: 0.15, fontSize: 16 }} />
+              <WarningAmberRounded
+                color="warning"
+                sx={{ mt: 0.15, fontSize: 16 }}
+              />
             ) : match ? (
-              <CheckCircleRounded color="success" sx={{ mt: 0.15, fontSize: 16 }} />
+              <CheckCircleRounded
+                color="success"
+                sx={{ mt: 0.15, fontSize: 16 }}
+              />
             ) : (
-              <HourglassTopRounded color="disabled" sx={{ mt: 0.15, fontSize: 16 }} />
+              <HourglassTopRounded
+                color="disabled"
+                sx={{ mt: 0.15, fontSize: 16 }}
+              />
             )}
             <Typography
               variant="subtitle2"
