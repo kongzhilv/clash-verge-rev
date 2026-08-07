@@ -14,7 +14,7 @@ interface Props {
 
 const itemStyle = {
   boxSizing: 'border-box',
-  minHeight: 62,
+  minHeight: 66,
   display: 'flex',
   alignItems: 'center',
   gap: 10,
@@ -34,28 +34,33 @@ const contentStyle = {
 const primaryStyle = {
   fontSize: 14,
   fontWeight: 650,
-  lineHeight: 1.4,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
+  lineHeight: 1.35,
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
 } as const
 
 const secondaryStyle = {
-  marginTop: 3,
+  marginTop: 4,
   display: 'flex',
   alignItems: 'center',
-  gap: 5,
+  flexWrap: 'wrap',
+  columnGap: 5,
+  rowGap: 2,
   color: 'var(--text-secondary)',
   fontSize: 11,
-  lineHeight: 1.4,
-  overflow: 'hidden',
-  whiteSpace: 'nowrap',
+  lineHeight: 1.35,
+  minWidth: 0,
 } as const
 
 const secondaryItemStyle = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
+  minWidth: 0,
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+} as const
+
+const separatorStyle = {
+  flex: '0 0 auto',
+  opacity: 0.7,
 } as const
 
 const speedStyle = {
@@ -112,22 +117,18 @@ export const ConnectionRowItem = memo(
             {title}
           </div>
           <div style={secondaryStyle}>
-            <span
-              style={{ ...secondaryItemStyle, maxWidth: '46%' }}
-              title={destination}
-            >
+            <span style={secondaryItemStyle} title={destination}>
               {destination}
               {projectInferred && !row.process ? '（规则识别）' : ''}
             </span>
-            <span>·</span>
-            <span
-              style={{ ...secondaryItemStyle, maxWidth: '34%' }}
-              title={route}
-            >
-              {route}
+            <span style={separatorStyle}>·</span>
+            <span style={secondaryItemStyle} title={route}>
+              出口：{route}
             </span>
-            <span>·</span>
-            <span>{closed ? '已结束' : <RelativeTime start={row.time} />}</span>
+            <span style={separatorStyle}>·</span>
+            <span style={{ flex: '0 0 auto' }}>
+              {closed ? '已结束' : <RelativeTime start={row.time} />}
+            </span>
           </div>
         </div>
         {showTraffic && (
