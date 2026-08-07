@@ -63,12 +63,13 @@ export const ConnectionProjectCard = ({
       <Stack
         direction="row"
         spacing={1}
-        sx={{ px: 1.5, py: 1.1, alignItems: 'center' }}
+        sx={{ px: 1.5, py: 1.1, alignItems: 'flex-start' }}
       >
         <Box
           sx={{
             width: 34,
             height: 34,
+            mt: 0.1,
             flex: '0 0 auto',
             display: 'grid',
             placeItems: 'center',
@@ -93,11 +94,18 @@ export const ConnectionProjectCard = ({
             ) : (
               <HourglassTopRounded color="disabled" sx={{ fontSize: 16 }} />
             )}
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}
+            >
               {status}
             </Typography>
           </Stack>
-          <Typography variant="caption" color="text.secondary" noWrap>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mt: 0.15, overflowWrap: 'anywhere' }}
+          >
             {recognition}
           </Typography>
         </Box>
@@ -108,7 +116,7 @@ export const ConnectionProjectCard = ({
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)',
+          gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1.45fr) minmax(0, 1fr)' },
         }}
       >
         <Box sx={{ minWidth: 0, px: 1.5, py: 1.25 }}>
@@ -117,8 +125,12 @@ export const ConnectionProjectCard = ({
           </Typography>
           <Typography
             variant="body2"
-            sx={{ mt: 0.2, fontWeight: 650, wordBreak: 'break-word' }}
-            title={ruleLabel}
+            sx={{
+              mt: 0.2,
+              fontWeight: 650,
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+            }}
           >
             {ruleLabel}
           </Typography>
@@ -128,7 +140,8 @@ export const ConnectionProjectCard = ({
             minWidth: 0,
             px: 1.5,
             py: 1.25,
-            borderLeft: 1,
+            borderLeft: { sm: 1 },
+            borderTop: { xs: 1, sm: 0 },
             borderColor: 'divider',
           }}
         >
@@ -137,8 +150,12 @@ export const ConnectionProjectCard = ({
           </Typography>
           <Typography
             variant="body2"
-            sx={{ mt: 0.2, fontWeight: 650, wordBreak: 'break-word' }}
-            title={currentPolicy}
+            sx={{
+              mt: 0.2,
+              fontWeight: 650,
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
+            }}
           >
             {currentPolicy}
           </Typography>
@@ -149,7 +166,12 @@ export const ConnectionProjectCard = ({
         <Typography
           variant="caption"
           color="warning.main"
-          sx={{ display: 'block', px: 1.5, pb: 1.2 }}
+          sx={{
+            display: 'block',
+            px: 1.5,
+            pb: 1.2,
+            overflowWrap: 'anywhere',
+          }}
         >
           预期出口为 {expectedPolicy}。重新建立连接后会按新规则匹配。
         </Typography>
