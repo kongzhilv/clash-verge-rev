@@ -6,6 +6,7 @@ const files = {
   connectionRow: 'src/components/connection/connection-row-item.tsx',
   connectionAssistant:
     'src/components/connection/connection-rule-assistant.tsx',
+  connectionsPage: 'src/pages/connections.tsx',
   diversionManager: 'src/components/rule/diversion-manager/manager.tsx',
   projectPanel: 'src/components/rule/diversion-manager/project-panel.tsx',
   detectedPrograms:
@@ -95,6 +96,21 @@ forbidText(
   "maxWidth: '34%'",
   'connection list no longer uses hard percentage clipping',
 )
+requireText(
+  'connectionsPage',
+  "flexWrap: 'wrap'",
+  'connection toolbar wraps instead of overflowing narrow windows',
+)
+requireText(
+  'connectionsPage',
+  "minWidth: { xs: '100%', sm: 180 }",
+  'connection search gets its own usable row on narrow windows',
+)
+requireText(
+  'connectionsPage',
+  'estimateSize={66}',
+  'connection virtual list estimate matches the minimum row height',
+)
 
 requireText(
   'projectPanel',
@@ -149,13 +165,23 @@ requireText(
 )
 requireText(
   'connectionProject',
-  'gridTemplateColumns:',
-  'routing relation summary keeps a responsive grid',
+  'divider={<Divider flexItem />}',
+  'routing relation summary uses a full-width vertical information flow',
 )
 requireText(
   'connectionProject',
-  "xs: '1fr'",
-  'routing relation summary stacks on narrow windows',
+  "overflow: 'visible'",
+  'routing relation summary does not clip wrapped text',
+)
+requireText(
+  'connectionProject',
+  "overflowWrap: 'anywhere'",
+  'routing relation summary allows long rules and outlets to wrap',
+)
+forbidText(
+  'connectionProject',
+  'gridTemplateColumns:',
+  'routing relation summary no longer squeezes long values into split columns',
 )
 
 if (failures.length > 0) {
