@@ -117,7 +117,7 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
         slotProps={{
           paper: {
             sx: {
-              width: { xs: '100%', sm: 520 },
+              width: { xs: '100%', sm: 560 },
               maxWidth: '100vw',
               display: 'flex',
               flexDirection: 'column',
@@ -180,7 +180,14 @@ const Metric = ({ label, value, icon }: MetricProps) => (
         {label}
       </Typography>
     </Stack>
-    <Typography sx={{ mt: 0.5, fontWeight: 700 }} noWrap>
+    <Typography
+      sx={{
+        mt: 0.5,
+        fontWeight: 700,
+        overflowWrap: 'anywhere',
+        wordBreak: 'break-word',
+      }}
+    >
       {value}
     </Typography>
   </Box>
@@ -302,7 +309,7 @@ const InnerConnectionDetail = ({
           px: 2,
           py: 1.25,
           flex: '0 0 auto',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           borderBottom: 1,
           borderColor: 'divider',
           bgcolor: 'background.paper',
@@ -312,8 +319,10 @@ const InnerConnectionDetail = ({
           sx={{
             width: 40,
             height: 40,
+            mt: 0.15,
             display: 'grid',
             placeItems: 'center',
+            flex: '0 0 auto',
             borderRadius: 2,
             bgcolor: 'primary.main',
             color: 'primary.contrastText',
@@ -322,14 +331,26 @@ const InnerConnectionDetail = ({
           {hasApplication ? <AppsRounded /> : <RouteRounded />}
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }} noWrap>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+              lineHeight: 1.35,
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+            }}
+          >
             {applicationName}
           </Typography>
-          <Typography variant="body2" color="text.secondary" noWrap>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.25, overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+          >
             {headerMeta}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} aria-label="关闭连接详情">
+        <IconButton onClick={onClose} aria-label="关闭连接详情" sx={{ mt: -0.5 }}>
           <CloseRounded />
         </IconButton>
       </Stack>
@@ -406,12 +427,14 @@ const InnerConnectionDetail = ({
               {information.map((item) => (
                 <Stack
                   key={item.label}
-                  direction={item.wide ? 'column' : 'row'}
+                  direction={item.wide ? 'column' : { xs: 'column', sm: 'row' }}
                   spacing={item.wide ? 0.5 : 1}
                   sx={{
                     px: 1.5,
                     py: 1,
-                    alignItems: item.wide ? 'stretch' : 'center',
+                    alignItems: item.wide
+                      ? 'stretch'
+                      : { xs: 'stretch', sm: 'center' },
                   }}
                 >
                   <Stack
@@ -425,7 +448,7 @@ const InnerConnectionDetail = ({
                     <Typography
                       variant="body2"
                       color="text.secondary"
-                      sx={{ minWidth: item.wide ? 0 : 72 }}
+                      sx={{ minWidth: item.wide ? 0 : { sm: 72 } }}
                     >
                       {item.label}
                     </Typography>
@@ -434,7 +457,9 @@ const InnerConnectionDetail = ({
                     variant="body2"
                     sx={{
                       flex: 1,
-                      textAlign: item.wide ? 'left' : 'right',
+                      textAlign: item.wide
+                        ? 'left'
+                        : { xs: 'left', sm: 'right' },
                       wordBreak: 'break-word',
                       overflowWrap: 'anywhere',
                       fontFamily: item.monospace ? 'monospace' : 'inherit',
@@ -451,7 +476,7 @@ const InnerConnectionDetail = ({
       </Stack>
 
       <Stack
-        direction="row"
+        direction={{ xs: 'column', sm: 'row' }}
         spacing={1}
         sx={{
           p: 1.5,
@@ -459,7 +484,7 @@ const InnerConnectionDetail = ({
           bottom: 0,
           zIndex: 2,
           flex: '0 0 auto',
-          alignItems: 'center',
+          alignItems: 'stretch',
           borderTop: 1,
           borderColor: 'divider',
           bgcolor: 'background.paper',
@@ -487,7 +512,7 @@ const InnerConnectionDetail = ({
               onClose()
             }}
           >
-            断开
+            断开连接
           </Button>
         )}
       </Stack>
