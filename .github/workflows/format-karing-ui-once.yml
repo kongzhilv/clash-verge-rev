@@ -13,6 +13,8 @@ permissions:
 jobs:
   format:
     runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
     steps:
       - uses: actions/checkout@v7
         with:
