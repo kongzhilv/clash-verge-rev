@@ -149,7 +149,12 @@ requireText(
 )
 requireText(
   'connectionProject',
-  "gridTemplateColumns: { xs: '1fr'",
+  'gridTemplateColumns:',
+  'routing relation summary keeps a responsive grid',
+)
+requireText(
+  'connectionProject',
+  "xs: '1fr'",
   'routing relation summary stacks on narrow windows',
 )
 
