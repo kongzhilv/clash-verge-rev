@@ -21,6 +21,7 @@ const files = {
   domainDetector: 'src/components/rule/diversion-detector.tsx',
   providerButton: 'src/components/rule/provider-button.tsx',
   routingRelations: 'src/components/routing/routing-relations-panel.tsx',
+  focusedPolicy: 'src/components/routing/focused-policy-panel.tsx',
   connectionProject: 'src/components/routing/connection-project-card.tsx',
 }
 
@@ -129,6 +130,16 @@ forbidText(
   'routingRelations',
   '<OverflowReveal',
   'application-to-outlet relations must show names directly',
+)
+forbidText(
+  'focusedPolicy',
+  '<OverflowReveal',
+  'focused outlet panel must show the current outlet directly',
+)
+requireText(
+  'focusedPolicy',
+  "overflowWrap: 'anywhere'",
+  'focused outlet panel allows long names to wrap',
 )
 requireText(
   'connectionProject',
