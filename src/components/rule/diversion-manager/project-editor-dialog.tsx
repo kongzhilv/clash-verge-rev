@@ -10,7 +10,6 @@ import {
   Alert,
   Box,
   Button,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -22,6 +21,8 @@ import {
 } from '@mui/material'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
 import { useState } from 'react'
+
+import { AdaptiveDialog } from '@/components/base'
 
 import { actionLabel } from './action-label'
 import ActionPicker from './action-picker'
@@ -95,9 +96,19 @@ export const ProjectEditorDialog = ({
   )
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>{project ? '编辑应用分流' : '新建应用分流'}</DialogTitle>
-      <DialogContent dividers>
+    <AdaptiveDialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      aria-labelledby="application-rule-editor-title"
+    >
+      <DialogTitle id="application-rule-editor-title">
+        {project ? '编辑应用分流' : '新建应用分流'}
+      </DialogTitle>
+      <DialogContent
+        dividers
+        sx={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+      >
         <Stack spacing={1.5}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <TextField
@@ -115,6 +126,7 @@ export const ProjectEditorDialog = ({
                 />
               }
               label="启用"
+              sx={{ flex: '0 0 auto' }}
             />
           </Stack>
 
@@ -126,7 +138,15 @@ export const ProjectEditorDialog = ({
               <Button
                 variant="outlined"
                 onClick={() => setActionPickerOpen(true)}
-                sx={{ minWidth: 240, justifyContent: 'space-between' }}
+                sx={{
+                  width: { xs: '100%', sm: 'auto' },
+                  minWidth: { xs: 0, sm: 240 },
+                  maxWidth: '100%',
+                  justifyContent: 'space-between',
+                  whiteSpace: 'normal',
+                  textAlign: 'left',
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {actionLabel(draft.action, draft.policy)}
               </Button>
@@ -156,10 +176,15 @@ export const ProjectEditorDialog = ({
               variant="contained"
               startIcon={<FolderOpenRounded />}
               onClick={() => void chooseApplications()}
+              sx={{ alignSelf: { xs: 'stretch', sm: 'auto' } }}
             >
               选择应用
             </Button>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ overflowWrap: 'anywhere' }}
+            >
               已选择 {draft.processPaths.length || draft.processNames.length}{' '}
               个应用标识
             </Typography>
@@ -173,13 +198,18 @@ export const ProjectEditorDialog = ({
               border: 1,
               borderColor: 'divider',
               borderRadius: '8px !important',
+              overflow: 'hidden',
               '&::before': { display: 'none' },
             }}
           >
             <AccordionSummary expandIcon={<ExpandMoreRounded />}>
-              <Box>
+              <Box sx={{ minWidth: 0 }}>
                 <Typography variant="subtitle2">识别条件</Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', overflowWrap: 'anywhere' }}
+                >
                   应用名称和路径优先；域名或 IP
                   用于核心未返回应用信息时补充识别。
                 </Typography>
@@ -254,7 +284,7 @@ export const ProjectEditorDialog = ({
             )}
         </Stack>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
         <Button onClick={onClose}>取消</Button>
         <Button
           variant="contained"
@@ -265,7 +295,7 @@ export const ProjectEditorDialog = ({
           保存
         </Button>
       </DialogActions>
-    </Dialog>
+    </AdaptiveDialog>
   )
 }
 
