@@ -9,7 +9,7 @@ on:
       - 'scripts/patch-karing-ui-release.mjs'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   patch:
@@ -18,13 +18,18 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: feature/karing-style-diversion
+          fetch-depth: 0
 
-      - name: Patch permanent release workflow
-        run: node scripts/patch-karing-ui-release.mjs
-
-      - name: Emit patched workflow
+      - name: Generate permanent release workflow
         run: |
-          echo 'PATCHED_WORKFLOW_BASE64_BEGIN'
-          base64 -w0 .github/workflows/karing-diagnostics-once.yml
-          echo
-          echo 'PATCHED_WORKFLOW_BASE64_END'
+          node scripts/patch-karing-ui-release.mjs
+          cp .github/workflows/karing-diagnostics-once.yml scripts/karing-diagnostics-generated.yml
+
+      - name: Stage generated workflow for authorized commit
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/karing-diagnostics-generated.yml
+          git commit -m 'ci: stage generated Karing UI release workflow'
+          git push origin HEAD:feature/karing-style-diversion
