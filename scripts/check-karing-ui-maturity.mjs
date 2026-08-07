@@ -111,6 +111,11 @@ forbidText(
   'Tooltip title="删除应用分流"',
   'application rules must not restore the old per-row delete icon',
 )
+forbidText(
+  'projectPanel',
+  '<OverflowReveal',
+  'application rule rows must show names and outlets directly',
+)
 requireText(
   'detectedPrograms',
   "'设置分流'",
