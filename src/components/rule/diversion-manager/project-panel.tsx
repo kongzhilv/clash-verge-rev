@@ -5,6 +5,7 @@ import {
   EditRounded,
   LanRounded,
   LinkRounded,
+  MoreVertRounded,
 } from '@mui/icons-material'
 import {
   Alert,
@@ -13,6 +14,10 @@ import {
   Button,
   Chip,
   IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Paper,
   Stack,
   Switch,
@@ -21,8 +26,6 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-
-import { OverflowReveal } from '@/components/base'
 
 import { actionLabel } from './action-label'
 import DetectedProgramsPanel, {
@@ -59,6 +62,8 @@ export const ProjectPanel = ({
   const [editingProject, setEditingProject] = useState<DiversionProject | null>(
     null,
   )
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const [menuProject, setMenuProject] = useState<DiversionProject | null>(null)
   const [dismissedFocusProjectId, setDismissedFocusProjectId] = useState<
     string | null
   >(null)
@@ -68,6 +73,9 @@ export const ProjectPanel = ({
       : null
   const editorOpen = manualEditorOpen || Boolean(focusedProject)
   const editorProject = manualEditorOpen ? editingProject : focusedProject
+  const menuPolicy = menuProject
+    ? resolveActionPolicy(config, menuProject.action, menuProject.policy)
+    : ''
 
   const openCreate = () => {
     setEditingProject(null)
@@ -77,6 +85,11 @@ export const ProjectPanel = ({
   const openEdit = (project: DiversionProject) => {
     setEditingProject(project)
     setManualEditorOpen(true)
+  }
+
+  const closeMenu = () => {
+    setMenuAnchor(null)
+    setMenuProject(null)
   }
 
   const importDetectedProgram = (program: DetectedProgram) => {
@@ -128,24 +141,29 @@ export const ProjectPanel = ({
 
       <Box>
         <Stack
-          direction="row"
+          direction={{ xs: 'column', sm: 'row' }}
           spacing={1}
-          sx={{ mb: 1.25, alignItems: 'center' }}
+          sx={{
+            mb: 1.25,
+            alignItems: { sm: 'center' },
+            justifyContent: 'space-between',
+          }}
         >
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               应用规则
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              按应用或连接特征匹配流量，并指定出口策略。
+              每个应用只保留一个主要出口；低频操作收在“更多”里。
             </Typography>
           </Box>
           <Button
             variant="outlined"
             startIcon={<AddRounded />}
             onClick={openCreate}
+            sx={{ alignSelf: { xs: 'flex-start', sm: 'auto' } }}
           >
-            新建
+            新建应用规则
           </Button>
         </Stack>
 
@@ -214,12 +232,17 @@ export const ProjectPanel = ({
                           spacing={0.75}
                           sx={{ alignItems: 'center', minWidth: 0 }}
                         >
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <OverflowReveal
-                              value={project.name}
-                              fontWeight={700}
-                            />
-                          </Box>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              flex: 1,
+                              minWidth: 0,
+                              fontWeight: 700,
+                              overflowWrap: 'anywhere',
+                            }}
+                          >
+                            {project.name}
+                          </Typography>
                           {!project.enabled && (
                             <Chip
                               size="small"
@@ -228,11 +251,13 @@ export const ProjectPanel = ({
                             />
                           )}
                         </Stack>
-                        <OverflowReveal
-                          value={project.description || '应用规则'}
+                        <Typography
                           variant="caption"
                           color="text.secondary"
-                        />
+                          sx={{ display: 'block', overflowWrap: 'anywhere' }}
+                        >
+                          {project.description || '应用规则'}
+                        </Typography>
                         <Stack
                           direction="row"
                           spacing={0.5}
@@ -246,11 +271,11 @@ export const ProjectPanel = ({
                             sx={{
                               display: 'inline-flex',
                               minWidth: 0,
-                              maxWidth: { xs: '100%', sm: 320 },
+                              maxWidth: '100%',
                               alignItems: 'center',
                               gap: 0.45,
                               px: 0.85,
-                              py: 0.15,
+                              py: 0.2,
                               border: 1,
                               borderColor: 'primary.main',
                               borderRadius: 999,
@@ -261,13 +286,16 @@ export const ProjectPanel = ({
                             <LanRounded
                               sx={{ fontSize: 16, flex: '0 0 auto' }}
                             />
-                            <Box sx={{ minWidth: 0, flex: 1 }}>
-                              <OverflowReveal
-                                value={policyLabel}
-                                variant="caption"
-                                fontWeight={650}
-                              />
-                            </Box>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                minWidth: 0,
+                                fontWeight: 650,
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {policyLabel}
+                            </Typography>
                           </Box>
                         </Stack>
                       </Box>
@@ -275,11 +303,11 @@ export const ProjectPanel = ({
 
                     <Stack
                       direction="row"
-                      spacing={0.25}
+                      spacing={0.5}
                       sx={{
                         flex: '0 0 auto',
                         alignItems: 'center',
-                        justifyContent: { xs: 'flex-end', sm: 'initial' },
+                        justifyContent: { xs: 'space-between', sm: 'flex-end' },
                       }}
                     >
                       <Switch
@@ -292,47 +320,25 @@ export const ProjectPanel = ({
                           input: { 'aria-label': `启用 ${project.name}` },
                         }}
                       />
-                      <Tooltip title="查看连接">
+                      <Box sx={{ flex: { xs: 1, sm: 'initial' } }} />
+                      <Button
+                        size="small"
+                        variant="text"
+                        startIcon={<EditRounded fontSize="small" />}
+                        onClick={() => openEdit(project)}
+                      >
+                        编辑
+                      </Button>
+                      <Tooltip title="更多操作">
                         <IconButton
                           size="small"
-                          onClick={() =>
-                            navigate(
-                              `/connections?project=${encodeURIComponent(project.id)}`,
-                            )
-                          }
+                          aria-label={`${project.name} 更多操作`}
+                          onClick={(event) => {
+                            setMenuAnchor(event.currentTarget)
+                            setMenuProject(project)
+                          }}
                         >
-                          <LinkRounded fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      {policy && (
-                        <Tooltip title={`查看出口：${policy}`}>
-                          <IconButton
-                            size="small"
-                            onClick={() =>
-                              navigate(
-                                `/proxies?policy=${encodeURIComponent(policy)}`,
-                              )
-                            }
-                          >
-                            <LanRounded fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      <Tooltip title="编辑">
-                        <IconButton
-                          size="small"
-                          onClick={() => openEdit(project)}
-                        >
-                          <EditRounded fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="删除">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => deleteProject(project)}
-                        >
-                          <DeleteOutlineRounded fontSize="small" />
+                          <MoreVertRounded fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     </Stack>
@@ -343,6 +349,57 @@ export const ProjectPanel = ({
           </Stack>
         )}
       </Box>
+
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor && menuProject)}
+        onClose={closeMenu}
+        slotProps={{ paper: { sx: { minWidth: 190 } } }}
+      >
+        <MenuItem
+          onClick={() => {
+            const project = menuProject
+            closeMenu()
+            if (project) {
+              navigate(
+                `/connections?project=${encodeURIComponent(project.id)}`,
+              )
+            }
+          }}
+        >
+          <ListItemIcon>
+            <LinkRounded fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>查看连接</ListItemText>
+        </MenuItem>
+        {menuPolicy && (
+          <MenuItem
+            onClick={() => {
+              const policy = menuPolicy
+              closeMenu()
+              navigate(`/proxies?policy=${encodeURIComponent(policy)}`)
+            }}
+          >
+            <ListItemIcon>
+              <LanRounded fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>查看出口</ListItemText>
+          </MenuItem>
+        )}
+        <MenuItem
+          sx={{ color: 'error.main' }}
+          onClick={() => {
+            const project = menuProject
+            closeMenu()
+            if (project) deleteProject(project)
+          }}
+        >
+          <ListItemIcon sx={{ color: 'inherit' }}>
+            <DeleteOutlineRounded fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>删除应用规则</ListItemText>
+        </MenuItem>
+      </Menu>
 
       {editorOpen && (
         <ProjectEditorDialog
