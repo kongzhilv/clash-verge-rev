@@ -9,7 +9,6 @@ import {
 } from '@mui/icons-material'
 import {
   Button,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -21,6 +20,8 @@ import {
   ListSubheader,
 } from '@mui/material'
 import type { ReactNode } from 'react'
+
+import { AdaptiveDialog } from '@/components/base'
 
 import { createMatcherForType } from './matcher-catalog'
 import type { Action, DiversionGroup, DiversionMatcher } from './model'
@@ -118,9 +119,12 @@ export const GroupCreateDialog = ({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <AdaptiveDialog open={open} onClose={onClose} maxWidth="sm">
       <DialogTitle>添加自定义规则组</DialogTitle>
-      <DialogContent dividers sx={{ p: 0 }}>
+      <DialogContent
+        dividers
+        sx={{ p: 0, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+      >
         <List disablePadding>
           <ListSubheader>新建</ListSubheader>
           <ListItemButton
@@ -134,13 +138,17 @@ export const GroupCreateDialog = ({
                 ),
               )
             }
+            sx={{ alignItems: 'flex-start' }}
           >
-            <ListItemIcon>
+            <ListItemIcon sx={{ mt: 0.25 }}>
               <AddRounded />
             </ListItemIcon>
             <ListItemText
               primary="空白规则组"
-              secondary="先创建空白组，再弹出选择要添加的匹配条件。"
+              secondary="先创建空白组，再选择要添加的匹配条件。"
+              slotProps={{
+                secondary: { sx: { overflowWrap: 'anywhere' } },
+              }}
             />
             <ChevronRightRounded color="disabled" />
           </ListItemButton>
@@ -160,11 +168,16 @@ export const GroupCreateDialog = ({
                   ),
                 )
               }
+              sx={{ alignItems: 'flex-start' }}
             >
-              <ListItemIcon>{template.icon}</ListItemIcon>
+              <ListItemIcon sx={{ mt: 0.25 }}>{template.icon}</ListItemIcon>
               <ListItemText
                 primary={template.name}
                 secondary={template.description}
+                slotProps={{
+                  primary: { sx: { overflowWrap: 'anywhere' } },
+                  secondary: { sx: { overflowWrap: 'anywhere' } },
+                }}
               />
               <ChevronRightRounded color="disabled" />
             </ListItemButton>
@@ -188,13 +201,17 @@ export const GroupCreateDialog = ({
                       })),
                     })
                   }
+                  sx={{ alignItems: 'flex-start' }}
                 >
-                  <ListItemIcon>
+                  <ListItemIcon sx={{ mt: 0.25 }}>
                     <ContentCopyRounded />
                   </ListItemIcon>
                   <ListItemText
                     primary={group.name || '未命名规则组'}
                     secondary={`${group.matchers.length} 个匹配条件`}
+                    slotProps={{
+                      primary: { sx: { overflowWrap: 'anywhere' } },
+                    }}
                   />
                   <ChevronRightRounded color="disabled" />
                 </ListItemButton>
@@ -206,7 +223,7 @@ export const GroupCreateDialog = ({
       <DialogActions>
         <Button onClick={onClose}>取消</Button>
       </DialogActions>
-    </Dialog>
+    </AdaptiveDialog>
   )
 }
 
