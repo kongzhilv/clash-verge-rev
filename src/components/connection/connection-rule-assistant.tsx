@@ -2,10 +2,10 @@ import {
   AddRounded,
   AppsRounded,
   ChevronRightRounded,
+  CloseRounded,
   DeleteOutlineRounded,
   DnsRounded,
   LanRounded,
-  OpenInNewRounded,
   RouterRounded,
   SettingsEthernetRounded,
 } from '@mui/icons-material'
@@ -14,11 +14,10 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
@@ -33,9 +32,9 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useNavigate } from 'react-router'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
+import { AdaptiveDialog } from '@/components/base'
 import { resolveConnectionProject } from '@/components/routing/connection-project'
 import {
   makeProject,
@@ -259,7 +258,6 @@ export const ConnectionRuleAssistant = ({
   closed,
   onClose,
 }: ConnectionRuleAssistantProps) => {
-  const navigate = useNavigate()
   const candidates = useMemo(() => buildCandidates(connection), [connection])
   const [selectedId, setSelectedId] = useState('')
   const [snapshot, setSnapshot] = useState<ProfileSnapshot | null>(null)
@@ -431,35 +429,49 @@ export const ConnectionRuleAssistant = ({
     }
   }
 
-  const openRulesPage = () => {
-    onClose()
-    navigate(
-      linkedProject
-        ? `/rules?project=${encodeURIComponent(linkedProject.id)}`
-        : '/rules?manage=projects',
-    )
-  }
-
   const manualGroups =
     snapshot?.config.groups.filter((group) => !group['project-id']) ?? []
 
   return (
     <>
-      <Dialog
+      <AdaptiveDialog
         open={open && !projectEditorOpen}
         onClose={onClose}
-        fullWidth
         maxWidth="md"
+        fillDesktopHeight
+        aria-labelledby="connection-routing-assistant-title"
       >
-        <DialogTitle>设置分流</DialogTitle>
-        <DialogContent dividers sx={{ p: 0 }}>
+        <DialogTitle
+          id="connection-routing-assistant-title"
+          sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              设置分流
+            </Typography>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ overflowWrap: 'anywhere' }}
+            >
+              为当前应用设置主要出口，或把单个连接特征补充到通用规则。
+            </Typography>
+          </Box>
+          <IconButton onClick={onClose} aria-label="关闭设置分流">
+            <CloseRounded />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          dividers
+          sx={{ p: 0, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+        >
           <Box sx={{ p: 2 }}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
                   当前连接
                 </Typography>
-                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
                   {connection.metadata.host ||
                     connection.metadata.destinationIP ||
                     connection.metadata.remoteDestination ||
@@ -471,12 +483,17 @@ export const ConnectionRuleAssistant = ({
                   sx={{ mt: 1, flexWrap: 'wrap' }}
                 >
                   {connection.rule && (
-                    <Chip size="small" label={`规则：${connection.rule}`} />
+                    <Chip
+                      size="small"
+                      label={`规则：${connection.rule}`}
+                      sx={{ maxWidth: '100%' }}
+                    />
                   )}
                   {connection.chains.length > 0 && (
                     <Chip
                       size="small"
                       label={`出口：${[...connection.chains].reverse().join(' / ')}`}
+                      sx={{ maxWidth: '100%' }}
                     />
                   )}
                   {linkedProject && (
@@ -484,26 +501,23 @@ export const ConnectionRuleAssistant = ({
                       size="small"
                       color="primary"
                       label={linkedProject.name}
+                      sx={{ maxWidth: '100%' }}
                     />
                   )}
                 </Stack>
               </Box>
-              <Stack spacing={0.75} sx={{ alignSelf: { md: 'flex-start' } }}>
-                <Button
-                  variant="contained"
-                  startIcon={<AppsRounded />}
-                  onClick={openProjectEditor}
-                  disabled={loading || savingGroupId !== null}
-                >
-                  {linkedProject ? '编辑应用分流' : '设置应用分流'}
-                </Button>
-                <Button
-                  startIcon={<OpenInNewRounded />}
-                  onClick={openRulesPage}
-                >
-                  打开分流中心
-                </Button>
-              </Stack>
+              <Button
+                variant="contained"
+                startIcon={<AppsRounded />}
+                onClick={openProjectEditor}
+                disabled={loading || savingGroupId !== null}
+                sx={{
+                  alignSelf: { xs: 'stretch', md: 'flex-start' },
+                  flex: '0 0 auto',
+                }}
+              >
+                {linkedProject ? '编辑应用分流' : '设置应用分流'}
+              </Button>
             </Stack>
           </Box>
 
@@ -511,12 +525,14 @@ export const ConnectionRuleAssistant = ({
 
           <Stack
             direction={{ xs: 'column', md: 'row' }}
-            sx={{ minHeight: 360 }}
+            sx={{ minHeight: { md: 360 } }}
           >
             <Box
               sx={{
                 width: { md: 300 },
+                flex: { md: '0 0 300px' },
                 borderRight: { md: 1 },
+                borderBottom: { xs: 1, md: 0 },
                 borderColor: 'divider',
               }}
             >
@@ -529,13 +545,14 @@ export const ConnectionRuleAssistant = ({
                     key={candidate.id}
                     selected={candidate.id === selectedCandidate?.id}
                     onClick={() => setSelectedId(candidate.id)}
+                    sx={{ alignItems: 'flex-start' }}
                   >
-                    <ListItemIcon>{candidate.icon}</ListItemIcon>
+                    <ListItemIcon sx={{ mt: 0.25 }}>{candidate.icon}</ListItemIcon>
                     <ListItemText
                       primary={candidate.label}
                       secondary={candidate.value}
                       slotProps={{
-                        secondary: { sx: { wordBreak: 'break-all' } },
+                        secondary: { sx: { overflowWrap: 'anywhere' } },
                       }}
                     />
                     <ChevronRightRounded color="disabled" />
@@ -555,21 +572,26 @@ export const ConnectionRuleAssistant = ({
                 spacing={1}
                 sx={{ p: 2, alignItems: { sm: 'center' } }}
               >
-                <Box sx={{ flex: 1 }}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography variant="subtitle2">通用规则</Typography>
                   {selectedCandidate && (
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ overflowWrap: 'anywhere' }}
+                    >
                       {selectedCandidate.description}
                     </Typography>
                   )}
                 </Box>
                 <Button
-                  variant="contained"
+                  variant="outlined"
                   startIcon={<AddRounded />}
                   onClick={() => void createGroup()}
                   disabled={
                     !selectedCandidate || loading || savingGroupId !== null
                   }
+                  sx={{ flex: '0 0 auto' }}
                 >
                   新建通用规则
                 </Button>
@@ -605,8 +627,9 @@ export const ConnectionRuleAssistant = ({
                             ? removeFromGroup(group)
                             : addToGroup(group))
                         }
+                        sx={{ alignItems: 'flex-start' }}
                       >
-                        <ListItemIcon>
+                        <ListItemIcon sx={{ mt: 0.25 }}>
                           {busy ? (
                             <CircularProgress size={22} />
                           ) : included ? (
@@ -618,12 +641,17 @@ export const ConnectionRuleAssistant = ({
                         <ListItemText
                           primary={group.name || '未命名规则组'}
                           secondary={`${group.enabled ? '已启用' : '未启用'} · ${group.matchers.length} 个条件`}
+                          slotProps={{
+                            primary: { sx: { overflowWrap: 'anywhere' } },
+                            secondary: { sx: { overflowWrap: 'anywhere' } },
+                          }}
                         />
                         <Chip
                           size="small"
                           color={included ? 'error' : 'primary'}
                           variant="outlined"
                           label={included ? '移除' : '添加'}
+                          sx={{ mt: 0.15, flex: '0 0 auto' }}
                         />
                       </ListItemButton>
                     )
@@ -639,10 +667,7 @@ export const ConnectionRuleAssistant = ({
             </Box>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>关闭</Button>
-        </DialogActions>
-      </Dialog>
+      </AdaptiveDialog>
 
       {projectEditorOpen && (
         <ProjectEditorDialog
