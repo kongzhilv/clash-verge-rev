@@ -5,7 +5,6 @@ import {
 } from '@mui/icons-material'
 import {
   Button,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -18,6 +17,7 @@ import {
 } from '@mui/material'
 import { useMemo, useState } from 'react'
 
+import { AdaptiveDialog } from '@/components/base'
 import { useRulesData } from '@/providers/app-data-context'
 
 import { matcherValueOptions } from './matcher-catalog'
@@ -60,9 +60,12 @@ export const MatcherValuePicker = ({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <AdaptiveDialog open={open} onClose={onClose} maxWidth="sm">
       <DialogTitle>选择规则内容</DialogTitle>
-      <DialogContent dividers sx={{ p: 0 }}>
+      <DialogContent
+        dividers
+        sx={{ p: 0, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+      >
         <TextField
           fullWidth
           size="small"
@@ -88,6 +91,7 @@ export const MatcherValuePicker = ({
                 key={option.value}
                 selected={matcher.value === option.value}
                 onClick={() => choose(option.value)}
+                sx={{ alignItems: 'flex-start' }}
               >
                 <ListItemText
                   primary={option.label}
@@ -96,6 +100,10 @@ export const MatcherValuePicker = ({
                       ? `${option.description} · ${option.value}`
                       : option.value
                   }
+                  slotProps={{
+                    primary: { sx: { overflowWrap: 'anywhere' } },
+                    secondary: { sx: { overflowWrap: 'anywhere' } },
+                  }}
                 />
                 {matcher.value === option.value ? (
                   <CheckRounded color="primary" />
@@ -114,7 +122,7 @@ export const MatcherValuePicker = ({
       <DialogActions>
         <Button onClick={onClose}>取消</Button>
       </DialogActions>
-    </Dialog>
+    </AdaptiveDialog>
   )
 }
 
