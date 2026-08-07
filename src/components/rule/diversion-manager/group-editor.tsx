@@ -98,7 +98,11 @@ export const GroupEditor = ({
           />
           <Stack sx={{ flex: 1, minWidth: 0 }} spacing={0.15}>
             <Typography
-              sx={{ fontWeight: 600, overflowWrap: 'anywhere', lineHeight: 1.35 }}
+              sx={{
+                fontWeight: 600,
+                overflowWrap: 'anywhere',
+                lineHeight: 1.35,
+              }}
             >
               {group.name || '未命名分流组'}
             </Typography>
@@ -106,8 +110,8 @@ export const GroupEditor = ({
               variant="caption"
               sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}
             >
-              {actionLabel(group.action, group.policy)} · {group.matchers.length}{' '}
-              项条件
+              {actionLabel(group.action, group.policy)} ·{' '}
+              {group.matchers.length} 项条件
             </Typography>
           </Stack>
         </Stack>

@@ -350,7 +350,11 @@ const InnerConnectionDetail = ({
             {headerMeta}
           </Typography>
         </Box>
-        <IconButton onClick={onClose} aria-label="关闭连接详情" sx={{ mt: -0.5 }}>
+        <IconButton
+          onClick={onClose}
+          aria-label="关闭连接详情"
+          sx={{ mt: -0.5 }}
+        >
           <CloseRounded />
         </IconButton>
       </Stack>

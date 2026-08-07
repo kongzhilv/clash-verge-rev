@@ -4,7 +4,8 @@ const files = {
   adaptiveDialog: 'src/components/base/adaptive-dialog.tsx',
   connectionDetail: 'src/components/connection/connection-detail.tsx',
   connectionRow: 'src/components/connection/connection-row-item.tsx',
-  connectionAssistant: 'src/components/connection/connection-rule-assistant.tsx',
+  connectionAssistant:
+    'src/components/connection/connection-rule-assistant.tsx',
   diversionManager: 'src/components/rule/diversion-manager/manager.tsx',
   projectPanel: 'src/components/rule/diversion-manager/project-panel.tsx',
   detectedPrograms:
@@ -16,8 +17,7 @@ const files = {
     'src/components/rule/diversion-manager/matcher-type-picker.tsx',
   matcherValuePicker:
     'src/components/rule/diversion-manager/matcher-value-picker.tsx',
-  groupCreate:
-    'src/components/rule/diversion-manager/group-create-dialog.tsx',
+  groupCreate: 'src/components/rule/diversion-manager/group-create-dialog.tsx',
   domainDetector: 'src/components/rule/diversion-detector.tsx',
   providerButton: 'src/components/rule/provider-button.tsx',
   routingRelations: 'src/components/routing/routing-relations-panel.tsx',
@@ -41,7 +41,8 @@ const requireText = (key, text, label) => {
 }
 
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text)) failures.push(`${label}: still contains ${text}`)
+  if (source[key].includes(text))
+    failures.push(`${label}: still contains ${text}`)
 }
 
 requireText(

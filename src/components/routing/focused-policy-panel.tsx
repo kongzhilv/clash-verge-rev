@@ -134,7 +134,11 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
                 component="span"
                 variant="body2"
                 title={String(selected)}
-                sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                sx={{
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
               >
                 {String(selected)}
               </Typography>
@@ -160,7 +164,11 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
                 <MenuItem
                   key={name}
                   value={name}
-                  sx={{ minWidth: 0, whiteSpace: 'normal', alignItems: 'flex-start' }}
+                  sx={{
+                    minWidth: 0,
+                    whiteSpace: 'normal',
+                    alignItems: 'flex-start',
+                  }}
                 >
                   <Typography
                     variant="body2"

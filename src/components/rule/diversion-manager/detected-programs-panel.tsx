@@ -1,8 +1,4 @@
-import {
-  AppsRounded,
-  CheckRounded,
-  RefreshRounded,
-} from '@mui/icons-material'
+import { AppsRounded, CheckRounded, RefreshRounded } from '@mui/icons-material'
 import {
   Alert,
   Avatar,
@@ -249,7 +245,9 @@ export const DetectedProgramsPanel = ({
                             sx={{
                               display: 'block',
                               overflowWrap: 'anywhere',
-                              fontFamily: program.path ? 'monospace' : 'inherit',
+                              fontFamily: program.path
+                                ? 'monospace'
+                                : 'inherit',
                             }}
                           >
                             {program.path || '受保护的系统进程'}

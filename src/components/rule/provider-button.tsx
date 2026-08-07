@@ -52,9 +52,12 @@ export const ProviderButton = () => {
       await updateRuleProvider(name)
       await refreshRules()
       await refreshRuleProviders()
-      showNotice.success('rules.feedback.notifications.provider.updateSuccess', {
-        name,
-      })
+      showNotice.success(
+        'rules.feedback.notifications.provider.updateSuccess',
+        {
+          name,
+        },
+      )
     } catch (err) {
       showNotice.error('rules.feedback.notifications.provider.updateFailed', {
         name,
@@ -129,7 +132,10 @@ export const ProviderButton = () => {
           <Stack
             direction={{ xs: 'column', sm: 'row' }}
             spacing={1}
-            sx={{ justifyContent: 'space-between', alignItems: { sm: 'center' } }}
+            sx={{
+              justifyContent: 'space-between',
+              alignItems: { sm: 'center' },
+            }}
           >
             <Typography variant="h6" sx={{ overflowWrap: 'anywhere' }}>
               {t('rules.page.provider.dialogTitle')}
@@ -200,7 +206,11 @@ export const ProviderButton = () => {
                           <Stack
                             direction="row"
                             spacing={0.75}
-                            sx={{ alignItems: 'center', minWidth: 0, flexWrap: 'wrap' }}
+                            sx={{
+                              alignItems: 'center',
+                              minWidth: 0,
+                              flexWrap: 'wrap',
+                            }}
                           >
                             <Typography
                               variant="subtitle1"
@@ -228,7 +238,9 @@ export const ProviderButton = () => {
                         </Stack>
                       }
                       secondary={
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', mt: 0.5 }}>
+                        <Box
+                          sx={{ display: 'flex', flexWrap: 'wrap', mt: 0.5 }}
+                        >
                           <TypeBox component="span">
                             {provider.vehicleType}
                           </TypeBox>

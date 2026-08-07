@@ -116,7 +116,10 @@ export const ConnectionProjectCard = ({
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1.45fr) minmax(0, 1fr)' },
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'minmax(0, 1.45fr) minmax(0, 1fr)',
+          },
         }}
       >
         <Box sx={{ minWidth: 0, px: 1.5, py: 1.25 }}>

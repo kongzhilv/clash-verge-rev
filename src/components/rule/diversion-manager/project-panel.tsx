@@ -361,9 +361,7 @@ export const ProjectPanel = ({
             const project = menuProject
             closeMenu()
             if (project) {
-              navigate(
-                `/connections?project=${encodeURIComponent(project.id)}`,
-              )
+              navigate(`/connections?project=${encodeURIComponent(project.id)}`)
             }
           }}
         >

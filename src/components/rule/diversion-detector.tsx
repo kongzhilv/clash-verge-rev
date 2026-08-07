@@ -236,7 +236,11 @@ export const DiversionDetector = () => {
   return (
     <>
       <Tooltip title="测试域名分流">
-        <IconButton size="small" onClick={openDetector} aria-label="测试域名分流">
+        <IconButton
+          size="small"
+          onClick={openDetector}
+          aria-label="测试域名分流"
+        >
           <SearchRounded fontSize="small" />
         </IconButton>
       </Tooltip>

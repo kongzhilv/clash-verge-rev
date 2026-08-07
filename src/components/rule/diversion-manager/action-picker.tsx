@@ -28,7 +28,11 @@ import {
 } from '@mui/material'
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { AdaptiveDialog, OverflowReveal, softScrollAreaSx } from '@/components/base'
+import {
+  AdaptiveDialog,
+  OverflowReveal,
+  softScrollAreaSx,
+} from '@/components/base'
 import { useProxiesData } from '@/providers/app-data-context'
 
 import type { Action } from './model'

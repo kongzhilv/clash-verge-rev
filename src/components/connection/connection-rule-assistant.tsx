@@ -547,7 +547,9 @@ export const ConnectionRuleAssistant = ({
                     onClick={() => setSelectedId(candidate.id)}
                     sx={{ alignItems: 'flex-start' }}
                   >
-                    <ListItemIcon sx={{ mt: 0.25 }}>{candidate.icon}</ListItemIcon>
+                    <ListItemIcon sx={{ mt: 0.25 }}>
+                      {candidate.icon}
+                    </ListItemIcon>
                     <ListItemText
                       primary={candidate.label}
                       secondary={candidate.value}
