@@ -1,21 +1,21 @@
 import { CloseRounded, SearchRounded } from '@mui/icons-material'
 import {
   Alert,
-  AppBar,
   Box,
   Chip,
-  Dialog,
+  DialogContent,
+  DialogTitle,
   IconButton,
   Paper,
   Stack,
   TextField,
-  Toolbar,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { load } from 'js-yaml'
 import { useCallback, useMemo, useState } from 'react'
 
+import { AdaptiveDialog } from '@/components/base'
 import { readProfileFile } from '@/services/cmds'
 import { showNotice } from '@/services/notice-service'
 
@@ -236,28 +236,37 @@ export const DiversionDetector = () => {
   return (
     <>
       <Tooltip title="测试域名分流">
-        <IconButton size="small" onClick={openDetector}>
+        <IconButton size="small" onClick={openDetector} aria-label="测试域名分流">
           <SearchRounded fontSize="small" />
         </IconButton>
       </Tooltip>
-      <Dialog fullScreen open={open} onClose={() => setOpen(false)}>
-        <AppBar
-          position="sticky"
-          color="default"
-          elevation={0}
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
+      <AdaptiveDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        maxWidth="md"
+        aria-labelledby="domain-routing-test-title"
+      >
+        <DialogTitle
+          id="domain-routing-test-title"
+          sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}
         >
-          <Toolbar sx={{ gap: 1 }}>
-            <IconButton edge="start" onClick={() => setOpen(false)}>
-              <CloseRounded />
-            </IconButton>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
               域名测试
             </Typography>
-          </Toolbar>
-        </AppBar>
+            <Typography variant="body2" color="text.secondary">
+              仅展示本地能够确定的匹配；其它条件继续交给 Mihomo 判断。
+            </Typography>
+          </Box>
+          <IconButton onClick={() => setOpen(false)} aria-label="关闭域名测试">
+            <CloseRounded />
+          </IconButton>
+        </DialogTitle>
 
-        <Box sx={{ width: '100%', maxWidth: 840, mx: 'auto', p: 2 }}>
+        <DialogContent
+          dividers
+          sx={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+        >
           <Stack spacing={1.5}>
             <TextField
               autoFocus
@@ -283,22 +292,30 @@ export const DiversionDetector = () => {
                         variant="outlined"
                         sx={{ px: 1.5, py: 1.25, borderRadius: 2 }}
                       >
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                        >
-                          <Chip
-                            size="small"
-                            color={index === 0 ? 'primary' : 'default'}
-                            label={
-                              index === 0 ? '首个命中' : `候选 ${index + 1}`
-                            }
-                          />
-                          <Typography sx={{ fontWeight: 650 }}>
-                            {hit.group}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
+                        <Stack spacing={0.5}>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                          >
+                            <Chip
+                              size="small"
+                              color={index === 0 ? 'primary' : 'default'}
+                              label={
+                                index === 0 ? '首个命中' : `候选 ${index + 1}`
+                              }
+                            />
+                            <Typography
+                              sx={{ fontWeight: 650, overflowWrap: 'anywhere' }}
+                            >
+                              {hit.group}
+                            </Typography>
+                          </Stack>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ overflowWrap: 'anywhere' }}
+                          >
                             {`${hit.matcherType} · ${hit.matcherValue} · ${hit.action}`}
                           </Typography>
                         </Stack>
@@ -320,6 +337,7 @@ export const DiversionDetector = () => {
                           key={item.id}
                           variant="body2"
                           color="text.secondary"
+                          sx={{ overflowWrap: 'anywhere' }}
                         >
                           {`${item.group} · ${item.matcherType} · ${item.matcherValue}`}
                         </Typography>
@@ -330,8 +348,8 @@ export const DiversionDetector = () => {
               </Stack>
             )}
           </Stack>
-        </Box>
-      </Dialog>
+        </DialogContent>
+      </AdaptiveDialog>
     </>
   )
 }
