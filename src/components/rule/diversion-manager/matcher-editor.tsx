@@ -101,15 +101,22 @@ export const MatcherEditor = ({
     <Box sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1.5 }}>
       <Stack spacing={1}>
         <Stack
-          direction={{ xs: 'column', md: 'row' }}
+          direction={{ xs: 'column', lg: 'row' }}
           spacing={1}
-          sx={{ alignItems: { md: 'center' } }}
+          sx={{ alignItems: { lg: 'flex-start' } }}
         >
           <Button
             variant="outlined"
             endIcon={<ChevronRightRounded />}
             onClick={() => setTypePickerOpen(true)}
-            sx={{ minWidth: 190, justifyContent: 'space-between' }}
+            sx={{
+              width: { xs: '100%', lg: 210 },
+              flex: { lg: '0 0 210px' },
+              justifyContent: 'space-between',
+              whiteSpace: 'normal',
+              textAlign: 'left',
+              overflowWrap: 'anywhere',
+            }}
           >
             {matcherTypeLabel(matcher.type)}
           </Button>
@@ -129,40 +136,57 @@ export const MatcherEditor = ({
             helperText={field.helperText}
             value={matcher.value}
             onChange={(event) => onChange({ value: event.target.value })}
+            slotProps={{
+              formHelperText: { sx: { overflowWrap: 'anywhere' } },
+            }}
           />
 
-          {hasMatcherValuePicker(matcher.type) && (
-            <Button
-              variant="outlined"
-              startIcon={<PlaylistAddCheckRounded />}
-              onClick={() => setValuePickerOpen(true)}
-              sx={{ minWidth: 96 }}
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{
+              flex: '0 0 auto',
+              alignItems: 'center',
+              justifyContent: { xs: 'space-between', lg: 'flex-end' },
+            }}
+          >
+            {hasMatcherValuePicker(matcher.type) && (
+              <Button
+                variant="outlined"
+                startIcon={<PlaylistAddCheckRounded />}
+                onClick={() => setValuePickerOpen(true)}
+              >
+                选择
+              </Button>
+            )}
+
+            <MatcherValuePicker
+              open={valuePickerOpen}
+              matcher={matcher}
+              onClose={() => setValuePickerOpen(false)}
+              onSelect={selectValue}
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={matcher.enabled}
+                  onChange={(_, checked) => onChange({ enabled: checked })}
+                />
+              }
+              label="启用"
+              sx={{ ml: 0 }}
+            />
+
+            <IconButton
+              color="error"
+              onClick={onDelete}
+              aria-label="删除匹配项"
             >
-              选择
-            </Button>
-          )}
-
-          <MatcherValuePicker
-            open={valuePickerOpen}
-            matcher={matcher}
-            onClose={() => setValuePickerOpen(false)}
-            onSelect={selectValue}
-          />
-
-          <FormControlLabel
-            control={
-              <Switch
-                size="small"
-                checked={matcher.enabled}
-                onChange={(_, checked) => onChange({ enabled: checked })}
-              />
-            }
-            label="启用"
-          />
-
-          <IconButton color="error" onClick={onDelete} aria-label="删除匹配项">
-            <DeleteOutlineRounded />
-          </IconButton>
+              <DeleteOutlineRounded />
+            </IconButton>
+          </Stack>
         </Stack>
 
         {matcher.type === 'RULE-SET-BUILDIN' && (
