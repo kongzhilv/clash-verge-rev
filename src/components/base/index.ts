@@ -1,3 +1,4 @@
+export { AdaptiveDialog } from './adaptive-dialog'
 export { BaseDialog, type DialogRef } from './base-dialog'
 export { BaseEmpty } from './base-empty'
 export { BaseErrorBoundary } from './base-error-boundary'
