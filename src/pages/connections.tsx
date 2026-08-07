@@ -315,6 +315,7 @@ const ConnectionsPage = () => {
           py: 1,
           display: 'flex',
           alignItems: 'center',
+          flexWrap: 'wrap',
           gap: 0.75,
           bgcolor: 'background.default',
           userSelect: 'text',
@@ -323,7 +324,7 @@ const ConnectionsPage = () => {
           zIndex: 2,
         }}
       >
-        <ButtonGroup size="small">
+        <ButtonGroup size="small" sx={{ flex: '0 0 auto' }}>
           <Button
             variant={connectionsType === 'active' ? 'contained' : 'outlined'}
             onClick={() => selectConnectionsType('active')}
@@ -368,7 +369,12 @@ const ConnectionsPage = () => {
           />
         )}
 
-        <Box sx={{ flex: 1, minWidth: 120 }}>
+        <Box
+          sx={{
+            flex: '1 1 220px',
+            minWidth: { xs: '100%', sm: 180 },
+          }}
+        >
           <BaseSearchBox onSearch={handleSearch} />
         </Box>
 
@@ -404,7 +410,7 @@ const ConnectionsPage = () => {
         <VirtualList
           key={`${connectionsType}:${projectFilter}:${policyFilter}`}
           count={displayRows.length}
-          estimateSize={58}
+          estimateSize={66}
           renderItem={(index) => {
             const row = displayRows[index]
             const projectMatch = projectMatches.get(row.id)
