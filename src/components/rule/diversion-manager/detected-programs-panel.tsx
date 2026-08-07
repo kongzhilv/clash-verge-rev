@@ -1,5 +1,4 @@
 import {
-  AddRounded,
   AppsRounded,
   CheckRounded,
   RefreshRounded,
@@ -8,6 +7,7 @@ import {
   Alert,
   Avatar,
   Box,
+  Button,
   CircularProgress,
   Divider,
   IconButton,
@@ -22,7 +22,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { OverflowReveal, softScrollAreaSx } from '@/components/base'
+import { softScrollAreaSx } from '@/components/base'
 import {
   getSystemProcessConnections,
   type ProcessConnectionSnapshot,
@@ -145,15 +145,16 @@ export const DetectedProgramsPanel = ({
             )}
           </Stack>
           <Typography variant="body2" color="text.secondary">
-            识别当前联网应用，并为其设置出口策略。
+            识别当前联网应用；选择“设置分流”后再指定出口。
           </Typography>
         </Box>
-        <Tooltip title="刷新">
+        <Tooltip title="刷新联网应用">
           <span>
             <IconButton
               size="small"
               onClick={() => void refresh()}
               disabled={loading}
+              aria-label="刷新联网应用"
             >
               {loading ? (
                 <CircularProgress size={18} />
@@ -214,28 +215,14 @@ export const DetectedProgramsPanel = ({
                 <Box key={program.key}>
                   {index > 0 && <Divider component="li" />}
                   <ListItem
-                    secondaryAction={
-                      <Tooltip title={registered ? '已设置' : '创建应用规则'}>
-                        <span>
-                          <IconButton
-                            edge="end"
-                            size="small"
-                            color={registered ? 'success' : 'primary'}
-                            disabled={registered}
-                            onClick={() => onImport(program)}
-                          >
-                            {registered ? (
-                              <CheckRounded fontSize="small" />
-                            ) : (
-                              <AddRounded fontSize="small" />
-                            )}
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    }
-                    sx={{ pr: 6, py: 0.9 }}
+                    sx={{
+                      gap: 1,
+                      py: 1,
+                      pr: 1.25,
+                      alignItems: 'flex-start',
+                    }}
                   >
-                    <ListItemAvatar sx={{ minWidth: 46 }}>
+                    <ListItemAvatar sx={{ minWidth: 46, mt: 0.1 }}>
                       <Avatar
                         variant="rounded"
                         sx={{ width: 34, height: 34, bgcolor: 'action.hover' }}
@@ -245,26 +232,53 @@ export const DetectedProgramsPanel = ({
                     </ListItemAvatar>
                     <ListItemText
                       disableTypography
+                      sx={{ minWidth: 0, my: 0 }}
                       primary={
-                        <OverflowReveal
-                          value={program.name}
+                        <Typography
                           variant="body2"
-                          fontWeight={650}
-                        />
+                          sx={{ fontWeight: 650, overflowWrap: 'anywhere' }}
+                        >
+                          {program.name}
+                        </Typography>
                       }
                       secondary={
                         <Stack spacing={0.2} sx={{ mt: 0.15, minWidth: 0 }}>
-                          <OverflowReveal
-                            value={program.path || '受保护的系统进程'}
+                          <Typography
                             variant="caption"
                             color="text.secondary"
-                          />
-                          <Typography variant="caption" color="text.secondary">
+                            sx={{
+                              display: 'block',
+                              overflowWrap: 'anywhere',
+                              fontFamily: program.path ? 'monospace' : 'inherit',
+                            }}
+                          >
+                            {program.path || '受保护的系统进程'}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ overflowWrap: 'anywhere' }}
+                          >
                             {`${program.connectionCount} 条连接 · ${processLabel}${protocolLabel ? ` · ${protocolLabel}` : ''}`}
                           </Typography>
                         </Stack>
                       }
                     />
+                    <Button
+                      size="small"
+                      variant={registered ? 'text' : 'outlined'}
+                      color={registered ? 'success' : 'primary'}
+                      startIcon={registered ? <CheckRounded /> : undefined}
+                      disabled={registered}
+                      onClick={() => onImport(program)}
+                      sx={{
+                        mt: 0.1,
+                        flex: '0 0 auto',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {registered ? '已设置' : '设置分流'}
+                    </Button>
                   </ListItem>
                 </Box>
               )
