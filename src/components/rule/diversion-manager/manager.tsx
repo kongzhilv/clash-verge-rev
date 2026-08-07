@@ -12,7 +12,6 @@ import {
   Box,
   Button,
   CircularProgress,
-  Dialog,
   IconButton,
   Stack,
   Tab,
@@ -23,6 +22,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { AdaptiveDialog } from '@/components/base'
 import { notifyDiversionUpdated } from '@/hooks/use-diversion-profile'
 import { readProfileFile, saveProfileFile } from '@/services/cmds'
 import { showNotice } from '@/services/notice-service'
@@ -216,12 +216,18 @@ export const DiversionManager = ({
         </Button>
       </Tooltip>
 
-      <Dialog fullScreen open={open} onClose={() => !saving && setOpen(false)}>
+      <AdaptiveDialog
+        open={open}
+        onClose={() => !saving && setOpen(false)}
+        maxWidth="lg"
+        fillDesktopHeight
+        aria-labelledby="diversion-center-title"
+      >
         <AppBar
-          position="sticky"
+          position="static"
           color="default"
           elevation={0}
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
+          sx={{ flex: '0 0 auto', borderBottom: 1, borderColor: 'divider' }}
         >
           <Toolbar sx={{ gap: 1.25, minHeight: 60 }}>
             <IconButton
@@ -233,10 +239,18 @@ export const DiversionManager = ({
               <CloseRounded />
             </IconButton>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              <Typography
+                id="diversion-center-title"
+                variant="h6"
+                sx={{ fontWeight: 700 }}
+              >
                 分流中心
               </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', overflowWrap: 'anywhere' }}
+              >
                 {`${config.projects.length} 个应用规则 · ${enabledGroupCount} 个规则组生效`}
               </Typography>
             </Box>
@@ -280,7 +294,10 @@ export const DiversionManager = ({
 
         <Box
           sx={{
-            minHeight: '100%',
+            flex: '1 1 0',
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
             bgcolor: 'background.default',
             px: { xs: 1.25, md: 2.5 },
             py: 2,
@@ -374,7 +391,7 @@ export const DiversionManager = ({
             )}
           </Box>
         </Box>
-      </Dialog>
+      </AdaptiveDialog>
     </>
   )
 }
