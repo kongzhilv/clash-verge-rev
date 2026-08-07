@@ -13,7 +13,7 @@ import {
 } from '@mui/material'
 import { useMemo } from 'react'
 
-import { OverflowReveal, softScrollAreaSx } from '@/components/base'
+import { softScrollAreaSx } from '@/components/base'
 import { useProxySelection } from '@/hooks/use-proxy-selection'
 import { useAppRefreshers, useProxiesData } from '@/providers/app-data-context'
 import { showNotice } from '@/services/notice-service'
@@ -78,7 +78,12 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
       >
         <AccountTreeRounded color="primary" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <OverflowReveal value={groupName} fontWeight={700} />
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 700, overflowWrap: 'anywhere' }}
+          >
+            {groupName}
+          </Typography>
           <Stack
             direction="row"
             spacing={0.75}
@@ -88,44 +93,51 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
               size="small"
               label={`类型：${String(group.type ?? '未知')}`}
             />
-            <Box
+            <Stack
+              direction="row"
+              spacing={0.45}
               sx={{
-                display: 'inline-flex',
                 minWidth: 0,
-                maxWidth: { xs: '100%', sm: 360 },
-                alignItems: 'center',
-                gap: 0.45,
+                maxWidth: '100%',
+                alignItems: 'flex-start',
                 px: 0.85,
-                py: 0.15,
+                py: 0.25,
                 border: 1,
                 borderColor: 'primary.main',
-                borderRadius: 999,
+                borderRadius: 2,
                 color: 'primary.main',
                 bgcolor: 'background.paper',
               }}
             >
-              <CheckRounded sx={{ fontSize: 16, flex: '0 0 auto' }} />
-              <Typography variant="caption" sx={{ flex: '0 0 auto' }}>
-                当前：
+              <CheckRounded sx={{ fontSize: 16, flex: '0 0 auto', mt: 0.05 }} />
+              <Typography
+                variant="caption"
+                sx={{ minWidth: 0, fontWeight: 650, overflowWrap: 'anywhere' }}
+              >
+                当前：{current || '未选择'}
               </Typography>
-              <Box sx={{ minWidth: 0, flex: 1 }}>
-                <OverflowReveal
-                  value={current || '未选择'}
-                  variant="caption"
-                  fontWeight={650}
-                />
-              </Box>
-            </Box>
+            </Stack>
             <Chip size="small" label={`${proxiesInGroup.length} 个候选节点`} />
           </Stack>
         </Box>
-        <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 320 } }}>
+        <FormControl
+          fullWidth
+          size="small"
+          sx={{ width: { md: 360 }, flex: { md: '0 0 360px' } }}
+        >
           <InputLabel>直接切换此代理组</InputLabel>
           <Select
             label="直接切换此代理组"
             value={current}
             renderValue={(selected) => (
-              <OverflowReveal value={String(selected)} variant="body2" />
+              <Typography
+                component="span"
+                variant="body2"
+                title={String(selected)}
+                sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}
+              >
+                {String(selected)}
+              </Typography>
             )}
             MenuProps={{
               slotProps: {
@@ -145,10 +157,17 @@ export const FocusedPolicyPanel = ({ policy }: FocusedPolicyPanelProps) => {
               const name = String(proxy.name ?? '').trim()
               const label = `${name} · ${String(proxy.type ?? '未知类型')}`
               return name ? (
-                <MenuItem key={name} value={name} sx={{ minWidth: 0 }}>
-                  <Box sx={{ minWidth: 0, width: '100%' }}>
-                    <OverflowReveal value={label} variant="body2" />
-                  </Box>
+                <MenuItem
+                  key={name}
+                  value={name}
+                  sx={{ minWidth: 0, whiteSpace: 'normal', alignItems: 'flex-start' }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ minWidth: 0, overflowWrap: 'anywhere' }}
+                  >
+                    {label}
+                  </Typography>
                 </MenuItem>
               ) : null
             })}
