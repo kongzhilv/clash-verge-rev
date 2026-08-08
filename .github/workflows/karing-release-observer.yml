@@ -22,7 +22,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: '1'
-      RELEASE_TAG: v2.5.4-karing.6
+      RELEASE_TAG: v2.5.4-karing.7
       STATUS_MARKER: '<!-- karing-v254-release-observer -->'
     steps:
       - name: 等待主发行运行并持续回报
