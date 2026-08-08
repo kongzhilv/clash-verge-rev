@@ -4,6 +4,7 @@ const files = {
   adaptiveDialog: 'src/components/base/adaptive-dialog.tsx',
   connectionDetail: 'src/components/connection/connection-detail.tsx',
   connectionRow: 'src/components/connection/connection-row-item.tsx',
+  connectionTable: 'src/components/connection/connection-table.tsx',
   connectionAssistant:
     'src/components/connection/connection-rule-assistant.tsx',
   connectionsPage: 'src/pages/connections.tsx',
@@ -82,6 +83,31 @@ requireText(
   'connection detail actions adapt on narrow windows',
 )
 requireText(
+  'connectionDetail',
+  "useMediaQuery(theme.breakpoints.up('md'))",
+  'connection detail switches to a docked side pane on desktop',
+)
+requireText(
+  'connectionDetail',
+  "const DETAIL_PANEL_WIDTH = 'clamp(420px, 42vw, 560px)'",
+  'desktop detail pane keeps a bounded responsive width',
+)
+requireText(
+  'connectionDetail',
+  'width: detailVisible ? DETAIL_PANEL_WIDTH : 0',
+  'desktop detail pane reserves layout width instead of covering the table',
+)
+requireText(
+  'connectionDetail',
+  'variant="temporary"',
+  'small screens keep an overlay drawer instead of squeezing the table',
+)
+forbidText(
+  'connectionDetail',
+  "width: { xs: '100%', sm: 560 }",
+  'connection detail must not restore the old fixed overlay width',
+)
+requireText(
   'connectionRow',
   "flexWrap: 'wrap'",
   'connection list metadata can wrap instead of fixed percentage clipping',
@@ -108,8 +134,23 @@ requireText(
 )
 requireText(
   'connectionsPage',
+  "flex: '1 1 auto'",
+  'connection workspace can shrink next to the docked detail pane',
+)
+requireText(
+  'connectionsPage',
+  '<ConnectionDetail ref={detailRef} />',
+  'connection detail participates in the connection workspace layout',
+)
+requireText(
+  'connectionsPage',
   'estimateSize={66}',
   'connection virtual list estimate matches the minimum row height',
+)
+requireText(
+  'connectionTable',
+  "overflow: 'auto'",
+  'connection table keeps horizontal scrolling after the workspace narrows',
 )
 
 requireText(
