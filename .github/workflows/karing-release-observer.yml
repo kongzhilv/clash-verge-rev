@@ -4,10 +4,20 @@ on:
   push:
     branches:
       - feature/karing-style-diversion
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
 
 permissions:
   actions: read
-  contents: write
+  contents: read
   issues: write
   pull-requests: write
 
@@ -16,126 +26,105 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  recover-and-verify:
-    name: 恢复发行并完成最终核验
+  observe:
+    name: 跟踪审查与正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: '1'
       RELEASE_TAG: v2.5.4-karing.7
-      MAIN_RUN_ID: '31241258493'
-      SOURCE_SHA: '170ff09a1918ceca75c9303364fea2665d5750cc'
-      RELEASE_TARGET_SHA: '044a5a9f48064b2ab55f4f2999957ebdcdbdafb0'
+      RELEASE_BRANCH: feature/karing-style-diversion
+      MAIN_WORKFLOW: karing-diagnostics-once.yml
       STATUS_MARKER: '<!-- karing-v254-release-observer -->'
     steps:
-      - name: 验证源码审查、平台构建与发行产物均已完成
+      - name: 等待对应源码提交的主发行运行
         shell: bash
         run: |
           set -euo pipefail
 
-          jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${MAIN_RUN_ID}/jobs?per_page=100")
-          failed_jobs=$(jq -r '[.jobs[] | select(.name != "发布正式 GitHub Release") | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
-          if [ -n "$failed_jobs" ]; then
-            echo "Non-publish jobs are not green: $failed_jobs" >&2
+          update_comment() {
+            local body="$1"
+            local comment_id
+            comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
+              --jq ".[] | select(.body | contains(\"${STATUS_MARKER}\")) | .id" | head -n1 || true)
+            if [ -n "$comment_id" ]; then
+              jq -n --arg body "$body" '{body: $body}' | \
+                gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input - >/dev/null
+            else
+              jq -n --arg body "$body" '{body: $body}' | \
+                gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input - >/dev/null
+            fi
+          }
+
+          run_id=''
+          for attempt in $(seq 1 60); do
+            run_id=$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${MAIN_WORKFLOW}/runs" \
+              -f branch="${RELEASE_BRANCH}" -f per_page=30 \
+              --jq ".workflow_runs[] | select(.head_sha == \"${GITHUB_SHA}\") | .id" | head -n1 || true)
+            if [ -n "$run_id" ]; then
+              break
+            fi
+            sleep 10
+          done
+
+          if [ -z "$run_id" ]; then
+            update_comment "${STATUS_MARKER}
+          ## Karing 2.5.4 发行状态
+
+          ❌ 没有找到源码提交 \`${GITHUB_SHA}\` 对应的主发行运行。"
             exit 1
           fi
 
-          for required_job in \
-            '审查并验证源码' \
-            '构建 Windows x64' \
-            '构建 Windows ARM64' \
-            '构建固定 WebView2 x64' \
-            '构建固定 WebView2 ARM64' \
-            '构建 macOS Apple Silicon' \
-            '构建 macOS Intel' \
-            '构建 Linux x64' \
-            '构建 Linux ARM64' \
-            '构建 Linux ARMv7' \
-            '汇总并审查发行产物'; do
-            count=$(jq --arg name "$required_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$jobs_json")
-            test "$count" -ge 1
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}"
+          update_comment "${STATUS_MARKER}
+          ## Karing 2.5.4 发行状态
+
+          ⏳ 正在审查、构建并发行
+
+          - 源码提交：\`${GITHUB_SHA}\`
+          - 主发行运行：${run_url}
+          - 预期标签：\`${RELEASE_TAG}\`"
+
+          status=''
+          conclusion=''
+          for attempt in $(seq 1 300); do
+            status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
+            conclusion=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion // ""')
+            if [ "$status" = 'completed' ]; then
+              break
+            fi
+            sleep 60
           done
 
-          artifact_count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${MAIN_RUN_ID}/artifacts?per_page=100" \
-            --jq '[.artifacts[] | select(.name == "karing-release-assets" and .expired == false)] | length')
-          test "$artifact_count" -eq 1
+          if [ "$status" != 'completed' ] || [ "$conclusion" != 'success' ]; then
+            failed_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | (.name + ": " + (.conclusion // "unknown"))] | join("；")')
+            update_comment "${STATUS_MARKER}
+          ## Karing 2.5.4 发行状态
 
-      - name: 下载已审查的发行资产
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf release-assets
-          gh run download "${MAIN_RUN_ID}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --name karing-release-assets \
-            --dir release-assets
+          ❌ 审查、构建或发行未全部成功
 
-      - name: 复验发行资产与构建来源
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          test -f release-assets/SHA256SUMS.txt
-          test -f release-assets/BUILD_INFO.txt
-          test -f release-assets/release-notes.md
-          grep -Fq "Commit: ${SOURCE_SHA}" release-assets/BUILD_INFO.txt
-          grep -Fq "Release tag: ${RELEASE_TAG}" release-assets/BUILD_INFO.txt
-
-          installer_count=$(find release-assets -maxdepth 1 -type f \( \
-            -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
-            \) | wc -l)
-          checksum_lines=$(grep -cve '^$' release-assets/SHA256SUMS.txt)
-          test "$installer_count" -eq 12
-          test "$checksum_lines" -eq 12
-
-          (
-            cd release-assets
-            sha256sum --check SHA256SUMS.txt
-          )
-
-          printf '\nBuild source: `%s`\n' "$SOURCE_SHA" >> release-assets/release-notes.md
-
-      - name: 使用无 workflow 差异的发行锚点发布 Latest
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # GitHub 对目标提交包含 workflow 变更时要求额外 Workflows 写权限；
-          # RELEASE_TARGET_SHA 是从已审查 SOURCE_SHA 的源码树生成的发行快照，
-          # 仅把 .github 元数据恢复为默认分支状态，应用源码与构建输入保持一致。
-          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
+          - 源码提交：\`${GITHUB_SHA}\`
+          - 主发行运行：${run_url}
+          - 失败作业：${failed_jobs:-未取得作业信息}"
+            exit 1
           fi
 
-          gh release create "${RELEASE_TAG}" \
-            release-assets/*.exe \
-            release-assets/*.dmg \
-            release-assets/*.deb \
-            release-assets/*.rpm \
-            release-assets/SHA256SUMS.txt \
-            release-assets/BUILD_INFO.txt \
-            --repo "${GITHUB_REPOSITORY}" \
-            --target "${RELEASE_TARGET_SHA}" \
-            --title "Clash Verge Rev Karing v2.5.4" \
-            --notes-file release-assets/release-notes.md \
-            --latest
+          release_json=''
+          for attempt in $(seq 1 30); do
+            if release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" 2>/dev/null); then
+              break
+            fi
+            sleep 10
+          done
+          test -n "$release_json"
 
-      - name: 核验公开 Release、标签与资产
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")
           asset_count=$(jq '.assets | length' <<<"$release_json")
-          target=$(jq -r '.target_commitish' <<<"$release_json")
           draft=$(jq -r '.draft' <<<"$release_json")
           prerelease=$(jq -r '.prerelease' <<<"$release_json")
           latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
-          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')
-
           test "$asset_count" -eq 14
-          test "$target" = "$RELEASE_TARGET_SHA"
-          test "$tag_sha" = "$RELEASE_TARGET_SHA"
           test "$draft" = false
           test "$prerelease" = false
           test "$latest_tag" = "$RELEASE_TAG"
@@ -144,48 +133,21 @@ jobs:
           mkdir -p release-audit
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern SHA256SUMS.txt --pattern BUILD_INFO.txt --dir release-audit
-          grep -Fq "Commit: ${SOURCE_SHA}" release-audit/BUILD_INFO.txt
+          grep -Fq "Commit: ${GITHUB_SHA}" release-audit/BUILD_INFO.txt
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
           test "$checksum_lines" -eq 12
 
-      - name: 更新 PR 发行状态
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
-            --jq ".[] | select(.body | contains(\"${STATUS_MARKER}\")) | .id" | head -n1 || true)
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            release_url=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url --jq '.url')
-            body="${STATUS_MARKER}
+          release_url=$(jq -r '.html_url' <<<"$release_json")
+          release_target=$(jq -r '.target_commitish' <<<"$release_json")
+          update_comment "${STATUS_MARKER}
           ## Karing 2.5.4 发行状态
 
-          ✅ 视频反馈的连接详情遮挡问题已修复，源码审查、全平台构建、发行产物复验与正式发行已完成。
+          ✅ 源码审查、全平台构建与正式发行全部完成
 
-          - 构建源码：\`${SOURCE_SHA}\`
-          - 发行锚点：\`${RELEASE_TARGET_SHA}\`（应用源码与构建输入一致，\`.github\` 使用默认分支元数据）
-          - 主发行运行：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${MAIN_RUN_ID}
+          - 构建源码：\`${GITHUB_SHA}\`
+          - Release 目标：\`${release_target}\`
+          - 主发行运行：${run_url}
           - Release：${release_url}
           - 标签：\`${RELEASE_TAG}\`
           - Release 资产：14 个；SHA256 安装文件记录：12 条
           - Draft：否；Pre-release：否；Latest：是"
-          else
-            body="${STATUS_MARKER}
-          ## Karing 2.5.4 发行状态
-
-          ❌ 发行恢复流程没有得到公开 Release \`${RELEASE_TAG}\`。
-
-          - 构建源码：\`${SOURCE_SHA}\`
-          - 主发行运行：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${MAIN_RUN_ID}
-          - 恢复运行：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          fi
-
-          if [ -n "$comment_id" ]; then
-            jq -n --arg body "$body" '{body: $body}' | \
-              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input - >/dev/null
-          else
-            jq -n --arg body "$body" '{body: $body}' | \
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input - >/dev/null
-          fi
