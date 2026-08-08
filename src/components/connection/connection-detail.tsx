@@ -23,7 +23,9 @@ import {
   Paper,
   Stack,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { useLockFn } from 'ahooks'
 import dayjs from 'dayjs'
 import {
@@ -54,6 +56,7 @@ export interface ConnectionDetailRef {
 }
 
 const PID_PLACEHOLDER_PATTERN = /^PID\s+\d+$/i
+const DETAIL_PANEL_WIDTH = 'clamp(420px, 42vw, 560px)'
 
 const processNameFrom = (process: string, processPath: string) => {
   const preferred = process.trim()
@@ -62,6 +65,8 @@ const processNameFrom = (process: string, processPath: string) => {
 }
 
 export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
+  const theme = useTheme()
+  const desktopSidePanel = useMediaQuery(theme.breakpoints.up('md'))
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<IConnectionsItem | null>(null)
   const [initiallyClosed, setInitiallyClosed] = useState(false)
@@ -90,6 +95,7 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
   )
   const detail = activeDetail ?? closedDetail ?? selected
   const closed = initiallyClosed || (!activeDetail && Boolean(closedDetail))
+  const detailVisible = open && !ruleAssistantOpen
 
   const onClose = useCallback(() => {
     setOpen(false)
@@ -108,36 +114,59 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
     close: onClose,
   }))
 
+  const detailContent = detail ? (
+    <InnerConnectionDetail
+      data={detail}
+      closed={closed}
+      onClose={onClose}
+      onOpenRuleAssistant={() => setRuleAssistantOpen(true)}
+    />
+  ) : null
+
   return (
     <>
-      <Drawer
-        anchor="right"
-        open={open && !ruleAssistantOpen}
-        onClose={onClose}
-        slotProps={{
-          paper: {
-            sx: {
-              width: { xs: '100%', sm: 560 },
-              maxWidth: '100vw',
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100dvh',
-              maxHeight: '100dvh',
-              overflow: 'hidden',
-              bgcolor: 'background.default',
+      {desktopSidePanel ? (
+        <Box
+          sx={{
+            flex: '0 0 auto',
+            width: detailVisible ? DETAIL_PANEL_WIDTH : 0,
+            minWidth: 0,
+            height: '100%',
+            overflow: 'hidden',
+            borderLeft: detailVisible ? 1 : 0,
+            borderColor: 'divider',
+            bgcolor: 'background.default',
+            transition: theme.transitions.create('width', {
+              duration: theme.transitions.duration.shorter,
+            }),
+          }}
+        >
+          {detailVisible ? detailContent : null}
+        </Box>
+      ) : (
+        <Drawer
+          variant="temporary"
+          anchor="right"
+          open={detailVisible}
+          onClose={onClose}
+          slotProps={{
+            paper: {
+              sx: {
+                width: '100%',
+                maxWidth: '100vw',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100dvh',
+                maxHeight: '100dvh',
+                overflow: 'hidden',
+                bgcolor: 'background.default',
+              },
             },
-          },
-        }}
-      >
-        {detail ? (
-          <InnerConnectionDetail
-            data={detail}
-            closed={closed}
-            onClose={onClose}
-            onOpenRuleAssistant={() => setRuleAssistantOpen(true)}
-          />
-        ) : null}
-      </Drawer>
+          }}
+        >
+          {detailContent}
+        </Drawer>
+      )}
 
       {detail && (
         <ConnectionRuleAssistant
@@ -297,7 +326,7 @@ const InnerConnectionDetail = ({
       sx={{
         flex: '1 1 auto',
         height: '100dvh',
-        maxHeight: '100dvh',
+        maxHeight: '100%',
         minHeight: 0,
         overflow: 'hidden',
       }}
