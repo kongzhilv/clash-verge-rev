@@ -36,23 +36,37 @@ const RuleItem = (props: Props) => {
   return (
     <Item sx={{ borderBottom: '1px solid var(--divider-color)' }}>
       <Typography
-        color="text.secondary"
         variant="body2"
-        sx={{ lineHeight: 2, minWidth: 30, mr: 2.25, textAlign: 'center' }}
+        sx={{
+          color: 'text.secondary',
+          lineHeight: 2,
+          minWidth: 30,
+          mr: 2.25,
+          textAlign: 'center',
+        }}
       >
         {value.lineNo}
       </Typography>
-
       <Box sx={{ userSelect: 'text' }}>
-        <Typography component="h6" variant="subtitle1" color="text.primary">
+        <Typography
+          component="h6"
+          variant="subtitle1"
+          sx={{
+            color: 'text.primary',
+          }}
+        >
           {value.payload || '-'}
         </Typography>
 
         <Typography
           component="span"
           variant="body2"
-          color="text.secondary"
-          sx={{ mr: 3, minWidth: 120, display: 'inline-block' }}
+          sx={{
+            color: 'text.secondary',
+            mr: 3,
+            minWidth: 120,
+            display: 'inline-block',
+          }}
         >
           {value.type}
         </Typography>

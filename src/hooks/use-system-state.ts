@@ -8,13 +8,13 @@ import { useVerge } from './use-verge'
 import { useVisibility } from './use-visibility'
 
 interface SystemState {
-  runningMode: 'Sidecar' | 'Service'
+  runningMode: 'Sidecar' | 'Service' | 'NotRunning'
   isAdminMode: boolean
   isServiceOk: boolean
 }
 
 const defaultSystemState = {
-  runningMode: 'Sidecar',
+  runningMode: 'NotRunning',
   isAdminMode: false,
   isServiceOk: false,
 } as SystemState
@@ -58,6 +58,9 @@ export function useSystemState() {
 
   const isSidecarMode = systemState.runningMode === 'Sidecar'
   const isServiceMode = systemState.runningMode === 'Service'
+  // The master proxy switch derives its checked state from the actual core runtime,
+  // not from persisted system-proxy or TUN preferences.
+  const isCoreRunning = systemState.runningMode !== 'NotRunning'
   const isTunModeAvailable = systemState.isAdminMode || systemState.isServiceOk
 
   const enable_tun_mode = verge?.enable_tun_mode
@@ -110,6 +113,7 @@ export function useSystemState() {
     isServiceOk: systemState.isServiceOk,
     isSidecarMode,
     isServiceMode,
+    isCoreRunning,
     isTunModeAvailable,
     mutateSystemState,
     isLoading,

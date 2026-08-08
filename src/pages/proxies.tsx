@@ -1,13 +1,23 @@
 import { LanOutlined, LanRounded, WarningRounded } from '@mui/icons-material'
-import { Box, Button, ButtonGroup } from '@mui/material'
+import {
+  Box,
+  Button,
+  ButtonGroup,
+  IconButton,
+  Stack,
+  Tooltip,
+} from '@mui/material'
 import { useLockFn } from 'ahooks'
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router'
 import { closeAllConnections } from 'tauri-plugin-mihomo-api'
 
 import { BasePage, TooltipIcon } from '@/components/base'
 import { ProviderButton } from '@/components/proxy/provider-button'
 import { ProxyGroups } from '@/components/proxy/proxy-groups'
+import FocusedPolicyPanel from '@/components/routing/focused-policy-panel'
+import RoutingRelationsPanel from '@/components/routing/routing-relations-panel'
 import { useVerge } from '@/hooks/use-verge'
 import {
   useAppRefreshers,
@@ -29,8 +39,9 @@ const isMode = (value: unknown): value is Mode =>
 
 const ProxyPage = () => {
   const { t } = useTranslation()
+  const [searchParams] = useSearchParams()
+  const policyFilter = searchParams.get('policy')
 
-  // 从 localStorage 恢复链式代理按钮状态
   const [isChainMode, setIsChainMode] = useState(() => {
     try {
       const saved = localStorage.getItem('proxy-chain-mode-enabled')
@@ -58,12 +69,10 @@ const ProxyPage = () => {
   const chainWarning = t('proxies.page.chain.warning')
 
   const onChangeMode = useLockFn(async (mode: Mode) => {
-    // 断开连接
     if (mode !== curMode && verge?.auto_close_connection) {
       closeAllConnections()
     }
     try {
-      // patchClashMode 在后端 PATCH 失败时会 reject，需提示用户而非静默失败
       await patchClashMode(mode)
       refreshClashConfig()
     } catch (error) {
@@ -75,11 +84,9 @@ const ProxyPage = () => {
     const newChainMode = !isChainMode
 
     setIsChainMode(newChainMode)
-    // 保存链式代理按钮状态到 localStorage
     localStorage.setItem('proxy-chain-mode-enabled', newChainMode.toString())
 
     if (!newChainMode) {
-      // 退出链式代理模式时，清除链式代理配置
       try {
         debugLog('Exiting chain mode, clearing chain configuration')
         await updateProxyChainConfigInRuntime(null)
@@ -90,7 +97,6 @@ const ProxyPage = () => {
     }
   })
 
-  // 当开启链式代理模式时，获取配置数据
   useEffect(() => {
     if (!isChainMode) {
       updateChainConfigData(null)
@@ -105,25 +111,19 @@ const ProxyPage = () => {
 
         if (!exitNode) {
           console.error('No proxy chain exit node found in localStorage')
-          if (!cancelled) {
-            updateChainConfigData('')
-          }
+          if (!cancelled) updateChainConfigData('')
           return
         }
 
         const configData = await getRuntimeProxyChainConfig(exitNode)
-        if (!cancelled) {
-          updateChainConfigData(configData || '')
-        }
+        if (!cancelled) updateChainConfigData(configData || '')
       } catch (error) {
         console.error('Failed to get runtime proxy chain config:', error)
-        if (!cancelled) {
-          updateChainConfigData('')
-        }
+        if (!cancelled) updateChainConfigData('')
       }
     }
 
-    fetchChainConfig()
+    void fetchChainConfig()
 
     return () => {
       cancelled = true
@@ -132,14 +132,14 @@ const ProxyPage = () => {
 
   useEffect(() => {
     if (normalizedMode && !isMode(normalizedMode)) {
-      onChangeMode('rule')
+      void onChangeMode('rule')
     }
   }, [normalizedMode, onChangeMode])
 
   return (
     <BasePage
       full
-      contentStyle={{ height: '100%' }}
+      contentStyle={{ height: '100%', overflow: 'hidden' }}
       title={
         isChainMode ? (
           <Box
@@ -160,7 +160,7 @@ const ProxyPage = () => {
         )
       }
       header={
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
           <ProviderButton />
 
           <ButtonGroup size="small">
@@ -168,37 +168,47 @@ const ProxyPage = () => {
               <Button
                 key={mode}
                 variant={mode === curMode ? 'contained' : 'outlined'}
-                onClick={() => onChangeMode(mode)}
-                sx={{ textTransform: 'capitalize' }}
+                onClick={() => void onChangeMode(mode)}
+                sx={{ minWidth: 58, textTransform: 'none' }}
               >
                 {t(`proxies.page.modes.${mode}`)}
               </Button>
             ))}
           </ButtonGroup>
 
-          <Button
-            size="small"
-            variant={isChainMode ? 'contained' : 'outlined'}
-            onClick={onToggleChainMode}
-            sx={{ ml: 1 }}
-            startIcon={
-              isChainMode ? (
+          <Tooltip title={t('proxies.page.actions.toggleChain')}>
+            <IconButton
+              size="small"
+              color={isChainMode ? 'primary' : 'default'}
+              onClick={() => void onToggleChainMode()}
+            >
+              {isChainMode ? (
                 <LanRounded fontSize="small" />
               ) : (
                 <LanOutlined fontSize="small" />
-              )
-            }
-          >
-            {t('proxies.page.actions.toggleChain')}
-          </Button>
-        </Box>
+              )}
+            </IconButton>
+          </Tooltip>
+        </Stack>
       }
     >
-      <ProxyGroups
-        mode={curMode ?? 'rule'}
-        isChainMode={isChainMode}
-        chainConfigData={chainConfigData}
-      />
+      <Stack sx={{ height: '100%', minHeight: 0 }} spacing={1}>
+        {policyFilter && (
+          <Box sx={{ px: 1.25, pt: 1.25 }}>
+            <Stack spacing={1}>
+              <FocusedPolicyPanel policy={policyFilter} />
+              <RoutingRelationsPanel policyFilter={policyFilter} compact />
+            </Stack>
+          </Box>
+        )}
+        <Box sx={{ flex: 1, minHeight: 0 }}>
+          <ProxyGroups
+            mode={curMode ?? 'rule'}
+            isChainMode={isChainMode}
+            chainConfigData={chainConfigData}
+          />
+        </Box>
+      </Stack>
     </BasePage>
   )
 }

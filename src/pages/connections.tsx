@@ -1,4 +1,6 @@
 import {
+  AccountTreeRounded,
+  CloseRounded,
   DeleteForeverRounded,
   TableChartRounded,
   TableRowsRounded,
@@ -8,15 +10,18 @@ import {
   Box,
   Button,
   ButtonGroup,
+  Chip,
   Fab,
   IconButton,
   MenuItem,
+  Stack,
   Tooltip,
   Zoom,
 } from '@mui/material'
 import { useLockFn } from 'ahooks'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate, useSearchParams } from 'react-router'
 import { closeAllConnections } from 'tauri-plugin-mihomo-api'
 
 import {
@@ -29,19 +34,25 @@ import {
 } from '@/components/base'
 import {
   ConnectionDetail,
-  ConnectionDetailRef,
+  type ConnectionDetailRef,
 } from '@/components/connection/connection-detail'
+import ConnectionFilterMenu, {
+  type ConnectionFilters,
+} from '@/components/connection/connection-filter-menu'
 import { ConnectionRowItem } from '@/components/connection/connection-row-item'
 import {
   getConnectionStartTime,
   useConnectionRowViews,
 } from '@/components/connection/connection-row-view'
 import { ConnectionTable } from '@/components/connection/connection-table'
+import {
+  connectionUsesPolicy,
+  resolveConnectionProject,
+} from '@/components/routing/connection-project'
 import { useConnectionData } from '@/hooks/use-connection-data'
 import { useConnectionSetting } from '@/hooks/use-connection-setting'
-import { useTrafficData } from '@/hooks/use-traffic-data'
+import { useDiversionProfile } from '@/hooks/use-diversion-profile'
 import { useVisibility } from '@/hooks/use-visibility'
-import parseTraffic from '@/utils/parse-traffic'
 
 type OrderFunc = (list: IConnectionsItem[]) => IConnectionsItem[]
 
@@ -79,13 +90,35 @@ const orderFunctionMap = ORDER_OPTIONS.reduce<Record<OrderKey, OrderFunc>>(
 )
 
 const EMPTY_CONNECTIONS: IConnectionsItem[] = []
+const EMPTY_FILTERS: ConnectionFilters = {
+  application: '',
+  rule: '',
+  outbound: '',
+}
+
+const connectionApplication = (connection: IConnectionsItem) => {
+  const process = String(connection.metadata.process ?? '').trim()
+  if (process) return process
+  const path = String(connection.metadata.processPath ?? '').trim()
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+}
+
+const connectionOutbound = (connection: IConnectionsItem) =>
+  connection.chains.at(-1)?.trim() ?? ''
+
 const ConnectionsPage = () => {
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const pageVisible = useVisibility()
+  const { profile } = useDiversionProfile()
+  const projectFilter = searchParams.get('project')?.trim() ?? ''
+  const policyFilter = searchParams.get('policy')?.trim() ?? ''
   const [match, setMatch] = useState<(input: string) => boolean>(
     () => () => true,
   )
   const [hasSearch, setHasSearch] = useState(false)
+  const [filters, setFilters] = useState<ConnectionFilters>(EMPTY_FILTERS)
   const [curOrderOpt, setCurOrderOpt] = useState<OrderKey>('default')
   const [connectionsType, setConnectionsType] = useState<'active' | 'closed'>(
     'active',
@@ -95,14 +128,9 @@ const ConnectionsPage = () => {
     response: { data: connections },
     clearClosedConnections,
   } = useConnectionData({ enabled: pageVisible })
-  const {
-    response: { data: traffic },
-  } = useTrafficData({ enabled: pageVisible })
 
   const [setting, setSetting] = useConnectionSetting()
-
   const isTableLayout = setting.layout === 'table'
-
   const [isColumnManagerOpen, setIsColumnManagerOpen] = useState(false)
 
   const selectedConnections =
@@ -110,21 +138,86 @@ const ConnectionsPage = () => {
       ? (connections?.activeConnections ?? EMPTY_CONNECTIONS)
       : (connections?.closedConnections ?? EMPTY_CONNECTIONS)
 
+  const projectMatches = useMemo(
+    () =>
+      new Map(
+        selectedConnections.map((connection) => [
+          connection.id,
+          resolveConnectionProject(connection, profile?.config),
+        ]),
+      ),
+    [profile?.config, selectedConnections],
+  )
+
+  const activeProject = profile?.config.projects.find(
+    (project) => project.id === projectFilter,
+  )
+
   const filterConn = useMemo(() => {
     const orderFunc = orderFunctionMap[curOrderOpt]
+    const filtered = selectedConnections.filter((conn) => {
+      const projectMatch = projectMatches.get(conn.id)
+      if (projectFilter && projectMatch?.project.id !== projectFilter) {
+        return false
+      }
+      if (
+        policyFilter &&
+        projectMatch?.policy.toLowerCase() !== policyFilter.toLowerCase() &&
+        !connectionUsesPolicy(conn, policyFilter)
+      ) {
+        return false
+      }
+      if (
+        filters.application &&
+        connectionApplication(conn) !== filters.application
+      ) {
+        return false
+      }
+      if (filters.rule && conn.rule !== filters.rule) return false
+      if (filters.outbound && connectionOutbound(conn) !== filters.outbound) {
+        return false
+      }
+      if (!hasSearch) return true
 
-    if (isTableLayout && !hasSearch) return selectedConnections
-    if (!hasSearch) return orderFunc([...selectedConnections])
-
-    const matchConns = selectedConnections.filter((conn) => {
-      const { host, destinationIP, process } = conn.metadata
+      const { host, destinationIP, remoteDestination, process, processPath } =
+        conn.metadata
       return (
-        match(host || '') || match(destinationIP || '') || match(process || '')
+        match(host || '') ||
+        match(destinationIP || '') ||
+        match(remoteDestination || '') ||
+        match(process || '') ||
+        match(processPath || '') ||
+        match(conn.rule || '') ||
+        match(conn.chains.join(' ')) ||
+        match(projectMatch?.project.name ?? '') ||
+        match(projectMatch?.project.description ?? '') ||
+        match(projectMatch?.policy ?? '')
       )
     })
 
-    return orderFunc ? orderFunc(matchConns) : matchConns
-  }, [selectedConnections, isTableLayout, hasSearch, match, curOrderOpt])
+    if (
+      isTableLayout &&
+      !hasSearch &&
+      !projectFilter &&
+      !policyFilter &&
+      !filters.application &&
+      !filters.rule &&
+      !filters.outbound
+    ) {
+      return filtered
+    }
+    return orderFunc([...filtered])
+  }, [
+    curOrderOpt,
+    filters,
+    hasSearch,
+    isTableLayout,
+    match,
+    policyFilter,
+    projectFilter,
+    projectMatches,
+    selectedConnections,
+  ])
 
   const displayRows = useConnectionRowViews(
     isTableLayout ? EMPTY_CONNECTIONS : filterConn,
@@ -155,8 +248,8 @@ const ConnectionsPage = () => {
   const onCloseAll = useLockFn(closeAllConnections)
 
   const handleSearch = useCallback(
-    (match: (content: string) => boolean, state: SearchState) => {
-      setMatch(() => match)
+    (nextMatch: (content: string) => boolean, state: SearchState) => {
+      setMatch(() => nextMatch)
       setHasSearch(state.text.length > 0)
     },
     [],
@@ -166,154 +259,209 @@ const ConnectionsPage = () => {
   return (
     <BasePage
       full
-      title={
-        <span style={{ whiteSpace: 'nowrap' }}>
-          {t('connections.page.title')}
-        </span>
-      }
+      title={t('connections.page.title')}
       contentStyle={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        borderRadius: '8px',
         minHeight: 0,
       }}
       header={
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ mx: 1 }}>
-            {t('shared.labels.downloaded')}:{' '}
-            {parseTraffic(traffic?.downTotal || 0)}
-          </Box>
-          <Box sx={{ mx: 1 }}>
-            {t('shared.labels.uploaded')}: {parseTraffic(traffic?.upTotal || 0)}
-          </Box>
-          <IconButton
-            color="inherit"
-            size="small"
-            onClick={() =>
-              setSetting((o) =>
-                o?.layout !== 'table'
-                  ? { ...o, layout: 'table' }
-                  : { ...o, layout: 'list' },
-              )
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+          <Tooltip title="应用分流">
+            <IconButton
+              size="small"
+              onClick={() => navigate('/rules?manage=projects')}
+            >
+              <AccountTreeRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip
+            title={
+              isTableLayout
+                ? t('shared.actions.listView')
+                : t('shared.actions.tableView')
             }
           >
-            {isTableLayout ? (
-              <TableRowsRounded titleAccess={t('shared.actions.listView')} />
-            ) : (
-              <TableChartRounded titleAccess={t('shared.actions.tableView')} />
-            )}
-          </IconButton>
-          <Button size="small" variant="contained" onClick={onCloseAll}>
-            <span style={{ whiteSpace: 'nowrap' }}>
-              {t('shared.actions.closeAll')}
-            </span>
-          </Button>
-        </Box>
+            <IconButton
+              size="small"
+              onClick={() =>
+                setSetting((previous) =>
+                  previous?.layout !== 'table'
+                    ? { ...previous, layout: 'table' }
+                    : { ...previous, layout: 'list' },
+                )
+              }
+            >
+              {isTableLayout ? (
+                <TableRowsRounded fontSize="small" />
+              ) : (
+                <TableChartRounded fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t('shared.actions.closeAll')}>
+            <IconButton size="small" color="error" onClick={onCloseAll}>
+              <CloseRounded fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
       }
     >
       <Box
         sx={{
-          pt: 1,
-          mb: 0.5,
-          mx: '10px',
-          minHeight: '36px',
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
           display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          userSelect: 'text',
-          position: 'sticky',
-          top: 0,
-          zIndex: 2,
+          overflow: 'hidden',
         }}
       >
-        <ButtonGroup sx={{ mr: 1, flexBasis: 'content' }}>
-          <Button
-            size="small"
-            variant={connectionsType === 'active' ? 'contained' : 'outlined'}
-            onClick={() => selectConnectionsType('active')}
-          >
-            {t('connections.components.actions.active')}{' '}
-            {connections?.activeConnections.length}
-          </Button>
-          <Button
-            size="small"
-            variant={connectionsType === 'closed' ? 'contained' : 'outlined'}
-            onClick={() => selectConnectionsType('closed')}
-          >
-            {t('connections.components.actions.closed')}{' '}
-            {connections?.closedConnections.length}
-          </Button>
-        </ButtonGroup>
-        {!isTableLayout && (
-          <BaseStyledSelect
-            value={curOrderOpt}
-            onChange={(e) => setCurOrderOpt(e.target.value as OrderKey)}
-          >
-            {ORDER_OPTIONS.map((option) => (
-              <MenuItem key={option.id} value={option.id}>
-                <span style={{ fontSize: 14 }}>{t(option.labelKey)}</span>
-              </MenuItem>
-            ))}
-          </BaseStyledSelect>
-        )}
         <Box
           sx={{
-            flex: 1,
+            flex: '1 1 auto',
+            minWidth: 0,
+            minHeight: 0,
             display: 'flex',
-            alignItems: 'center',
-            '& > *': {
-              flex: 1,
-            },
+            flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
-          <BaseSearchBox onSearch={handleSearch} />
-        </Box>
-        {isTableLayout && hasTableData && (
-          <Tooltip title={t('connections.components.columnManager.title')}>
-            <IconButton
-              size="small"
-              aria-label={t('connections.components.columnManager.title')}
-              onClick={() => setIsColumnManagerOpen(true)}
-              sx={{ flex: '0 0 auto' }}
-            >
-              <ViewColumnRounded fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
-      </Box>
+          <Box
+            sx={{
+              px: 1.25,
+              py: 1,
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 0.75,
+              bgcolor: 'background.default',
+              userSelect: 'text',
+              position: 'sticky',
+              top: 0,
+              zIndex: 2,
+            }}
+          >
+            <ButtonGroup size="small" sx={{ flex: '0 0 auto' }}>
+              <Button
+                variant={
+                  connectionsType === 'active' ? 'contained' : 'outlined'
+                }
+                onClick={() => selectConnectionsType('active')}
+              >
+                {`${t('connections.components.actions.active')} ${connections?.activeConnections.length ?? 0}`}
+              </Button>
+              <Button
+                variant={
+                  connectionsType === 'closed' ? 'contained' : 'outlined'
+                }
+                onClick={() => selectConnectionsType('closed')}
+              >
+                {`${t('connections.components.actions.closed')} ${connections?.closedConnections.length ?? 0}`}
+              </Button>
+            </ButtonGroup>
 
-      {!hasTableData ? (
-        <BaseEmpty />
-      ) : isTableLayout ? (
-        <ConnectionTable
-          connections={filterConn}
-          onShowDetail={showDetailById}
-          columnManagerOpen={isColumnManagerOpen}
-          onCloseColumnManager={() => setIsColumnManagerOpen(false)}
-        />
-      ) : (
-        <VirtualList
-          key={connectionsType}
-          count={displayRows.length}
-          estimateSize={56}
-          renderItem={(i) => (
-            <ConnectionRowItem
-              row={displayRows[i]}
-              closed={connectionsType === 'closed'}
+            {!isTableLayout && (
+              <BaseStyledSelect
+                value={curOrderOpt}
+                onChange={(event) =>
+                  setCurOrderOpt(event.target.value as OrderKey)
+                }
+              >
+                {ORDER_OPTIONS.map((option) => (
+                  <MenuItem key={option.id} value={option.id}>
+                    <span style={{ fontSize: 14 }}>{t(option.labelKey)}</span>
+                  </MenuItem>
+                ))}
+              </BaseStyledSelect>
+            )}
+
+            {projectFilter && (
+              <Chip
+                size="small"
+                color="primary"
+                label={activeProject?.name ?? projectFilter}
+                onDelete={() => navigate('/connections')}
+              />
+            )}
+            {policyFilter && (
+              <Chip
+                size="small"
+                color="secondary"
+                label={policyFilter}
+                onDelete={() => navigate('/connections')}
+              />
+            )}
+
+            <Box
+              sx={{
+                flex: '1 1 220px',
+                minWidth: { xs: '100%', sm: 180 },
+              }}
+            >
+              <BaseSearchBox onSearch={handleSearch} />
+            </Box>
+
+            <ConnectionFilterMenu
+              connections={selectedConnections}
+              value={filters}
+              onChange={setFilters}
+            />
+
+            {isTableLayout && hasTableData && (
+              <Tooltip title={t('connections.components.columnManager.title')}>
+                <IconButton
+                  size="small"
+                  aria-label={t('connections.components.columnManager.title')}
+                  onClick={() => setIsColumnManagerOpen(true)}
+                >
+                  <ViewColumnRounded fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+
+          {!hasTableData ? (
+            <BaseEmpty />
+          ) : isTableLayout ? (
+            <ConnectionTable
+              connections={filterConn}
               onShowDetail={showDetailById}
+              columnManagerOpen={isColumnManagerOpen}
+              onCloseColumnManager={() => setIsColumnManagerOpen(false)}
+            />
+          ) : (
+            <VirtualList
+              key={`${connectionsType}:${projectFilter}:${policyFilter}`}
+              count={displayRows.length}
+              estimateSize={66}
+              renderItem={(index) => {
+                const row = displayRows[index]
+                const projectMatch = projectMatches.get(row.id)
+                return (
+                  <ConnectionRowItem
+                    row={row}
+                    closed={connectionsType === 'closed'}
+                    onShowDetail={showDetailById}
+                    projectName={projectMatch?.project.name}
+                    projectPolicy={projectMatch?.policy}
+                    projectInferred={projectMatch?.inferred}
+                  />
+                )
+              }}
+              style={{
+                flex: 1,
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
+              }}
             />
           )}
-          style={{
-            flex: 1,
-            borderRadius: '8px',
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-          }}
-        />
-      )}
-      <ConnectionDetail ref={detailRef} />
+        </Box>
+
+        <ConnectionDetail ref={detailRef} />
+      </Box>
+
       <Zoom
         in={connectionsType === 'closed' && filterConn.length > 0}
         unmountOnExit

@@ -2,9 +2,9 @@ mod config;
 mod lifecycle;
 mod state;
 
-use anyhow::Result;
 use arc_swap::{ArcSwap, ArcSwapOption};
 use clash_verge_logger::AsyncLogger;
+use clash_verge_logging::{Type, logging};
 use once_cell::sync::Lazy;
 use std::{
     fmt,
@@ -138,9 +138,13 @@ impl CoreManager {
         self.config_update_in_progress.store(false, Ordering::Release);
     }
 
-    pub async fn init(&self) -> Result<()> {
-        self.start_core().await?;
-        Ok(())
+    pub fn init(&self) {
+        self.set_running_mode(RunningMode::NotRunning);
+        logging!(
+            info,
+            Type::Core,
+            "application startup keeps the proxy core stopped until the user enables it"
+        );
     }
 }
 

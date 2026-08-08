@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{CoreManager, handle, tray},
+    core::{CoreManager, handle, manager::RunningMode, tray},
     feat::clean_async,
     process::AsyncHandler,
     utils,
@@ -79,29 +79,41 @@ fn after_change_clash_mode() {
     });
 }
 
-/// Change Clash mode (rule/global/direct/script)
+/// Change Clash mode (rule/global/direct/script).
 ///
-/// mihomo `/configs` PATCH 失败时返回 `Err`，以便命令层把失败上抛给前端。
-/// （此前该函数吞掉错误并始终视为成功，导致 UI 误判"切换成功"、看似"切不动"。）
+/// When the core is running, patch Mihomo first and persist only after success.
+/// When the core is stopped, persist the requested mode for the next start
+/// without attempting to connect to the absent named pipe.
 pub async fn change_clash_mode(mode: String) -> Result<(), String> {
     let mut mapping = Mapping::new();
     mapping.insert(Value::from("mode"), Value::from(mode.as_str()));
-    // Convert YAML mapping to JSON Value
-    let json_value = serde_json::json!({
-        "mode": mode
-    });
+
+    let core_running = !matches!(
+        CoreManager::global().get_running_mode().as_ref(),
+        RunningMode::NotRunning
+    );
+
     logging!(debug, Type::Core, "change clash mode to {mode}");
-    if let Err(err) = handle::Handle::mihomo().await.patch_base_config(&json_value).await {
-        logging!(error, Type::Core, "{err}");
-        return Err(err.to_string().into());
+    if core_running {
+        let json_value = serde_json::json!({
+            "mode": mode
+        });
+        if let Err(err) = handle::Handle::mihomo().await.patch_base_config(&json_value).await {
+            logging!(error, Type::Core, "{err}");
+            return Err(err.to_string().into());
+        }
+    } else {
+        logging!(
+            info,
+            Type::Core,
+            "core is stopped; saved Clash mode {mode} for the next start"
+        );
     }
 
-    // 更新订阅
     let clash = Config::clash().await;
     clash.edit_draft(|d| d.patch_config(&mapping));
     clash.apply();
 
-    // 分离数据获取和异步调用
     let clash_data = clash.data_arc();
     if clash_data.save_config().await.is_ok() {
         handle::Handle::refresh_clash();
@@ -109,7 +121,7 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
     }
 
     let is_auto_close_connection = Config::verge().await.data_arc().auto_close_connection.unwrap_or(false);
-    if is_auto_close_connection {
+    if core_running && is_auto_close_connection {
         after_change_clash_mode();
     }
 
@@ -147,7 +159,6 @@ pub async fn test_delay(url: String) -> anyhow::Result<u32> {
     tokio::time::timeout(Duration::from_secs(10), async {
         let start = Instant::now();
         let mut buf = BytesMut::with_capacity(1024);
-
         if is_https {
             let stream = match proxy_port {
                 Some(pp) => {

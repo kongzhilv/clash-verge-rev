@@ -1,9 +1,20 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { MihomoWebSocket } from 'tauri-plugin-mihomo-api'
 
+import {
+  enrichConnectionsWithProcesses,
+  getProcessAttributionSnapshot,
+  getSystemProcessConnections,
+  subscribeProcessAttribution,
+  type ProcessConnectionSnapshot,
+} from '@/services/process-connections'
+
 const MAX_CLOSED_CONNS_NUM = 500
 const CONNECTION_UPDATE_THROTTLE_MS = 500
 const CONNECTION_RECONNECT_DELAY_MS = 1_000
+const PROCESS_CONNECTION_REFRESH_MS = 2_000
+const PROCESS_CONNECTION_NEW_DELAY_MS = 120
+const PROCESS_CONNECTION_RETRY_DELAY_MS = 350
 
 type ConnectionMetadata = IConnectionsItem['metadata']
 type ConnectionListener = () => void
@@ -40,6 +51,13 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 let pendingMessageData: string | null = null
 let lastFlushAt = 0
+let processConnectionSnapshot: ProcessConnectionSnapshot | undefined
+let processConnectionTimer: ReturnType<typeof setTimeout> | null = null
+let processConnectionTimerDueAt = 0
+let processConnectionRefreshing = false
+let processConnectionRefreshQueued = false
+let processConnectionFastRetryPending = false
+let processConnectionSupported: boolean | undefined
 
 const connectionListeners = new Set<ConnectionListener>()
 const summaryListeners = new Set<ConnectionListener>()
@@ -149,7 +167,10 @@ const mergeConnectionSnapshot = (
   payload: IConnections,
   previous: ConnectionMonitorData = initConnData,
 ): ConnectionMonitorData => {
-  const nextConnections = payload.connections ?? []
+  const nextConnections = enrichConnectionsWithProcesses(
+    payload.connections ?? [],
+    processConnectionSnapshot,
+  )
   const previousActive = previous.activeConnections ?? []
   const previousClosed = previous.closedConnections ?? []
   const previousActiveById = new Map<string, IConnectionsItem>()
@@ -213,6 +234,132 @@ const mergeConnectionSummary = (
   activeConnectionCount: payload.connections?.length ?? 0,
 })
 
+const applyProcessConnectionSnapshot = (
+  snapshot: ProcessConnectionSnapshot,
+) => {
+  processConnectionSnapshot = snapshot
+  const activeConnections = enrichConnectionsWithProcesses(
+    connectionData.activeConnections,
+    snapshot,
+  )
+  const closedConnections = enrichConnectionsWithProcesses(
+    connectionData.closedConnections,
+    snapshot,
+  )
+  if (
+    activeConnections === connectionData.activeConnections &&
+    closedConnections === connectionData.closedConnections
+  ) {
+    return
+  }
+
+  connectionData = {
+    ...connectionData,
+    activeConnections,
+    closedConnections,
+  }
+  notifyConnectionListeners()
+}
+
+const clearProcessConnectionTimer = () => {
+  if (!processConnectionTimer) return
+  window.clearTimeout(processConnectionTimer)
+  processConnectionTimer = null
+  processConnectionTimerDueAt = 0
+}
+
+const scheduleProcessConnectionRefresh = (
+  delay = PROCESS_CONNECTION_REFRESH_MS,
+) => {
+  if (connectionListeners.size === 0 || processConnectionSupported === false) {
+    return
+  }
+
+  const dueAt = Date.now() + Math.max(0, delay)
+  if (processConnectionTimer) {
+    if (processConnectionTimerDueAt <= dueAt) return
+    clearProcessConnectionTimer()
+  }
+
+  processConnectionTimerDueAt = dueAt
+  processConnectionTimer = window.setTimeout(
+    () => {
+      processConnectionTimer = null
+      processConnectionTimerDueAt = 0
+      void refreshProcessConnections()
+    },
+    Math.max(0, delay),
+  )
+}
+
+const requestFastProcessConnectionRefresh = () => {
+  processConnectionFastRetryPending = true
+  scheduleProcessConnectionRefresh(PROCESS_CONNECTION_NEW_DELAY_MS)
+}
+
+async function refreshProcessConnections() {
+  if (connectionListeners.size === 0 || processConnectionSupported === false) {
+    return
+  }
+  if (processConnectionRefreshing) {
+    processConnectionRefreshQueued = true
+    return
+  }
+
+  processConnectionRefreshing = true
+  try {
+    const snapshot = await getSystemProcessConnections()
+    processConnectionSupported = snapshot.supported
+    if (connectionListeners.size === 0) return
+    applyProcessConnectionSnapshot(snapshot)
+  } catch (error) {
+    console.warn('[Connections] Failed to refresh native process owners', error)
+  } finally {
+    processConnectionRefreshing = false
+    if (connectionListeners.size > 0) {
+      if (processConnectionRefreshQueued) {
+        processConnectionRefreshQueued = false
+        scheduleProcessConnectionRefresh(PROCESS_CONNECTION_NEW_DELAY_MS)
+      } else if (processConnectionFastRetryPending) {
+        processConnectionFastRetryPending = false
+        scheduleProcessConnectionRefresh(PROCESS_CONNECTION_RETRY_DELAY_MS)
+      } else {
+        scheduleProcessConnectionRefresh()
+      }
+    }
+  }
+}
+
+const startProcessConnectionMonitor = () => {
+  if (connectionListeners.size === 0 || processConnectionSupported === false) {
+    return
+  }
+  clearProcessConnectionTimer()
+  void refreshProcessConnections()
+}
+
+const stopProcessConnectionMonitorIfIdle = () => {
+  if (connectionListeners.size > 0) return
+  clearProcessConnectionTimer()
+  processConnectionRefreshQueued = false
+  processConnectionFastRetryPending = false
+}
+
+const hasNewUnresolvedConnection = (
+  payload: IConnections,
+  previousActive: IConnectionsItem[],
+) => {
+  const previousIds = new Set(previousActive.map((connection) => connection.id))
+  return (payload.connections ?? []).some((connection) => {
+    if (previousIds.has(connection.id)) return false
+    const metadata = connection.metadata
+    return (
+      !String(metadata.process ?? '').trim() &&
+      !String(metadata.processPath ?? '').trim()
+    )
+  })
+}
+
 const flushPendingMessage = () => {
   flushTimer = null
   const messageData = pendingMessageData
@@ -233,8 +380,13 @@ const flushPendingMessage = () => {
 
   if (connectionListeners.size === 0) return
 
+  const needsFastProcessRefresh = hasNewUnresolvedConnection(
+    payload,
+    connectionData.activeConnections,
+  )
   connectionData = mergeConnectionSnapshot(payload, connectionData)
   notifyConnectionListeners()
+  if (needsFastProcessRefresh) requestFastProcessConnectionRefresh()
 }
 
 const enqueueConnectionMessage = (messageData: string) => {
@@ -319,9 +471,11 @@ async function connectConnectionSocket() {
 
 const startConnectionMonitor = () => {
   void connectConnectionSocket()
+  startProcessConnectionMonitor()
 }
 
 const stopConnectionMonitorIfIdle = () => {
+  stopProcessConnectionMonitorIfIdle()
   if (hasConnectionSubscribers()) return
 
   clearReconnectTimer()
@@ -362,6 +516,7 @@ const refreshConnectionData = () => {
   }
 
   void reconnectConnectionSocket()
+  requestFastProcessConnectionRefresh()
 }
 
 const clearClosedConnectionData = () => {
@@ -421,4 +576,15 @@ export const useConnectionSummaryData = (options?: { enabled?: boolean }) => {
     response,
     refreshGetClashConnectionSummary,
   }
+}
+
+export const useConnectionProcessAttribution = (
+  connectionId?: string | null,
+) => {
+  const snapshot = useSyncExternalStore(
+    subscribeProcessAttribution,
+    getProcessAttributionSnapshot,
+    getProcessAttributionSnapshot,
+  )
+  return connectionId ? snapshot.items.get(connectionId) : undefined
 }

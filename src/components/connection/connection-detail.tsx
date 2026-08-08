@@ -1,166 +1,554 @@
-import { Box, Button, Snackbar, useTheme } from '@mui/material'
+import {
+  AppsRounded,
+  ArrowDownwardRounded,
+  ArrowUpwardRounded,
+  CloseRounded,
+  ExpandMoreRounded,
+  LanRounded,
+  PowerOffRounded,
+  RouteRounded,
+  ScheduleRounded,
+  SpeedRounded,
+  TuneRounded,
+} from '@mui/icons-material'
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Box,
+  Button,
+  Divider,
+  Drawer,
+  IconButton,
+  Paper,
+  Stack,
+  Typography,
+  useMediaQuery,
+} from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { useLockFn } from 'ahooks'
 import dayjs from 'dayjs'
-import { useCallback, useImperativeHandle, useState, type Ref } from 'react'
+import {
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { closeConnection } from 'tauri-plugin-mihomo-api'
 
+import { resolveConnectionProject } from '@/components/routing/connection-project'
+import ConnectionProjectCard from '@/components/routing/connection-project-card'
+import {
+  useConnectionData,
+  useConnectionProcessAttribution,
+} from '@/hooks/use-connection-data'
+import { useDiversionProfile } from '@/hooks/use-diversion-profile'
 import parseTraffic from '@/utils/parse-traffic'
+
+import ConnectionRuleAssistant from './connection-rule-assistant'
 
 export interface ConnectionDetailRef {
   open: (detail: IConnectionsItem, closed: boolean) => void
   close: () => void
 }
 
+const PID_PLACEHOLDER_PATTERN = /^PID\s+\d+$/i
+const DETAIL_PANEL_WIDTH = 'clamp(420px, 42vw, 560px)'
+
+const processNameFrom = (process: string, processPath: string) => {
+  const preferred = process.trim()
+  if (preferred && !PID_PLACEHOLDER_PATTERN.test(preferred)) return preferred
+  return processPath.split(/[\\/]/).filter(Boolean).at(-1) ?? ''
+}
+
 export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
-  const [open, setOpen] = useState(false)
-  const [detail, setDetail] = useState<IConnectionsItem | null>(null)
-  const [closed, setClosed] = useState(false)
   const theme = useTheme()
+  const desktopSidePanel = useMediaQuery(theme.breakpoints.up('md'))
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState<IConnectionsItem | null>(null)
+  const [initiallyClosed, setInitiallyClosed] = useState(false)
+  const [ruleAssistantOpen, setRuleAssistantOpen] = useState(false)
+  const {
+    response: { data: connectionData },
+  } = useConnectionData({ enabled: open })
+
+  const activeDetail = useMemo(
+    () =>
+      selected
+        ? connectionData.activeConnections.find(
+            (connection) => connection.id === selected.id,
+          )
+        : undefined,
+    [connectionData.activeConnections, selected],
+  )
+  const closedDetail = useMemo(
+    () =>
+      selected
+        ? connectionData.closedConnections.find(
+            (connection) => connection.id === selected.id,
+          )
+        : undefined,
+    [connectionData.closedConnections, selected],
+  )
+  const detail = activeDetail ?? closedDetail ?? selected
+  const closed = initiallyClosed || (!activeDetail && Boolean(closedDetail))
+  const detailVisible = open && !ruleAssistantOpen
 
   const onClose = useCallback(() => {
     setOpen(false)
-    setDetail(null)
-    setClosed(false)
+    setRuleAssistantOpen(false)
+    setSelected(null)
+    setInitiallyClosed(false)
   }, [])
 
   useImperativeHandle(ref, () => ({
-    open: (detail: IConnectionsItem, closed: boolean) => {
-      if (open) return
+    open: (nextDetail: IConnectionsItem, nextClosed: boolean) => {
+      setSelected(nextDetail)
+      setInitiallyClosed(nextClosed)
+      setRuleAssistantOpen(false)
       setOpen(true)
-      setDetail(detail)
-      setClosed(closed)
     },
     close: onClose,
   }))
 
-  return (
-    <Snackbar
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      open={open}
+  const detailContent = detail ? (
+    <InnerConnectionDetail
+      data={detail}
+      closed={closed}
       onClose={onClose}
-      sx={{
-        '.MuiSnackbarContent-root': {
-          maxWidth: '520px',
-          maxHeight: '480px',
-          overflowY: 'auto',
-          backgroundColor: theme.palette.background.paper,
-          color: theme.palette.text.primary,
-        },
-      }}
-      message={
-        detail ? (
-          <InnerConnectionDetail
-            data={detail}
-            closed={closed}
-            onClose={onClose}
-          />
-        ) : null
-      }
+      onOpenRuleAssistant={() => setRuleAssistantOpen(true)}
     />
+  ) : null
+
+  return (
+    <>
+      {desktopSidePanel ? (
+        <Box
+          sx={{
+            flex: '0 0 auto',
+            width: detailVisible ? DETAIL_PANEL_WIDTH : 0,
+            minWidth: 0,
+            height: '100%',
+            overflow: 'hidden',
+            borderLeft: detailVisible ? 1 : 0,
+            borderColor: 'divider',
+            bgcolor: 'background.default',
+            transition: theme.transitions.create('width', {
+              duration: theme.transitions.duration.shorter,
+            }),
+          }}
+        >
+          {detailVisible ? detailContent : null}
+        </Box>
+      ) : (
+        <Drawer
+          variant="temporary"
+          anchor="right"
+          open={detailVisible}
+          onClose={onClose}
+          slotProps={{
+            paper: {
+              sx: {
+                width: '100%',
+                maxWidth: '100vw',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100dvh',
+                maxHeight: '100dvh',
+                overflow: 'hidden',
+                bgcolor: 'background.default',
+              },
+            },
+          }}
+        >
+          {detailContent}
+        </Drawer>
+      )}
+
+      {detail && (
+        <ConnectionRuleAssistant
+          open={open && ruleAssistantOpen}
+          connection={detail}
+          closed={closed}
+          onClose={() => setRuleAssistantOpen(false)}
+        />
+      )}
+    </>
   )
 }
 
 interface InnerProps {
   data: IConnectionsItem
   closed: boolean
-  onClose?: () => void
+  onClose: () => void
+  onOpenRuleAssistant: () => void
 }
 
-const InnerConnectionDetail = ({ data, closed, onClose }: InnerProps) => {
+interface InformationItem {
+  label: string
+  value: string
+  icon: ReactNode
+  wide?: boolean
+  monospace?: boolean
+}
+
+interface MetricProps {
+  label: string
+  value: string
+  icon: ReactNode
+}
+
+const Metric = ({ label, value, icon }: MetricProps) => (
+  <Box sx={{ minWidth: 0, p: 1.25 }}>
+    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+      <Box sx={{ color: 'text.secondary', display: 'flex' }}>{icon}</Box>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+    </Stack>
+    <Typography
+      sx={{
+        mt: 0.5,
+        fontWeight: 700,
+        overflowWrap: 'anywhere',
+        wordBreak: 'break-word',
+      }}
+    >
+      {value}
+    </Typography>
+  </Box>
+)
+
+const InnerConnectionDetail = ({
+  data,
+  closed,
+  onClose,
+  onOpenRuleAssistant,
+}: InnerProps) => {
   const { t } = useTranslation()
-  const { metadata, rulePayload } = data
-  const theme = useTheme()
-  const chains = [...data.chains].reverse().join(' / ')
-  const rule = rulePayload ? `${data.rule}(${rulePayload})` : data.rule
+  const { profile } = useDiversionProfile()
+  const attribution = useConnectionProcessAttribution(data.id)
+  const projectMatch = useMemo(
+    () => resolveConnectionProject(data, profile?.config),
+    [data, profile?.config],
+  )
+  const { metadata } = data
   const hostAddress =
     metadata.host || metadata.destinationIP || metadata.remoteDestination
-  const host = `${hostAddress}:${metadata.destinationPort}`
-  const Destination = metadata.destinationIP
-    ? metadata.destinationIP
-    : metadata.remoteDestination
+  const destination = metadata.destinationIP || metadata.remoteDestination
+  const processPath = String(metadata.processPath ?? '').trim()
+  const processName = processNameFrom(
+    String(metadata.process ?? ''),
+    processPath,
+  )
+  const recognizedApplication = processName || projectMatch?.project.name || ''
+  const hasApplication = Boolean(recognizedApplication)
+  const applicationName = recognizedApplication || hostAddress || '未知连接'
+  const targetLabel = hostAddress
+    ? `${hostAddress}:${metadata.destinationPort}`
+    : '未知目标'
+  const rule = data.rulePayload
+    ? `${data.rule} (${data.rulePayload})`
+    : data.rule || '未返回'
+  const outbound = [...data.chains].reverse().join(' / ') || '未返回'
+  const attributionSource =
+    attribution?.source === 'mihomo'
+      ? '代理核心'
+      : attribution?.source === 'windows'
+        ? 'Windows 系统'
+        : '未识别'
+  const attributionDetail = attribution
+    ? `${attributionSource} · ${attribution.detail}${
+        attribution.pid === undefined ? '' : ` · PID ${attribution.pid}`
+      }`
+    : '正在等待应用识别'
+  const headerMeta = [
+    hasApplication ? targetLabel : '应用未识别',
+    String(metadata.network || '').toUpperCase(),
+    metadata.type,
+    closed ? '已结束' : '',
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
-  const information = [
-    { label: t('connections.components.fields.host'), value: host },
+  const information: InformationItem[] = [
     {
-      label: t('shared.labels.downloaded'),
-      value: parseTraffic(data.download).join(' '),
+      label: '归因状态',
+      value: attributionDetail,
+      icon: <AppsRounded fontSize="small" />,
+      wide: true,
+    },
+    ...(processPath
+      ? [
+          {
+            label: '程序路径',
+            value: processPath,
+            icon: <AppsRounded fontSize="small" />,
+            wide: true,
+            monospace: true,
+          },
+        ]
+      : []),
+    {
+      label: t('connections.components.fields.source'),
+      value: `${metadata.sourceIP}:${metadata.sourcePort}`,
+      icon: <LanRounded fontSize="small" />,
     },
     {
-      label: t('shared.labels.uploaded'),
-      value: parseTraffic(data.upload).join(' '),
+      label: t('connections.components.fields.destination'),
+      value: `${destination}:${metadata.destinationPort}`,
+      icon: <RouteRounded fontSize="small" />,
     },
     {
-      label: t('connections.components.fields.dlSpeed'),
-      value: parseTraffic(data.curDownload ?? -1).join(' ') + '/s',
+      label: '命中规则',
+      value: rule,
+      icon: <RouteRounded fontSize="small" />,
     },
     {
-      label: t('connections.components.fields.ulSpeed'),
-      value: parseTraffic(data.curUpload ?? -1).join(' ') + '/s',
-    },
-    {
-      label: t('connections.components.fields.chains'),
-      value: chains,
-    },
-    { label: t('connections.components.fields.rule'), value: rule },
-    {
-      label: t('connections.components.fields.process'),
-      value: `${metadata.process}${metadata.processPath ? `(${metadata.processPath})` : ''}`,
+      label: '出口链',
+      value: outbound,
+      icon: <RouteRounded fontSize="small" />,
     },
     {
       label: t('connections.components.fields.time'),
       value: dayjs(data.start).fromNow(),
-    },
-    {
-      label: t('connections.components.fields.source'),
-      value: `${metadata.sourceIP}:${metadata.sourcePort}`,
-    },
-    {
-      label: t('connections.components.fields.destination'),
-      value: Destination,
-    },
-    {
-      label: t('connections.components.fields.destinationPort'),
-      value: `${metadata.destinationPort}`,
-    },
-    {
-      label: t('connections.components.fields.type'),
-      value: `${metadata.type}(${metadata.network})`,
+      icon: <ScheduleRounded fontSize="small" />,
     },
   ]
 
   const onDelete = useLockFn(async () => closeConnection(data.id))
 
   return (
-    <Box sx={{ userSelect: 'text', color: theme.palette.text.secondary }}>
-      {information.map((each) => (
-        <div key={each.label}>
-          <b>{each.label}</b>
-          <span
-            style={{
-              wordBreak: 'break-all',
-              color: theme.palette.text.primary,
-            }}
-          >
-            : {each.value}
-          </span>
-        </div>
-      ))}
-
-      {!closed && (
-        <Box sx={{ textAlign: 'right' }}>
-          <Button
-            variant="contained"
-            title={t('connections.components.actions.closeConnection')}
-            onClick={() => {
-              onDelete()
-              onClose?.()
-            }}
-          >
-            {t('connections.components.actions.closeConnection')}
-          </Button>
+    <Stack
+      sx={{
+        flex: '1 1 auto',
+        height: '100dvh',
+        maxHeight: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          px: 2,
+          py: 1.25,
+          flex: '0 0 auto',
+          alignItems: 'flex-start',
+          borderBottom: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Box
+          sx={{
+            width: 40,
+            height: 40,
+            mt: 0.15,
+            display: 'grid',
+            placeItems: 'center',
+            flex: '0 0 auto',
+            borderRadius: 2,
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+          }}
+        >
+          {hasApplication ? <AppsRounded /> : <RouteRounded />}
         </Box>
-      )}
-    </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography
+            variant="subtitle1"
+            sx={{
+              fontWeight: 700,
+              lineHeight: 1.35,
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+            }}
+          >
+            {applicationName}
+          </Typography>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.25, overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+          >
+            {headerMeta}
+          </Typography>
+        </Box>
+        <IconButton
+          onClick={onClose}
+          aria-label="关闭连接详情"
+          sx={{ mt: -0.5 }}
+        >
+          <CloseRounded />
+        </IconButton>
+      </Stack>
+
+      <Stack
+        spacing={1.25}
+        sx={{
+          p: 1.5,
+          flex: '1 1 0',
+          minHeight: 0,
+          overflowX: 'hidden',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          scrollbarGutter: 'stable',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        <ConnectionProjectCard connection={data} />
+
+        <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              '& > :nth-of-type(odd)': {
+                borderRight: 1,
+                borderColor: 'divider',
+              },
+              '& > :nth-of-type(-n+2)': {
+                borderBottom: 1,
+                borderColor: 'divider',
+              },
+            }}
+          >
+            <Metric
+              label={t('shared.labels.downloaded')}
+              value={parseTraffic(data.download).join(' ')}
+              icon={<ArrowDownwardRounded fontSize="small" />}
+            />
+            <Metric
+              label={t('shared.labels.uploaded')}
+              value={parseTraffic(data.upload).join(' ')}
+              icon={<ArrowUpwardRounded fontSize="small" />}
+            />
+            <Metric
+              label={t('connections.components.fields.dlSpeed')}
+              value={`${parseTraffic(data.curDownload ?? -1).join(' ')}/s`}
+              icon={<SpeedRounded fontSize="small" />}
+            />
+            <Metric
+              label={t('connections.components.fields.ulSpeed')}
+              value={`${parseTraffic(data.curUpload ?? -1).join(' ')}/s`}
+              icon={<SpeedRounded fontSize="small" />}
+            />
+          </Box>
+        </Paper>
+
+        <Accordion
+          disableGutters
+          elevation={0}
+          sx={{
+            border: 1,
+            borderColor: 'divider',
+            borderRadius: '8px !important',
+            overflow: 'hidden',
+            '&::before': { display: 'none' },
+          }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+            <Typography variant="subtitle2">技术详情</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 0 }}>
+            <Stack divider={<Divider flexItem />}>
+              {information.map((item) => (
+                <Stack
+                  key={item.label}
+                  direction={item.wide ? 'column' : { xs: 'column', sm: 'row' }}
+                  spacing={item.wide ? 0.5 : 1}
+                  sx={{
+                    px: 1.5,
+                    py: 1,
+                    alignItems: item.wide
+                      ? 'stretch'
+                      : { xs: 'stretch', sm: 'center' },
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    <Box sx={{ color: 'text.secondary', display: 'flex' }}>
+                      {item.icon}
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ minWidth: item.wide ? 0 : { sm: 72 } }}
+                    >
+                      {item.label}
+                    </Typography>
+                  </Stack>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      flex: 1,
+                      textAlign: item.wide
+                        ? 'left'
+                        : { xs: 'left', sm: 'right' },
+                      wordBreak: 'break-word',
+                      overflowWrap: 'anywhere',
+                      fontFamily: item.monospace ? 'monospace' : 'inherit',
+                      fontSize: item.monospace ? 12 : undefined,
+                    }}
+                  >
+                    {item.value}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </AccordionDetails>
+        </Accordion>
+      </Stack>
+
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        sx={{
+          p: 1.5,
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 2,
+          flex: '0 0 auto',
+          alignItems: 'stretch',
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Button
+          variant="contained"
+          startIcon={<TuneRounded />}
+          onClick={onOpenRuleAssistant}
+          sx={{ flex: 1 }}
+        >
+          {projectMatch
+            ? '调整分流'
+            : hasApplication
+              ? '为此应用设置分流'
+              : '按目标设置分流'}
+        </Button>
+        {!closed && (
+          <Button
+            variant="text"
+            color="error"
+            startIcon={<PowerOffRounded />}
+            onClick={() => {
+              void onDelete()
+              onClose()
+            }}
+          >
+            断开连接
+          </Button>
+        )}
+      </Stack>
+    </Stack>
   )
 }

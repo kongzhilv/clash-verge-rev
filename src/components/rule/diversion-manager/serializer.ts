@@ -1,0 +1,94 @@
+import { dump, load } from 'js-yaml'
+
+import {
+  CONFIG_KEY,
+  cleanConfig,
+  isRecord,
+  normalizeConfig,
+  syncProjectGroups,
+  validateConfig,
+  type DiversionConfig,
+  type UnknownRecord,
+} from './model'
+
+export interface ParsedDiversionProfile {
+  mergeConfig: UnknownRecord
+  config: DiversionConfig
+}
+
+export interface SerializedDiversionProfile {
+  mergeConfig: UnknownRecord
+  config: DiversionConfig
+  content: string
+}
+
+const sanitizeProjectManagedGroups = (
+  cleanedConfig: UnknownRecord,
+): UnknownRecord => {
+  if (!Array.isArray(cleanedConfig.groups)) return cleanedConfig
+
+  return {
+    ...cleanedConfig,
+    groups: cleanedConfig.groups.map((groupValue) => {
+      if (
+        !isRecord(groupValue) ||
+        typeof groupValue['project-id'] !== 'string' ||
+        !Array.isArray(groupValue.matchers)
+      ) {
+        return groupValue
+      }
+
+      const hasIdentityMatcher = groupValue.matchers.some(
+        (matcherValue) =>
+          isRecord(matcherValue) &&
+          typeof matcherValue.type === 'string' &&
+          matcherValue.type !== 'DST-PORT',
+      )
+      if (!hasIdentityMatcher) return groupValue
+
+      return {
+        ...groupValue,
+        matchers: groupValue.matchers.filter(
+          (matcherValue) =>
+            !isRecord(matcherValue) || matcherValue.type !== 'DST-PORT',
+        ),
+      }
+    }),
+  }
+}
+
+export const parseDiversionProfile = (
+  content: string,
+): ParsedDiversionProfile => {
+  const parsed = content.trim() ? load(content) : {}
+  const mergeConfig = isRecord(parsed) ? parsed : {}
+
+  return {
+    mergeConfig,
+    config: normalizeConfig(mergeConfig[CONFIG_KEY]),
+  }
+}
+
+export const serializeDiversionProfile = (
+  mergeConfig: UnknownRecord,
+  input: DiversionConfig,
+): SerializedDiversionProfile => {
+  const config = syncProjectGroups(input)
+  const error = validateConfig(config)
+  if (error) throw new Error(error)
+
+  const nextMerge: UnknownRecord = {
+    ...mergeConfig,
+    [CONFIG_KEY]: sanitizeProjectManagedGroups(cleanConfig(config)),
+  }
+
+  return {
+    mergeConfig: nextMerge,
+    config,
+    content: dump(nextMerge, {
+      noRefs: true,
+      lineWidth: 120,
+      noCompatMode: true,
+    }),
+  }
+}

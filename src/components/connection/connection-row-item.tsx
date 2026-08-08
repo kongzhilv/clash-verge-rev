@@ -1,9 +1,4 @@
-import { CloseRounded } from '@mui/icons-material'
-import { IconButton } from '@mui/material'
-import { useLockFn } from 'ahooks'
-import { memo, useCallback } from 'react'
-import { useTranslation } from 'react-i18next'
-import { closeConnection } from 'tauri-plugin-mihomo-api'
+import { memo, useCallback, type KeyboardEvent } from 'react'
 
 import { RelativeTime } from './connection-relative-time'
 import type { ConnectionRowView } from './connection-row-view'
@@ -12,30 +7,19 @@ interface Props {
   row: ConnectionRowView
   closed: boolean
   onShowDetail: (id: string) => void
+  projectName?: string
+  projectPolicy?: string
+  projectInferred?: boolean
 }
-
-const tagStyle = {
-  boxSizing: 'border-box',
-  maxWidth: '100%',
-  padding: '0 4px',
-  border: '1px solid rgba(128,128,128,0.35)',
-  borderRadius: 4,
-  fontSize: 10,
-  lineHeight: 1.375,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-} as const
 
 const itemStyle = {
   boxSizing: 'border-box',
-  minHeight: 56,
+  minHeight: 66,
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
-  padding: '6px 48px 6px 12px',
+  gap: 10,
+  padding: '8px 12px',
   borderBottom: '1px solid var(--divider-color)',
-  position: 'relative',
   overflow: 'hidden',
 } as const
 
@@ -44,71 +28,114 @@ const contentStyle = {
   flex: 1,
   cursor: 'pointer',
   userSelect: 'text',
+  outlineOffset: 3,
 } as const
 
 const primaryStyle = {
   fontSize: 14,
-  lineHeight: 1.4,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  fontWeight: 650,
+  lineHeight: 1.35,
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+} as const
+
+const secondaryStyle = {
+  marginTop: 4,
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  columnGap: 5,
+  rowGap: 2,
+  color: 'var(--text-secondary)',
+  fontSize: 11,
+  lineHeight: 1.35,
+  minWidth: 0,
+} as const
+
+const secondaryItemStyle = {
+  minWidth: 0,
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+} as const
+
+const separatorStyle = {
+  flex: '0 0 auto',
+  opacity: 0.7,
+} as const
+
+const speedStyle = {
+  flex: '0 0 auto',
+  color: 'var(--text-secondary)',
+  fontSize: 11,
+  lineHeight: 1.45,
+  textAlign: 'right',
   whiteSpace: 'nowrap',
 } as const
 
-const tagsStyle = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 4,
-  marginTop: 4,
-  overflow: 'hidden',
-} as const
-
-const actionStyle = {
-  position: 'absolute',
-  right: 8,
-  top: '50%',
-  transform: 'translateY(-50%)',
-} as const
-
 export const ConnectionRowItem = memo(
-  function ConnectionRowItem({ row, closed, onShowDetail }: Props) {
-    const { t } = useTranslation()
-    const onDelete = useLockFn(async () => closeConnection(row.id))
+  function ConnectionRowItem({
+    row,
+    closed,
+    onShowDetail,
+    projectName,
+    projectPolicy,
+    projectInferred = false,
+  }: Props) {
     const handleShowDetail = useCallback(
       () => onShowDetail(row.id),
       [onShowDetail, row.id],
     )
+    const handleKeyDown = useCallback(
+      (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        handleShowDetail()
+      },
+      [handleShowDetail],
+    )
+    const application = row.process || projectName || '未识别应用'
+    const identifiedApplication = application !== '未识别应用'
+    const title = identifiedApplication ? application : row.host
+    const destination = identifiedApplication ? row.host : '等待应用识别'
+    const route = row.chains || projectPolicy || '出口未知'
     const showTraffic = row.uploadSpeed >= 100 || row.downloadSpeed >= 100
 
     return (
       <div style={itemStyle}>
-        <div style={contentStyle} onClick={handleShowDetail}>
-          <div style={primaryStyle}>{row.host}</div>
-          <div style={tagsStyle}>
-            <span style={tagStyle}>{row.network}</span>
-            <span style={tagStyle}>{row.type}</span>
-            {row.process && <span style={tagStyle}>{row.process}</span>}
-            {row.chains && <span style={tagStyle}>{row.chains}</span>}
-            <span style={tagStyle}>
-              <RelativeTime start={row.time} />
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label={`查看连接详情：${title}`}
+          style={contentStyle}
+          onClick={handleShowDetail}
+          onKeyDown={handleKeyDown}
+        >
+          <div
+            style={primaryStyle}
+            title={row.processPath || projectName || row.host}
+          >
+            {title}
+          </div>
+          <div style={secondaryStyle}>
+            <span style={secondaryItemStyle} title={destination}>
+              {destination}
+              {projectInferred && !row.process ? '（规则识别）' : ''}
             </span>
-            {showTraffic && (
-              <span style={tagStyle}>
-                {row.uploadSpeedText} / {row.downloadSpeedText}
-              </span>
-            )}
+            <span style={separatorStyle}>·</span>
+            <span style={secondaryItemStyle} title={route}>
+              出口：{route}
+            </span>
+            <span style={separatorStyle}>·</span>
+            <span style={{ flex: '0 0 auto' }}>
+              {closed ? '已结束' : <RelativeTime start={row.time} />}
+            </span>
           </div>
         </div>
-        {!closed && (
-          <IconButton
-            size="small"
-            color="inherit"
-            onClick={onDelete}
-            title={t('connections.components.actions.closeConnection')}
-            aria-label={t('connections.components.actions.closeConnection')}
-            sx={actionStyle}
-          >
-            <CloseRounded fontSize="small" />
-          </IconButton>
+        {showTraffic && (
+          <div style={speedStyle}>
+            <div>↓ {row.downloadSpeedText}</div>
+            <div>↑ {row.uploadSpeedText}</div>
+          </div>
         )}
       </div>
     )
@@ -116,5 +143,8 @@ export const ConnectionRowItem = memo(
   (prev, next) =>
     prev.row === next.row &&
     prev.closed === next.closed &&
-    prev.onShowDetail === next.onShowDetail,
+    prev.onShowDetail === next.onShowDetail &&
+    prev.projectName === next.projectName &&
+    prev.projectPolicy === next.projectPolicy &&
+    prev.projectInferred === next.projectInferred,
 )

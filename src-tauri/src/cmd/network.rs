@@ -3,11 +3,14 @@ use crate::cmd::StringifyErr as _;
 use crate::core::sysopt::Sysopt;
 use clash_verge_logging::{Type, logging};
 use gethostname::gethostname;
-use network_interface::NetworkInterface;
+use serde_json::Value;
 use serde_yaml_ng::Mapping;
 use std::net::TcpListener;
 use sysproxy::{Autoproxy, Sysproxy};
 use tauri_plugin_clash_verge_sysinfo;
+
+#[path = "process_connections.rs"]
+mod process_connections;
 
 /// get the system proxy
 #[tauri::command]
@@ -63,13 +66,10 @@ pub async fn get_auto_proxy() -> CmdResult<Mapping> {
 /// 获取系统主机名
 #[tauri::command]
 pub fn get_system_hostname() -> String {
-    // 获取系统主机名，处理可能的非UTF-8字符
     match gethostname().into_string() {
         Ok(name) => name,
         Err(os_string) => {
-            // 对于包含非UTF-8的主机名，使用调试格式化
             let fallback = format!("{os_string:?}");
-            // 去掉可能存在的引号
             fallback.trim_matches('"').to_string()
         }
     }
@@ -81,23 +81,23 @@ pub fn get_network_interfaces() -> Vec<String> {
     tauri_plugin_clash_verge_sysinfo::list_network_interfaces()
 }
 
-/// 获取网络接口详细信息
+/// 获取网络接口详细信息；kind=process-connections 时返回系统连接与进程归因快照。
 #[tauri::command]
-pub fn get_network_interfaces_info() -> CmdResult<Vec<NetworkInterface>> {
+pub fn get_network_interfaces_info(kind: Option<String>) -> CmdResult<Value> {
+    if kind.as_deref() == Some("process-connections") {
+        return serde_json::to_value(process_connections::get_process_connections()).stringify_err();
+    }
+
     use network_interface::{NetworkInterface, NetworkInterfaceConfig as _};
 
     let names = get_network_interfaces();
     let interfaces = NetworkInterface::show().stringify_err()?;
+    let result: Vec<_> = interfaces
+        .into_iter()
+        .filter(|interface| names.contains(&interface.name))
+        .collect();
 
-    let mut result = Vec::new();
-
-    for interface in interfaces {
-        if names.contains(&interface.name) {
-            result.push(interface);
-        }
-    }
-
-    Ok(result)
+    serde_json::to_value(result).stringify_err()
 }
 
 #[tauri::command]

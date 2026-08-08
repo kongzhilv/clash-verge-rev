@@ -2,7 +2,6 @@ import { RefreshRounded, StorageOutlined } from '@mui/icons-material'
 import {
   Box,
   Button,
-  Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
@@ -11,6 +10,7 @@ import {
   List,
   ListItem,
   ListItemText,
+  Stack,
   Typography,
   alpha,
   styled,
@@ -21,10 +21,10 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { updateRuleProvider } from 'tauri-plugin-mihomo-api'
 
+import { AdaptiveDialog } from '@/components/base'
 import { useAppRefreshers, useRulesData } from '@/providers/app-data-context'
 import { showNotice } from '@/services/notice-service'
 
-// 辅助组件 - 类型框
 const TypeBox = styled(Box)<{ component?: React.ElementType }>(({ theme }) => ({
   display: 'inline-block',
   border: '1px solid #ccc',
@@ -44,21 +44,14 @@ export const ProviderButton = () => {
   const { refreshRules, refreshRuleProviders } = useAppRefreshers()
   const [updating, setUpdating] = useState<Record<string, boolean>>({})
 
-  // 检查是否有提供者
   const hasProviders = Object.keys(ruleProviders || {}).length > 0
 
-  // 更新单个规则提供者
   const updateProvider = useLockFn(async (name: string) => {
     try {
-      // 设置更新状态
       setUpdating((prev) => ({ ...prev, [name]: true }))
-
       await updateRuleProvider(name)
-
-      // 刷新数据
       await refreshRules()
       await refreshRuleProviders()
-
       showNotice.success(
         'rules.feedback.notifications.provider.updateSuccess',
         {
@@ -71,22 +64,18 @@ export const ProviderButton = () => {
         message: String(err),
       })
     } finally {
-      // 清除更新状态
       setUpdating((prev) => ({ ...prev, [name]: false }))
     }
   })
 
-  // 更新所有规则提供者
   const updateAllProviders = useLockFn(async () => {
     try {
-      // 获取所有provider的名称
       const allProviders = Object.keys(ruleProviders || {})
       if (allProviders.length === 0) {
         showNotice.info('rules.feedback.notifications.provider.none')
         return
       }
 
-      // 设置所有provider为更新中状态
       const newUpdating = allProviders.reduce(
         (acc, key) => {
           acc[key] = true
@@ -96,29 +85,23 @@ export const ProviderButton = () => {
       )
       setUpdating(newUpdating)
 
-      // 改为串行逐个更新所有provider
       for (const name of allProviders) {
         try {
           await updateRuleProvider(name)
-          // 每个更新完成后更新状态
           setUpdating((prev) => ({ ...prev, [name]: false }))
         } catch (err) {
           console.error(`更新 ${name} 失败`, err)
-          // 继续执行下一个，不中断整体流程
         }
       }
 
-      // 刷新数据
       await refreshRules()
       await refreshRuleProviders()
-
       showNotice.success('rules.feedback.notifications.provider.allUpdated')
     } catch (err) {
       showNotice.error('rules.feedback.notifications.provider.genericError', {
         message: String(err),
       })
     } finally {
-      // 清除所有更新状态
       setUpdating({})
     }
   })
@@ -139,30 +122,39 @@ export const ProviderButton = () => {
       >
         {t('rules.page.provider.trigger')}
       </Button>
-
-      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Box
+      <AdaptiveDialog
+        open={open}
+        onClose={handleClose}
+        maxWidth="sm"
+        aria-labelledby="rule-provider-dialog-title"
+      >
+        <DialogTitle id="rule-provider-dialog-title">
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1}
             sx={{
-              display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center',
+              alignItems: { sm: 'center' },
             }}
           >
-            <Typography variant="h6">
+            <Typography variant="h6" sx={{ overflowWrap: 'anywhere' }}>
               {t('rules.page.provider.dialogTitle')}
             </Typography>
             <Button
               variant="contained"
               size="small"
               onClick={updateAllProviders}
+              sx={{ alignSelf: { xs: 'flex-start', sm: 'auto' } }}
             >
               {t('rules.page.provider.actions.updateAll')}
             </Button>
-          </Box>
+          </Stack>
         </DialogTitle>
 
-        <DialogContent>
+        <DialogContent
+          dividers
+          sx={{ minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}
+        >
           <List sx={{ py: 0, minHeight: 250 }}>
             {Object.entries(ruleProviders || {})
               .sort()
@@ -200,40 +192,55 @@ export const ProviderButton = () => {
                     ]}
                   >
                     <ListItemText
-                      sx={{ px: 2, py: 1 }}
+                      sx={{ px: 2, py: 1, minWidth: 0 }}
                       primary={
-                        <Box
+                        <Stack
+                          direction={{ xs: 'column', sm: 'row' }}
+                          spacing={0.5}
                           sx={{
-                            display: 'flex',
                             justifyContent: 'space-between',
-                            alignItems: 'center',
+                            alignItems: { sm: 'center' },
+                            minWidth: 0,
                           }}
                         >
-                          <Typography
-                            variant="subtitle1"
-                            component="div"
-                            noWrap
-                            title={key}
-                            sx={{ display: 'flex', alignItems: 'center' }}
+                          <Stack
+                            direction="row"
+                            spacing={0.75}
+                            sx={{
+                              alignItems: 'center',
+                              minWidth: 0,
+                              flexWrap: 'wrap',
+                            }}
                           >
-                            <span style={{ marginRight: '8px' }}>{key}</span>
+                            <Typography
+                              variant="subtitle1"
+                              component="div"
+                              sx={{
+                                minWidth: 0,
+                                overflowWrap: 'anywhere',
+                                wordBreak: 'break-word',
+                              }}
+                            >
+                              {key}
+                            </Typography>
                             <TypeBox component="span">
                               {provider.ruleCount}
                             </TypeBox>
-                          </Typography>
+                          </Stack>
 
                           <Typography
                             variant="body2"
-                            color="text.secondary"
-                            noWrap
+                            sx={{ color: 'text.secondary', flex: '0 0 auto' }}
                           >
                             <small>{t('shared.labels.updateAt')}: </small>
                             {time.fromNow()}
                           </Typography>
-                        </Box>
+                        </Stack>
                       }
                       secondary={
-                        <Box sx={{ display: 'flex' }}>
+                        <Box
+                          sx={{ display: 'flex', flexWrap: 'wrap', mt: 0.5 }}
+                        >
                           <TypeBox component="span">
                             {provider.vehicleType}
                           </TypeBox>
@@ -246,7 +253,8 @@ export const ProviderButton = () => {
                     <Divider orientation="vertical" flexItem />
                     <Box
                       sx={{
-                        width: 40,
+                        width: 44,
+                        flex: '0 0 44px',
                         display: 'flex',
                         justifyContent: 'center',
                         alignItems: 'center',
@@ -283,7 +291,7 @@ export const ProviderButton = () => {
             {t('shared.actions.close')}
           </Button>
         </DialogActions>
-      </Dialog>
+      </AdaptiveDialog>
     </>
   )
 }
