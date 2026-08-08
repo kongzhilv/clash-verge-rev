@@ -79,7 +79,7 @@ jobs:
           test -f release-assets/BUILD_INFO.txt
           test -f release-assets/release-notes.md
           grep -Fq "Commit: ${SOURCE_SHA}" release-assets/BUILD_INFO.txt
-          grep -Fq "Tag: ${RELEASE_TAG}" release-assets/BUILD_INFO.txt
+          grep -Fq "Release tag: ${RELEASE_TAG}" release-assets/BUILD_INFO.txt
 
           installer_count=$(find release-assets -maxdepth 1 -type f \( \
             -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
@@ -92,6 +92,8 @@ jobs:
             cd release-assets
             sha256sum --check SHA256SUMS.txt
           )
+
+          printf '\nBuild source: `%s`\n' "$SOURCE_SHA" >> release-assets/release-notes.md
 
       - name: 使用无 workflow 差异的发行锚点发布 Latest
         shell: bash
