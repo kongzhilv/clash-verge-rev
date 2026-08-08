@@ -311,128 +311,157 @@ const ConnectionsPage = () => {
     >
       <Box
         sx={{
-          px: 1.25,
-          py: 1,
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
           display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 0.75,
-          bgcolor: 'background.default',
-          userSelect: 'text',
-          position: 'sticky',
-          top: 0,
-          zIndex: 2,
+          overflow: 'hidden',
         }}
       >
-        <ButtonGroup size="small" sx={{ flex: '0 0 auto' }}>
-          <Button
-            variant={connectionsType === 'active' ? 'contained' : 'outlined'}
-            onClick={() => selectConnectionsType('active')}
-          >
-            {`${t('connections.components.actions.active')} ${connections?.activeConnections.length ?? 0}`}
-          </Button>
-          <Button
-            variant={connectionsType === 'closed' ? 'contained' : 'outlined'}
-            onClick={() => selectConnectionsType('closed')}
-          >
-            {`${t('connections.components.actions.closed')} ${connections?.closedConnections.length ?? 0}`}
-          </Button>
-        </ButtonGroup>
-
-        {!isTableLayout && (
-          <BaseStyledSelect
-            value={curOrderOpt}
-            onChange={(event) => setCurOrderOpt(event.target.value as OrderKey)}
-          >
-            {ORDER_OPTIONS.map((option) => (
-              <MenuItem key={option.id} value={option.id}>
-                <span style={{ fontSize: 14 }}>{t(option.labelKey)}</span>
-              </MenuItem>
-            ))}
-          </BaseStyledSelect>
-        )}
-
-        {projectFilter && (
-          <Chip
-            size="small"
-            color="primary"
-            label={activeProject?.name ?? projectFilter}
-            onDelete={() => navigate('/connections')}
-          />
-        )}
-        {policyFilter && (
-          <Chip
-            size="small"
-            color="secondary"
-            label={policyFilter}
-            onDelete={() => navigate('/connections')}
-          />
-        )}
-
         <Box
           sx={{
-            flex: '1 1 220px',
-            minWidth: { xs: '100%', sm: 180 },
+            flex: '1 1 auto',
+            minWidth: 0,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
           }}
         >
-          <BaseSearchBox onSearch={handleSearch} />
+          <Box
+            sx={{
+              px: 1.25,
+              py: 1,
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 0.75,
+              bgcolor: 'background.default',
+              userSelect: 'text',
+              position: 'sticky',
+              top: 0,
+              zIndex: 2,
+            }}
+          >
+            <ButtonGroup size="small" sx={{ flex: '0 0 auto' }}>
+              <Button
+                variant={
+                  connectionsType === 'active' ? 'contained' : 'outlined'
+                }
+                onClick={() => selectConnectionsType('active')}
+              >
+                {`${t('connections.components.actions.active')} ${connections?.activeConnections.length ?? 0}`}
+              </Button>
+              <Button
+                variant={
+                  connectionsType === 'closed' ? 'contained' : 'outlined'
+                }
+                onClick={() => selectConnectionsType('closed')}
+              >
+                {`${t('connections.components.actions.closed')} ${connections?.closedConnections.length ?? 0}`}
+              </Button>
+            </ButtonGroup>
+
+            {!isTableLayout && (
+              <BaseStyledSelect
+                value={curOrderOpt}
+                onChange={(event) =>
+                  setCurOrderOpt(event.target.value as OrderKey)
+                }
+              >
+                {ORDER_OPTIONS.map((option) => (
+                  <MenuItem key={option.id} value={option.id}>
+                    <span style={{ fontSize: 14 }}>{t(option.labelKey)}</span>
+                  </MenuItem>
+                ))}
+              </BaseStyledSelect>
+            )}
+
+            {projectFilter && (
+              <Chip
+                size="small"
+                color="primary"
+                label={activeProject?.name ?? projectFilter}
+                onDelete={() => navigate('/connections')}
+              />
+            )}
+            {policyFilter && (
+              <Chip
+                size="small"
+                color="secondary"
+                label={policyFilter}
+                onDelete={() => navigate('/connections')}
+              />
+            )}
+
+            <Box
+              sx={{
+                flex: '1 1 220px',
+                minWidth: { xs: '100%', sm: 180 },
+              }}
+            >
+              <BaseSearchBox onSearch={handleSearch} />
+            </Box>
+
+            <ConnectionFilterMenu
+              connections={selectedConnections}
+              value={filters}
+              onChange={setFilters}
+            />
+
+            {isTableLayout && hasTableData && (
+              <Tooltip title={t('connections.components.columnManager.title')}>
+                <IconButton
+                  size="small"
+                  aria-label={t('connections.components.columnManager.title')}
+                  onClick={() => setIsColumnManagerOpen(true)}
+                >
+                  <ViewColumnRounded fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
+
+          {!hasTableData ? (
+            <BaseEmpty />
+          ) : isTableLayout ? (
+            <ConnectionTable
+              connections={filterConn}
+              onShowDetail={showDetailById}
+              columnManagerOpen={isColumnManagerOpen}
+              onCloseColumnManager={() => setIsColumnManagerOpen(false)}
+            />
+          ) : (
+            <VirtualList
+              key={`${connectionsType}:${projectFilter}:${policyFilter}`}
+              count={displayRows.length}
+              estimateSize={66}
+              renderItem={(index) => {
+                const row = displayRows[index]
+                const projectMatch = projectMatches.get(row.id)
+                return (
+                  <ConnectionRowItem
+                    row={row}
+                    closed={connectionsType === 'closed'}
+                    onShowDetail={showDetailById}
+                    projectName={projectMatch?.project.name}
+                    projectPolicy={projectMatch?.policy}
+                    projectInferred={projectMatch?.inferred}
+                  />
+                )
+              }}
+              style={{
+                flex: 1,
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
+              }}
+            />
+          )}
         </Box>
 
-        <ConnectionFilterMenu
-          connections={selectedConnections}
-          value={filters}
-          onChange={setFilters}
-        />
-
-        {isTableLayout && hasTableData && (
-          <Tooltip title={t('connections.components.columnManager.title')}>
-            <IconButton
-              size="small"
-              aria-label={t('connections.components.columnManager.title')}
-              onClick={() => setIsColumnManagerOpen(true)}
-            >
-              <ViewColumnRounded fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        )}
+        <ConnectionDetail ref={detailRef} />
       </Box>
 
-      {!hasTableData ? (
-        <BaseEmpty />
-      ) : isTableLayout ? (
-        <ConnectionTable
-          connections={filterConn}
-          onShowDetail={showDetailById}
-          columnManagerOpen={isColumnManagerOpen}
-          onCloseColumnManager={() => setIsColumnManagerOpen(false)}
-        />
-      ) : (
-        <VirtualList
-          key={`${connectionsType}:${projectFilter}:${policyFilter}`}
-          count={displayRows.length}
-          estimateSize={66}
-          renderItem={(index) => {
-            const row = displayRows[index]
-            const projectMatch = projectMatches.get(row.id)
-            return (
-              <ConnectionRowItem
-                row={row}
-                closed={connectionsType === 'closed'}
-                onShowDetail={showDetailById}
-                projectName={projectMatch?.project.name}
-                projectPolicy={projectMatch?.policy}
-                projectInferred={projectMatch?.inferred}
-              />
-            )
-          }}
-          style={{
-            flex: 1,
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-          }}
-        />
-      )}
-      <ConnectionDetail ref={detailRef} />
       <Zoom
         in={connectionsType === 'closed' && filterConn.length > 0}
         unmountOnExit
