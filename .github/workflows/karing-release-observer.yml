@@ -27,8 +27,8 @@ jobs:
       RELEASE_TAG: v2.5.4-karing.8
       RELEASE_BRANCH: feature/karing-style-diversion
       MAIN_WORKFLOW: karing-diagnostics-once.yml
-      SOURCE_SHA: '3d69571f8daf334af19192162d7d32487ccd604c'
-      RELEASE_TARGET_SHA: '249d793503cea02a2fdcfc05b1f660361000b9a4'
+      SOURCE_SHA: '0c089703836df21b1ead6733fe5945325a731e09'
+      RELEASE_TARGET_SHA: '3e7daffa080615e3eca18a795645f74be8e574fd'
       STATUS_MARKER: '<!-- karing-v254-release-observer -->'
     steps:
       - name: 等待对应源码提交的主发行运行
