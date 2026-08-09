@@ -56,7 +56,9 @@ export interface ConnectionDetailRef {
 }
 
 const PID_PLACEHOLDER_PATTERN = /^PID\s+\d+$/i
-const DETAIL_PANEL_WIDTH = 'clamp(420px, 42vw, 560px)'
+const DOCKED_DETAIL_QUERY = '(min-width: 1760px)'
+const DETAIL_PANEL_WIDTH = 'clamp(400px, 28vw, 480px)'
+const OVERLAY_DETAIL_WIDTH = 520
 
 const processNameFrom = (process: string, processPath: string) => {
   const preferred = process.trim()
@@ -66,7 +68,8 @@ const processNameFrom = (process: string, processPath: string) => {
 
 export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
   const theme = useTheme()
-  const desktopSidePanel = useMediaQuery(theme.breakpoints.up('md'))
+  const desktopSidePanel = useMediaQuery(DOCKED_DETAIL_QUERY)
+  const compactDetail = useMediaQuery(theme.breakpoints.down('sm'))
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<IConnectionsItem | null>(null)
   const [initiallyClosed, setInitiallyClosed] = useState(false)
@@ -149,11 +152,12 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
           anchor="right"
           open={detailVisible}
           onClose={onClose}
+          ModalProps={{ keepMounted: true }}
           slotProps={{
             paper: {
               sx: {
-                width: '100%',
-                maxWidth: '100vw',
+                width: compactDetail ? '100%' : OVERLAY_DETAIL_WIDTH,
+                maxWidth: compactDetail ? '100vw' : 'calc(100vw - 32px)',
                 display: 'flex',
                 flexDirection: 'column',
                 height: '100dvh',
@@ -512,7 +516,7 @@ const InnerConnectionDetail = ({
         direction={{ xs: 'column', sm: 'row' }}
         spacing={1}
         sx={{
-          p: 1.5,
+          p: 1.25,
           position: 'sticky',
           bottom: 0,
           zIndex: 2,
@@ -524,26 +528,25 @@ const InnerConnectionDetail = ({
         }}
       >
         <Button
+          size="small"
           variant="contained"
           startIcon={<TuneRounded />}
           onClick={onOpenRuleAssistant}
-          sx={{ flex: 1 }}
+          sx={{ flex: '1 1 180px' }}
         >
-          {projectMatch
-            ? '调整分流'
-            : hasApplication
-              ? '为此应用设置分流'
-              : '按目标设置分流'}
+          调整分流
         </Button>
         {!closed && (
           <Button
-            variant="text"
+            size="small"
+            variant="outlined"
             color="error"
             startIcon={<PowerOffRounded />}
             onClick={() => {
               void onDelete()
               onClose()
             }}
+            sx={{ flex: '0 0 auto' }}
           >
             断开连接
           </Button>
