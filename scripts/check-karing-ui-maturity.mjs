@@ -84,28 +84,68 @@ requireText(
 )
 requireText(
   'connectionDetail',
-  "useMediaQuery(theme.breakpoints.up('md'))",
-  'connection detail switches to a docked side pane on desktop',
+  "const DOCKED_DETAIL_QUERY = '(min-width: 1760px)'",
+  'docked detail is reserved for genuinely wide desktop windows',
 )
 requireText(
   'connectionDetail',
-  "const DETAIL_PANEL_WIDTH = 'clamp(420px, 42vw, 560px)'",
-  'desktop detail pane keeps a bounded responsive width',
+  'useMediaQuery(DOCKED_DETAIL_QUERY)',
+  'connection detail uses the wide-window docked threshold',
+)
+requireText(
+  'connectionDetail',
+  "const DETAIL_PANEL_WIDTH = 'clamp(400px, 28vw, 480px)'",
+  'docked detail pane keeps a compact inspector width',
+)
+requireText(
+  'connectionDetail',
+  'const OVERLAY_DETAIL_WIDTH = 520',
+  'regular desktop windows use a bounded overlay inspector',
 )
 requireText(
   'connectionDetail',
   'width: detailVisible ? DETAIL_PANEL_WIDTH : 0',
-  'desktop detail pane reserves layout width instead of covering the table',
+  'wide desktop detail pane reserves layout width instead of covering the table',
 )
 requireText(
   'connectionDetail',
   'variant="temporary"',
-  'small screens keep an overlay drawer instead of squeezing the table',
+  'non-wide windows keep an overlay drawer instead of squeezing the table',
+)
+requireText(
+  'connectionDetail',
+  "width: compactDetail ? '100%' : OVERLAY_DETAIL_WIDTH",
+  'desktop overlay detail does not expand to the full viewport',
+)
+requireText(
+  'connectionDetail',
+  "maxWidth: compactDetail ? '100vw' : 'calc(100vw - 32px)'",
+  'desktop overlay detail keeps visible breathing room',
+)
+forbidText(
+  'connectionDetail',
+  "useMediaQuery(theme.breakpoints.up('md'))",
+  'medium desktop widths must not switch to a docked pane',
 )
 forbidText(
   'connectionDetail',
   "width: { xs: '100%', sm: 560 }",
   'connection detail must not restore the old fixed overlay width',
+)
+requireText(
+  'connectionDetail',
+  '>\n          调整分流\n        </Button>',
+  'connection detail uses one concise routing action',
+)
+forbidText(
+  'connectionDetail',
+  '按目标设置分流',
+  'connection detail must not repeat long routing action labels',
+)
+forbidText(
+  'connectionDetail',
+  '为此应用设置分流',
+  'connection detail must not duplicate application-routing wording',
 )
 requireText(
   'connectionRow',
@@ -150,7 +190,7 @@ requireText(
 requireText(
   'connectionTable',
   "overflow: 'auto'",
-  'connection table keeps horizontal scrolling after the workspace narrows',
+  'connection table keeps horizontal scrolling as a last-resort fallback',
 )
 
 requireText(
