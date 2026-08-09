@@ -1,0 +1,271 @@
+name: 应用 Karing v8 短连接归因与详情修复
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/apply-karing-v8-fix-once.yml'
+
+permissions:
+  contents: write
+
+env:
+  HUSKY: 0
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 应用修复
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f'{label}: marker missing')
+              return text.replace(old, new, 1)
+
+          service = Path('src/services/process-connections.ts')
+          text = service.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              "  | 'recent-local-endpoint'\n  | 'none'",
+              "  | 'recent-local-endpoint'\n  | 'recent-local-port'\n  | 'none'",
+              'attribution match type',
+          )
+          text = replace_once(
+              text,
+              "const recentLocalEndpointCandidates = new Map<string, RecentCandidate>()\n",
+              "const recentLocalEndpointCandidates = new Map<string, RecentCandidate>()\nconst recentLocalPortCandidates = new Map<string, RecentCandidate>()\n",
+              'recent local port map',
+          )
+          text = replace_once(
+              text,
+              "  purgeRecentCandidates(recentLocalEndpointCandidates, now)\n",
+              "  purgeRecentCandidates(recentLocalEndpointCandidates, now)\n  purgeRecentCandidates(recentLocalPortCandidates, now)\n",
+              'recent local port purge',
+          )
+          text = replace_once(
+              text,
+              "      insertCandidate(localPort, `${protocol}|${local.port}`, identity)\n      rememberCandidate(recentLocalEndpointCandidates, localKey, identity, now)\n",
+              "      const portKey = `${protocol}|${local.port}`\n      insertCandidate(localPort, portKey, identity)\n      rememberCandidate(recentLocalEndpointCandidates, localKey, identity, now)\n      rememberCandidate(recentLocalPortCandidates, portKey, identity, now)\n",
+              'remember recent local port',
+          )
+          text = replace_once(
+              text,
+              "    const recentLocalCandidate =\n      !localEndpointCandidate && localKey\n        ? readRecentCandidate(recentLocalEndpointCandidates, localKey, now)\n        : undefined\n\n    const identity =",
+              "    const recentLocalCandidate =\n      !localEndpointCandidate && localKey\n        ? readRecentCandidate(recentLocalEndpointCandidates, localKey, now)\n        : undefined\n    const recentLocalPortCandidate = !localPortCandidate\n      ? readRecentCandidate(recentLocalPortCandidates, portKey, now)\n      : undefined\n\n    const identity =",
+              'read recent local port',
+          )
+          text = replace_once(
+              text,
+              "      recentLocalCandidate ||\n      localPortCandidate\n",
+              "      recentLocalCandidate ||\n      localPortCandidate ||\n      recentLocalPortCandidate\n",
+              'select recent local port',
+          )
+          text = replace_once(
+              text,
+              "    else if (localPortCandidate) match = 'local-port'\n\n    if (!identity) {",
+              "    else if (localPortCandidate) match = 'local-port'\n    else if (recentLocalPortCandidate) match = 'recent-local-port'\n\n    if (!identity) {\n      if (wasInjectedByWindows && previousAttribution) {\n        attributionUpdates.set(connection.id, previousAttribution)\n        return connection\n      }",
+              'preserve closed attribution',
+          )
+          text = replace_once(
+              text,
+              "      'recent-local-endpoint':\n        '短连接已结束，使用最近的 TUN/Fake-IP 本地端点记录识别应用',\n",
+              "      'recent-local-endpoint':\n        '短连接已结束，使用最近的 TUN/Fake-IP 本地端点记录识别应用',\n      'recent-local-port':\n        '短连接已结束，使用最近无冲突的唯一源端口识别应用',\n",
+              'recent local port description',
+          )
+          service.write_text(text, encoding='utf-8')
+
+          data = Path('src/hooks/use-connection-data.ts')
+          text = data.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              "  const activeConnections = enrichConnectionsWithProcesses(\n    connectionData.activeConnections,\n    snapshot,\n  )\n  if (activeConnections === connectionData.activeConnections) return\n\n  connectionData = {\n    ...connectionData,\n    activeConnections,\n  }",
+              "  const activeConnections = enrichConnectionsWithProcesses(\n    connectionData.activeConnections,\n    snapshot,\n  )\n  const closedConnections = enrichConnectionsWithProcesses(\n    connectionData.closedConnections,\n    snapshot,\n  )\n  if (\n    activeConnections === connectionData.activeConnections &&\n    closedConnections === connectionData.closedConnections\n  ) {\n    return\n  }\n\n  connectionData = {\n    ...connectionData,\n    activeConnections,\n    closedConnections,\n  }",
+              'enrich closed connections',
+          )
+          data.write_text(text, encoding='utf-8')
+
+          detail = Path('src/components/connection/connection-detail.tsx')
+          text = detail.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              "interface InformationItem {\n  label: string\n  value: string\n  icon: ReactNode\n}",
+              "interface InformationItem {\n  label: string\n  value: string\n  icon: ReactNode\n  wide?: boolean\n  monospace?: boolean\n}",
+              'information item layout options',
+          )
+          text = replace_once(
+              text,
+              "  const applicationName =\n    processName || projectMatch?.project.name || '未识别应用'\n",
+              "  const recognizedApplication = processName || projectMatch?.project.name || ''\n  const hasApplication = Boolean(recognizedApplication)\n  const applicationName = recognizedApplication || hostAddress || '未知连接'\n",
+              'unknown application header',
+          )
+          text = replace_once(
+              text,
+              "  const headerMeta = [\n    targetLabel,\n    String(metadata.network || '').toUpperCase(),",
+              "  const headerMeta = [\n    hasApplication ? targetLabel : '应用未识别',\n    String(metadata.network || '').toUpperCase(),",
+              'unknown application subtitle',
+          )
+          text = replace_once(
+              text,
+              "      icon: <AppsRounded fontSize=\"small\" />,\n    },\n    ...(processPath",
+              "      icon: <AppsRounded fontSize=\"small\" />,\n      wide: true,\n    },\n    ...(processPath",
+              'wide attribution row',
+          )
+          text = replace_once(
+              text,
+              "            icon: <AppsRounded fontSize=\"small\" />,\n          },",
+              "            icon: <AppsRounded fontSize=\"small\" />,\n            wide: true,\n            monospace: true,\n          },",
+              'wide path row',
+          )
+          text = replace_once(
+              text,
+              "                  direction=\"row\"\n                  spacing={1}\n                  sx={{ px: 1.5, py: 1, alignItems: 'center' }}",
+              "                  direction={item.wide ? 'column' : 'row'}\n                  spacing={item.wide ? 0.5 : 1}\n                  sx={{\n                    px: 1.5,\n                    py: 1,\n                    alignItems: item.wide ? 'stretch' : 'center',\n                  }}",
+              'technical row direction',
+          )
+          text = replace_once(
+              text,
+              "                    sx={{ minWidth: 72 }}",
+              "                    sx={{ minWidth: item.wide ? 0 : 72 }}",
+              'technical label width',
+          )
+          text = replace_once(
+              text,
+              "                    sx={{ flex: 1, textAlign: 'right', wordBreak: 'break-all' }}",
+              "                    sx={{\n                      flex: 1,\n                      textAlign: item.wide ? 'left' : 'right',\n                      wordBreak: 'break-word',\n                      overflowWrap: 'anywhere',\n                      fontFamily: item.monospace ? 'monospace' : 'inherit',\n                      fontSize: item.monospace ? 12 : undefined,\n                    }}",
+              'technical value layout',
+          )
+          text = replace_once(
+              text,
+              "          {projectMatch ? '调整分流' : '创建应用规则'}",
+              "          {projectMatch\n            ? '调整分流'\n            : hasApplication\n              ? '为此应用设置分流'\n              : '按目标设置分流'}",
+              'contextual routing action',
+          )
+          detail.write_text(text, encoding='utf-8')
+
+          test = Path('scripts/check-karing-process-attribution.mjs')
+          text = test.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              "assert.match(processSource, /recentLocalEndpointCandidates/)\n",
+              "assert.match(processSource, /recentLocalEndpointCandidates/)\nassert.match(processSource, /recentLocalPortCandidates/)\nassert.match(processSource, /recent-local-port/)\nassert.match(processSource, /最近无冲突的唯一源端口/)\n",
+              'recent port regression assertions',
+          )
+          text = replace_once(
+              text,
+              "assert.match(dataSource, /PROCESS_CONNECTION_RETRY_DELAY_MS = 350/)\n",
+              "assert.match(dataSource, /PROCESS_CONNECTION_RETRY_DELAY_MS = 350/)\nassert.match(dataSource, /const closedConnections = enrichConnectionsWithProcesses/)\n",
+              'closed connection regression assertion',
+          )
+          text = replace_once(
+              text,
+              "assert.match(detailSource, /调整分流/)\n",
+              "assert.match(detailSource, /调整分流/)\nassert.match(detailSource, /按目标设置分流/)\nassert.match(detailSource, /hasApplication \? targetLabel : '应用未识别'/)\n",
+              'unknown app UI assertions',
+          )
+          text = replace_once(
+              text,
+              "console.log('[通过] Fake-IP UDP 可在端点地址变化时按唯一源端口归属')\n",
+              "console.log('[通过] Fake-IP UDP 可在端点地址变化时按唯一源端口归属')\nconsole.log('[通过] 已结束 UDP 可使用最近唯一源端口补全应用')\nconsole.log('[通过] 已结束连接继续接受系统归因更新且保留已识别结果')\n",
+              'regression output',
+          )
+          test.write_text(text, encoding='utf-8')
+
+          workflow = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = workflow.read_text(encoding='utf-8')
+          text = replace_once(
+              text,
+              'RELEASE_TAG: v2.5.4-karing.6',
+              'RELEASE_TAG: v2.5.4-karing.7',
+              'release tag',
+          )
+          text = replace_once(
+              text,
+              "          check_contains src/services/process-connections.ts 'INACTIVE_TCP_STATES' '失效 TCP 状态不会污染程序归因'\n",
+              "          check_contains src/services/process-connections.ts 'INACTIVE_TCP_STATES' '失效 TCP 状态不会污染程序归因'\n          check_contains src/services/process-connections.ts 'recentLocalPortCandidates' '短命 UDP 可使用最近唯一源端口归因'\n          check_contains src/hooks/use-connection-data.ts 'const closedConnections = enrichConnectionsWithProcesses' '已结束连接继续接受系统归因更新'\n",
+              'release source gates',
+          )
+          text = replace_once(
+              text,
+              "          - TIME-WAIT、LISTEN、CLOSED 与 PID 0 不再污染端点候选。\n",
+              "          - TIME-WAIT、LISTEN、CLOSED 与 PID 0 不再污染端点候选。\n          - 短命 UDP/TUN 连接可通过最近无冲突源端口补全应用，已结束连接也继续接受归因更新。\n          - 未识别应用时以目标作为主标题，并提供按目标设置分流，不再误导为应用规则。\n",
+              'release notes',
+          )
+          text = replace_once(
+              text,
+              "    permissions:\n      contents: write\n    steps:",
+              "    permissions:\n      contents: write\n      issues: write\n      pull-requests: write\n    steps:",
+              'release comment permissions',
+          )
+          text = replace_once(
+              text,
+              "          gh release view \"${RELEASE_TAG}\" --json url,tagName,targetCommitish,isDraft,isPrerelease,assets --jq '{url: .url, tag: .tagName, target: .targetCommitish, draft: .isDraft, prerelease: .isPrerelease, assets: [.assets[].name]}'",
+              "          release_json=$(gh release view \"${RELEASE_TAG}\" --json url,tagName,targetCommitish,isDraft,isPrerelease,assets)\n          jq '{url, tag: .tagName, target: .targetCommitish, draft: .isDraft, prerelease: .isPrerelease, assets: [.assets[].name]}' <<< \"$release_json\"\n          release_url=$(jq -r '.url' <<< \"$release_json\")\n          gh api \"repos/${GITHUB_REPOSITORY}/issues/1/comments\" -f body=\"<!-- karing7-release-status -->\\n## Karing 2.5.4 短连接归因发行\\n\\n✅ 正式发行成功\\n\\n- 分支提交：`${{ needs.review.outputs.commit }}`\\n- 审查与发行运行：`${GITHUB_RUN_ID}`\\n- 标签：`${RELEASE_TAG}`\\n- Release：${release_url}\\n- 安装文件：12 个；Release 资产：14 个\" >/dev/null",
+              'release status comment',
+          )
+          workflow.write_text(text, encoding='utf-8')
+          PY
+
+      - name: 格式化并执行前端专项检查
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec biome format --write \
+            src/services/process-connections.ts \
+            src/hooks/use-connection-data.ts \
+            src/components/connection/connection-detail.tsx \
+            scripts/check-karing-process-attribution.mjs \
+            .github/workflows/karing-diagnostics-once.yml
+          node scripts/check-karing-process-attribution.mjs
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+
+      - name: 提交功能分支
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/services/process-connections.ts \
+            src/hooks/use-connection-data.ts \
+            src/components/connection/connection-detail.tsx \
+            scripts/check-karing-process-attribution.mjs \
+            .github/workflows/karing-diagnostics-once.yml
+          git commit --no-verify -m 'fix: retain short UDP attribution and unclutter unknown details'
+          git push origin HEAD:feature/karing-style-diversion
+
+      - name: 删除一次性工作流
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin dev
+          git switch --force-create dev origin/dev
+          git rm .github/workflows/apply-karing-v8-fix-once.yml
+          git commit --no-verify -m 'chore: remove Karing v8 patch workflow'
+          git push origin dev
