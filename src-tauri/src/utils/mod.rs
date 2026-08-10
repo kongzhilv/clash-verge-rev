@@ -14,7 +14,7 @@ pub mod server;
 pub mod singleton;
 pub mod speed;
 pub mod tmpl;
-#[cfg(target_os = "macos")]
-pub mod tray_speed;
 pub mod window_manager;
+#[cfg(target_os = "windows")]
+pub mod windows_network;
 pub mod yaml_emitter;
