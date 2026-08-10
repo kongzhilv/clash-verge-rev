@@ -185,7 +185,12 @@ assert.match(
 assert.match(detailSource, /activeConnections\.find/)
 assert.match(detailSource, /closedConnections\.find/)
 assert.match(detailSource, /recognizedApplication/)
-assert.match(detailSource, /hasApplication \? targetLabel : '应用未识别'/)
+assert.match(
+  detailSource,
+  /const applicationName = recognizedApplication \|\| '未识别应用'/,
+)
+assert.match(detailSource, /\{applicationName\}/)
+assert.match(detailSource, /\{targetLabel\}/)
 assert.match(detailSource, /调整分流/)
 assert.match(detailSource, /monospace/)
 assert.match(detailSource, /overflowWrap: 'anywhere'/)
@@ -205,6 +210,6 @@ console.log('[通过] 已结束 UDP 可使用最近唯一源端口补全应用')
 console.log('[通过] 已结束连接继续接受系统归因更新并保留身份')
 console.log('[通过] 本轮端点冲突时不会退回历史缓存继续猜测')
 console.log('[通过] 同一源端口存在多个应用时停止猜测')
-console.log('[通过] 未识别应用以目标为主标题，并通过统一入口调整分流')
+console.log('[通过] 未识别应用保留目标副标题，并通过统一入口调整分流')
 console.log('[通过] 长程序路径与技术字段使用纵向信息流完整展示')
 console.log('[通过] 已打开详情持续订阅连接，列表以应用为主，路由摘要无重复按钮')
