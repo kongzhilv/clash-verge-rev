@@ -79,63 +79,88 @@ forbidText(
 )
 requireText(
   'connectionDetail',
-  "direction={{ xs: 'column', sm: 'row' }}",
-  'connection detail actions adapt on narrow windows',
+  "const TWO_PANE_QUERY = '(min-width: 1760px)'",
+  'connection detail has an explicit wide-screen two-pane threshold',
 )
 requireText(
   'connectionDetail',
-  "const DOCKED_DETAIL_QUERY = '(min-width: 1760px)'",
-  'docked detail is reserved for genuinely wide desktop windows',
+  "const DETAIL_PANE_WIDTH = 'clamp(420px, 30vw, 520px)'",
+  'wide-screen detail pane has bounded inspector width',
 )
 requireText(
   'connectionDetail',
-  'useMediaQuery(DOCKED_DETAIL_QUERY)',
-  'connection detail uses the wide-window docked threshold',
+  'useMediaQuery(TWO_PANE_QUERY)',
+  'connection detail selects one-pane or two-pane layout from available width',
 )
 requireText(
   'connectionDetail',
-  "const DETAIL_PANEL_WIDTH = 'clamp(400px, 28vw, 480px)'",
-  'docked detail pane keeps a compact inspector width',
+  'role="region"',
+  'connection detail is a semantic pane rather than a modal drawer',
 )
 requireText(
   'connectionDetail',
-  'const OVERLAY_DETAIL_WIDTH = 520',
-  'regular desktop windows use a bounded overlay inspector',
+  "position: 'absolute'",
+  'single-pane detail replaces the connection workspace without a modal backdrop',
 )
 requireText(
   'connectionDetail',
-  'width: detailVisible ? DETAIL_PANEL_WIDTH : 0',
-  'wide desktop detail pane reserves layout width instead of covering the table',
+  'inset: 0',
+  'single-pane detail owns the available connection workspace',
 )
 requireText(
   'connectionDetail',
-  'variant="temporary"',
-  'non-wide windows keep an overlay drawer instead of squeezing the table',
+  'ArrowBackRounded',
+  'single-pane detail exposes navigation back to the list',
 )
 requireText(
   'connectionDetail',
-  "width: compactDetail ? '100%' : OVERLAY_DETAIL_WIDTH",
-  'desktop overlay detail does not expand to the full viewport',
+  "height: '100%'",
+  'detail pane follows its workspace height instead of viewport-height clipping',
 )
 requireText(
   'connectionDetail',
-  "maxWidth: compactDetail ? '100vw' : 'calc(100vw - 32px)'",
-  'desktop overlay detail keeps visible breathing room',
-)
-forbidText(
-  'connectionDetail',
-  "useMediaQuery(theme.breakpoints.up('md'))",
-  'medium desktop widths must not switch to a docked pane',
-)
-forbidText(
-  'connectionDetail',
-  "width: { xs: '100%', sm: 560 }",
-  'connection detail must not restore the old fixed overlay width',
+  "gridTemplateColumns:\n                  'repeat(auto-fit, minmax(min(160px, 100%), 1fr))'",
+  'traffic metrics adapt from columns to rows using available width',
 )
 requireText(
   'connectionDetail',
-  '>\n          调整分流\n        </Button>',
+  'maxWidth: DETAIL_CONTENT_MAX_WIDTH',
+  'single-pane detail keeps readable line length on large ordinary windows',
+)
+requireText(
+  'connectionDetail',
+  'pl: 3.75',
+  'technical values use a stacked key-value layout instead of competing columns',
+)
+requireText(
+  'connectionDetail',
+  "flexWrap: 'wrap'",
+  'detail actions can wrap without clipping',
+)
+requireText(
+  'connectionDetail',
+  '>\n            调整分流\n          </Button>',
   'connection detail uses one concise routing action',
+)
+forbidText(
+  'connectionDetail',
+  '<Drawer',
+  'connection details must not return to the modal drawer implementation',
+)
+forbidText(
+  'connectionDetail',
+  'ModalProps',
+  'connection details must not dim the list with a modal backdrop',
+)
+forbidText(
+  'connectionDetail',
+  'OVERLAY_DETAIL_WIDTH',
+  'connection details must not restore the old fixed overlay inspector',
+)
+forbidText(
+  'connectionDetail',
+  '100dvh',
+  'connection detail must not escape the connection workspace height',
 )
 forbidText(
   'connectionDetail',
@@ -174,8 +199,13 @@ requireText(
 )
 requireText(
   'connectionsPage',
+  "position: 'relative'",
+  'connection workspace is the containing block for single-pane details',
+)
+requireText(
+  'connectionsPage',
   "flex: '1 1 auto'",
-  'connection workspace can shrink next to the docked detail pane',
+  'connection workspace can shrink next to the two-pane detail',
 )
 requireText(
   'connectionsPage',
