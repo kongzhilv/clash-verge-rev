@@ -455,10 +455,7 @@ const InnerConnectionDetail = ({
             <AccordionDetails sx={{ p: 0 }}>
               <Stack divider={<Divider flexItem />}>
                 {information.map((item) => (
-                  <Box
-                    key={item.label}
-                    sx={{ px: 1.5, py: 1.1, minWidth: 0 }}
-                  >
+                  <Box key={item.label} sx={{ px: 1.5, py: 1.1, minWidth: 0 }}>
                     <Stack
                       direction="row"
                       spacing={1}
