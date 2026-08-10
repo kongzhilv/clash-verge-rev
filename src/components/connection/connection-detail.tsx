@@ -1,5 +1,6 @@
 import {
   AppsRounded,
+  ArrowBackRounded,
   ArrowDownwardRounded,
   ArrowUpwardRounded,
   CloseRounded,
@@ -18,14 +19,12 @@ import {
   Box,
   Button,
   Divider,
-  Drawer,
   IconButton,
   Paper,
   Stack,
   Typography,
   useMediaQuery,
 } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
 import { useLockFn } from 'ahooks'
 import dayjs from 'dayjs'
 import {
@@ -56,9 +55,9 @@ export interface ConnectionDetailRef {
 }
 
 const PID_PLACEHOLDER_PATTERN = /^PID\s+\d+$/i
-const DOCKED_DETAIL_QUERY = '(min-width: 1760px)'
-const DETAIL_PANEL_WIDTH = 'clamp(400px, 28vw, 480px)'
-const OVERLAY_DETAIL_WIDTH = 520
+const TWO_PANE_QUERY = '(min-width: 1760px)'
+const DETAIL_PANE_WIDTH = 'clamp(420px, 30vw, 520px)'
+const DETAIL_CONTENT_MAX_WIDTH = 960
 
 const processNameFrom = (process: string, processPath: string) => {
   const preferred = process.trim()
@@ -67,9 +66,7 @@ const processNameFrom = (process: string, processPath: string) => {
 }
 
 export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
-  const theme = useTheme()
-  const desktopSidePanel = useMediaQuery(DOCKED_DETAIL_QUERY)
-  const compactDetail = useMediaQuery(theme.breakpoints.down('sm'))
+  const twoPane = useMediaQuery(TWO_PANE_QUERY)
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<IConnectionsItem | null>(null)
   const [initiallyClosed, setInitiallyClosed] = useState(false)
@@ -117,59 +114,45 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
     close: onClose,
   }))
 
-  const detailContent = detail ? (
-    <InnerConnectionDetail
-      data={detail}
-      closed={closed}
-      onClose={onClose}
-      onOpenRuleAssistant={() => setRuleAssistantOpen(true)}
-    />
-  ) : null
-
   return (
     <>
-      {desktopSidePanel ? (
+      {detailVisible && detail && (
         <Box
-          sx={{
-            flex: '0 0 auto',
-            width: detailVisible ? DETAIL_PANEL_WIDTH : 0,
-            minWidth: 0,
-            height: '100%',
-            overflow: 'hidden',
-            borderLeft: detailVisible ? 1 : 0,
-            borderColor: 'divider',
-            bgcolor: 'background.default',
-            transition: theme.transitions.create('width', {
-              duration: theme.transitions.duration.shorter,
-            }),
-          }}
+          role="region"
+          aria-label="连接详情"
+          sx={
+            twoPane
+              ? {
+                  flex: '0 0 auto',
+                  width: DETAIL_PANE_WIDTH,
+                  minWidth: 0,
+                  minHeight: 0,
+                  height: '100%',
+                  overflow: 'hidden',
+                  borderLeft: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'background.default',
+                }
+              : {
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 4,
+                  minWidth: 0,
+                  minHeight: 0,
+                  display: 'flex',
+                  overflow: 'hidden',
+                  bgcolor: 'background.default',
+                }
+          }
         >
-          {detailVisible ? detailContent : null}
+          <InnerConnectionDetail
+            data={detail}
+            closed={closed}
+            singlePane={!twoPane}
+            onClose={onClose}
+            onOpenRuleAssistant={() => setRuleAssistantOpen(true)}
+          />
         </Box>
-      ) : (
-        <Drawer
-          variant="temporary"
-          anchor="right"
-          open={detailVisible}
-          onClose={onClose}
-          ModalProps={{ keepMounted: true }}
-          slotProps={{
-            paper: {
-              sx: {
-                width: compactDetail ? '100%' : OVERLAY_DETAIL_WIDTH,
-                maxWidth: compactDetail ? '100vw' : 'calc(100vw - 32px)',
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100dvh',
-                maxHeight: '100dvh',
-                overflow: 'hidden',
-                bgcolor: 'background.default',
-              },
-            },
-          }}
-        >
-          {detailContent}
-        </Drawer>
       )}
 
       {detail && (
@@ -187,6 +170,7 @@ export function ConnectionDetail({ ref }: { ref?: Ref<ConnectionDetailRef> }) {
 interface InnerProps {
   data: IConnectionsItem
   closed: boolean
+  singlePane: boolean
   onClose: () => void
   onOpenRuleAssistant: () => void
 }
@@ -195,7 +179,6 @@ interface InformationItem {
   label: string
   value: string
   icon: ReactNode
-  wide?: boolean
   monospace?: boolean
 }
 
@@ -229,6 +212,7 @@ const Metric = ({ label, value, icon }: MetricProps) => (
 const InnerConnectionDetail = ({
   data,
   closed,
+  singlePane,
   onClose,
   onOpenRuleAssistant,
 }: InnerProps) => {
@@ -283,7 +267,6 @@ const InnerConnectionDetail = ({
       label: '归因状态',
       value: attributionDetail,
       icon: <AppsRounded fontSize="small" />,
-      wide: true,
     },
     ...(processPath
       ? [
@@ -291,7 +274,6 @@ const InnerConnectionDetail = ({
             label: '程序路径',
             value: processPath,
             icon: <AppsRounded fontSize="small" />,
-            wide: true,
             monospace: true,
           },
         ]
@@ -329,17 +311,19 @@ const InnerConnectionDetail = ({
     <Stack
       sx={{
         flex: '1 1 auto',
-        height: '100dvh',
-        maxHeight: '100%',
+        width: '100%',
+        height: '100%',
+        minWidth: 0,
         minHeight: 0,
         overflow: 'hidden',
+        bgcolor: 'background.default',
       }}
     >
       <Stack
         direction="row"
         spacing={1}
         sx={{
-          px: 2,
+          px: 1.5,
           py: 1.25,
           flex: '0 0 auto',
           alignItems: 'flex-start',
@@ -348,6 +332,13 @@ const InnerConnectionDetail = ({
           bgcolor: 'background.paper',
         }}
       >
+        <IconButton
+          onClick={onClose}
+          aria-label={singlePane ? '返回连接列表' : '关闭连接详情'}
+          sx={{ mt: -0.35, ml: -0.5, flex: '0 0 auto' }}
+        >
+          {singlePane ? <ArrowBackRounded /> : <CloseRounded />}
+        </IconButton>
         <Box
           sx={{
             width: 40,
@@ -378,24 +369,20 @@ const InnerConnectionDetail = ({
           <Typography
             variant="body2"
             color="text.secondary"
-            sx={{ mt: 0.25, overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+            sx={{
+              mt: 0.25,
+              lineHeight: 1.45,
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+            }}
           >
             {headerMeta}
           </Typography>
         </Box>
-        <IconButton
-          onClick={onClose}
-          aria-label="关闭连接详情"
-          sx={{ mt: -0.5 }}
-        >
-          <CloseRounded />
-        </IconButton>
       </Stack>
 
-      <Stack
-        spacing={1.25}
+      <Box
         sx={{
-          p: 1.5,
           flex: '1 1 0',
           minHeight: 0,
           overflowX: 'hidden',
@@ -405,153 +392,153 @@ const InnerConnectionDetail = ({
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <ConnectionProjectCard connection={data} />
-
-        <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              '& > :nth-of-type(odd)': {
-                borderRight: 1,
-                borderColor: 'divider',
-              },
-              '& > :nth-of-type(-n+2)': {
-                borderBottom: 1,
-                borderColor: 'divider',
-              },
-            }}
-          >
-            <Metric
-              label={t('shared.labels.downloaded')}
-              value={parseTraffic(data.download).join(' ')}
-              icon={<ArrowDownwardRounded fontSize="small" />}
-            />
-            <Metric
-              label={t('shared.labels.uploaded')}
-              value={parseTraffic(data.upload).join(' ')}
-              icon={<ArrowUpwardRounded fontSize="small" />}
-            />
-            <Metric
-              label={t('connections.components.fields.dlSpeed')}
-              value={`${parseTraffic(data.curDownload ?? -1).join(' ')}/s`}
-              icon={<SpeedRounded fontSize="small" />}
-            />
-            <Metric
-              label={t('connections.components.fields.ulSpeed')}
-              value={`${parseTraffic(data.curUpload ?? -1).join(' ')}/s`}
-              icon={<SpeedRounded fontSize="small" />}
-            />
-          </Box>
-        </Paper>
-
-        <Accordion
-          disableGutters
-          elevation={0}
+        <Stack
+          spacing={1.25}
           sx={{
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: '8px !important',
-            overflow: 'hidden',
-            '&::before': { display: 'none' },
+            width: '100%',
+            maxWidth: DETAIL_CONTENT_MAX_WIDTH,
+            mx: 'auto',
+            p: 1.5,
           }}
         >
-          <AccordionSummary expandIcon={<ExpandMoreRounded />}>
-            <Typography variant="subtitle2">技术详情</Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ p: 0 }}>
-            <Stack divider={<Divider flexItem />}>
-              {information.map((item) => (
-                <Stack
-                  key={item.label}
-                  direction={item.wide ? 'column' : { xs: 'column', sm: 'row' }}
-                  spacing={item.wide ? 0.5 : 1}
-                  sx={{
-                    px: 1.5,
-                    py: 1,
-                    alignItems: item.wide
-                      ? 'stretch'
-                      : { xs: 'stretch', sm: 'center' },
-                  }}
-                >
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center' }}
+          <ConnectionProjectCard connection={data} />
+
+          <Paper variant="outlined" sx={{ borderRadius: 2 }}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fit, minmax(min(160px, 100%), 1fr))',
+                '& > *': {
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                },
+                '& > :last-child': { borderBottom: 0 },
+              }}
+            >
+              <Metric
+                label={t('shared.labels.downloaded')}
+                value={parseTraffic(data.download).join(' ')}
+                icon={<ArrowDownwardRounded fontSize="small" />}
+              />
+              <Metric
+                label={t('shared.labels.uploaded')}
+                value={parseTraffic(data.upload).join(' ')}
+                icon={<ArrowUpwardRounded fontSize="small" />}
+              />
+              <Metric
+                label={t('connections.components.fields.dlSpeed')}
+                value={`${parseTraffic(data.curDownload ?? -1).join(' ')}/s`}
+                icon={<SpeedRounded fontSize="small" />}
+              />
+              <Metric
+                label={t('connections.components.fields.ulSpeed')}
+                value={`${parseTraffic(data.curUpload ?? -1).join(' ')}/s`}
+                icon={<SpeedRounded fontSize="small" />}
+              />
+            </Box>
+          </Paper>
+
+          <Accordion
+            disableGutters
+            elevation={0}
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: '8px !important',
+              '&::before': { display: 'none' },
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreRounded />}>
+              <Typography variant="subtitle2">技术详情</Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ p: 0 }}>
+              <Stack divider={<Divider flexItem />}>
+                {information.map((item) => (
+                  <Box
+                    key={item.label}
+                    sx={{ px: 1.5, py: 1.1, minWidth: 0 }}
                   >
-                    <Box sx={{ color: 'text.secondary', display: 'flex' }}>
-                      {item.icon}
-                    </Box>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'center', minWidth: 0 }}
+                    >
+                      <Box sx={{ color: 'text.secondary', display: 'flex' }}>
+                        {item.icon}
+                      </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {item.label}
+                      </Typography>
+                    </Stack>
                     <Typography
                       variant="body2"
-                      color="text.secondary"
-                      sx={{ minWidth: item.wide ? 0 : { sm: 72 } }}
+                      sx={{
+                        mt: 0.5,
+                        pl: 3.75,
+                        minWidth: 0,
+                        lineHeight: 1.5,
+                        wordBreak: 'break-word',
+                        overflowWrap: 'anywhere',
+                        fontFamily: item.monospace ? 'monospace' : 'inherit',
+                        fontSize: item.monospace ? 12 : undefined,
+                      }}
                     >
-                      {item.label}
+                      {item.value}
                     </Typography>
-                  </Stack>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      flex: 1,
-                      textAlign: item.wide
-                        ? 'left'
-                        : { xs: 'left', sm: 'right' },
-                      wordBreak: 'break-word',
-                      overflowWrap: 'anywhere',
-                      fontFamily: item.monospace ? 'monospace' : 'inherit',
-                      fontSize: item.monospace ? 12 : undefined,
-                    }}
-                  >
-                    {item.value}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          </AccordionDetails>
-        </Accordion>
-      </Stack>
+                  </Box>
+                ))}
+              </Stack>
+            </AccordionDetails>
+          </Accordion>
+        </Stack>
+      </Box>
 
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        spacing={1}
+      <Box
         sx={{
-          p: 1.25,
-          position: 'sticky',
-          bottom: 0,
-          zIndex: 2,
           flex: '0 0 auto',
-          alignItems: 'stretch',
           borderTop: 1,
           borderColor: 'divider',
           bgcolor: 'background.paper',
         }}
       >
-        <Button
-          size="small"
-          variant="contained"
-          startIcon={<TuneRounded />}
-          onClick={onOpenRuleAssistant}
-          sx={{ flex: '1 1 180px' }}
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            width: '100%',
+            maxWidth: DETAIL_CONTENT_MAX_WIDTH,
+            mx: 'auto',
+            p: 1.25,
+            flexWrap: 'wrap',
+          }}
         >
-          调整分流
-        </Button>
-        {!closed && (
           <Button
             size="small"
-            variant="outlined"
-            color="error"
-            startIcon={<PowerOffRounded />}
-            onClick={() => {
-              void onDelete()
-              onClose()
-            }}
-            sx={{ flex: '0 0 auto' }}
+            variant="contained"
+            startIcon={<TuneRounded />}
+            onClick={onOpenRuleAssistant}
+            sx={{ flex: '1 1 220px' }}
           >
-            断开连接
+            调整分流
           </Button>
-        )}
-      </Stack>
+          {!closed && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={<PowerOffRounded />}
+              onClick={() => {
+                void onDelete()
+                onClose()
+              }}
+              sx={{ flex: '0 1 auto' }}
+            >
+              断开连接
+            </Button>
+          )}
+        </Stack>
+      </Box>
     </Stack>
   )
 }
