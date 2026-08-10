@@ -21,7 +21,8 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text)) failures.push(`${label}: still contains ${text}`)
+  if (source[key].includes(text))
+    failures.push(`${label}: still contains ${text}`)
 }
 
 requireText(
