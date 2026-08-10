@@ -315,6 +315,7 @@ const ConnectionsPage = () => {
           minWidth: 0,
           minHeight: 0,
           display: 'flex',
+          position: 'relative',
           overflow: 'hidden',
         }}
       >
