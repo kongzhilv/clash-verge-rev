@@ -1,0 +1,3 @@
+Release: v2.5.4-karing.10
+Build source: d0817f329e1beb92e3bdeb27eefb5e23af769003
+Purpose: remove PowerShell-based Windows route probing, harden Wi-Fi/ICS/TUN routing, and polish adaptive connection details.
