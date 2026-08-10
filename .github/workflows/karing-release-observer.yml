@@ -19,16 +19,16 @@ concurrency:
 
 jobs:
   recover-and-verify:
-    name: 恢复 v2.5.4-karing.8 并完成最终核验
+    name: 恢复 v2.5.4-karing.9 并完成最终核验
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: '1'
-      RELEASE_TAG: v2.5.4-karing.8
+      RELEASE_TAG: v2.5.4-karing.9
       RELEASE_BRANCH: feature/karing-style-diversion
       MAIN_WORKFLOW: karing-diagnostics-once.yml
-      SOURCE_SHA: '0c089703836df21b1ead6733fe5945325a731e09'
-      RELEASE_TARGET_SHA: '3e7daffa080615e3eca18a795645f74be8e574fd'
+      SOURCE_SHA: '3cfd72022183d35711c490086d91b042ffd044fb'
+      RELEASE_TARGET_SHA: '4f5f47d0039bf35b903323f097044a0681be53cb'
       STATUS_MARKER: '<!-- karing-v254-release-observer -->'
     steps:
       - name: 等待对应源码提交的主发行运行
@@ -110,7 +110,8 @@ jobs:
           test -f release-assets/SHA256SUMS.txt
           test -f release-assets/BUILD_INFO.txt
           test -f release-assets/release-notes.md
-          grep -Fq "Commit: ${SOURCE_SHA}" release-assets/BUILD_INFO.txt
+          grep -Fqx "Commit: ${SOURCE_SHA}" release-assets/BUILD_INFO.txt
+          grep -Fqx "Release tag: ${RELEASE_TAG}" release-assets/BUILD_INFO.txt
 
           installer_count=$(find release-assets -maxdepth 1 -type f \( \
             -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
@@ -124,9 +125,8 @@ jobs:
             sha256sum --check SHA256SUMS.txt
           )
 
-          sed -i "s/Release tag: v2.5.4-karing.7/Release tag: ${RELEASE_TAG}/" release-assets/BUILD_INFO.txt
-          grep -Fq "Release tag: ${RELEASE_TAG}" release-assets/BUILD_INFO.txt
-          printf '\n本次迭代标签：`%s`\n构建源码：`%s`\n' "$RELEASE_TAG" "$SOURCE_SHA" >> release-assets/release-notes.md
+          printf '\n最终发行标签：`%s`\n构建源码：`%s`\n发行锚点：`%s`\n' \
+            "$RELEASE_TAG" "$SOURCE_SHA" "$RELEASE_TARGET_SHA" >> release-assets/release-notes.md
 
       - name: 发布正式 Latest Release
         shell: bash
@@ -146,7 +146,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "$GITHUB_REPOSITORY" \
             --target "$RELEASE_TARGET_SHA" \
-            --title "Clash Verge Rev Karing v2.5.4 · UI Inspector Fix" \
+            --title "Clash Verge Rev Karing v2.5.4 · Network Safety + List Detail" \
             --notes-file release-assets/release-notes.md \
             --latest
 
@@ -174,8 +174,8 @@ jobs:
           mkdir -p release-audit
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern SHA256SUMS.txt --pattern BUILD_INFO.txt --dir release-audit
-          grep -Fq "Commit: ${SOURCE_SHA}" release-audit/BUILD_INFO.txt
-          grep -Fq "Release tag: ${RELEASE_TAG}" release-audit/BUILD_INFO.txt
+          grep -Fqx "Commit: ${SOURCE_SHA}" release-audit/BUILD_INFO.txt
+          grep -Fqx "Release tag: ${RELEASE_TAG}" release-audit/BUILD_INFO.txt
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
           test "$checksum_lines" -eq 12
 
@@ -194,7 +194,7 @@ jobs:
             body="${STATUS_MARKER}
           ## Karing 2.5.4 发行状态
 
-          ✅ 第二轮连接详情布局已完成审查、全平台构建与正式发行。
+          ✅ Windows 热点/TUN 网络安全修复与新 List/Detail 连接详情已完成审查、全平台构建与正式发行。
 
           - 构建源码：\`${SOURCE_SHA}\`
           - 发行锚点：\`${RELEASE_TARGET_SHA}\`
@@ -207,7 +207,7 @@ jobs:
             body="${STATUS_MARKER}
           ## Karing 2.5.4 发行状态
 
-          ❌ 第二轮连接详情布局未完成正式发行。
+          ❌ Windows 热点/TUN 网络安全修复与新 List/Detail 连接详情尚未完成正式发行。
 
           - 构建源码：\`${SOURCE_SHA}\`
           - 主发行运行：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}
