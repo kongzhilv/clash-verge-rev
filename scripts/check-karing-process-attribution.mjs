@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
+import './check-windows-tun-safety.mjs'
+
 const normalizeHost = (value) =>
   value
     .trim()
@@ -155,9 +157,12 @@ assert.match(processSource, /PID_PLACEHOLDER_PATTERN/)
 assert.match(processSource, /INACTIVE_TCP_STATES/)
 assert.match(processSource, /TIME-WAIT/)
 assert.doesNotMatch(rustSource, /format!\("PID \{pid\}"\)/)
-assert.match(detailSource, /height: '100dvh'/)
+assert.match(detailSource, /TWO_PANE_QUERY/)
+assert.match(detailSource, /ArrowBackRounded/)
+assert.match(detailSource, /position: 'absolute'/)
 assert.match(detailSource, /flex: '1 1 0'/)
 assert.match(detailSource, /scrollbarGutter: 'stable'/)
+assert.doesNotMatch(detailSource, /<Drawer/)
 assert.match(processSource, /localEndpointCandidate/)
 assert.match(processSource, /recentLocalEndpointCandidates/)
 assert.match(processSource, /recentLocalPortCandidates/)
@@ -190,9 +195,10 @@ assert.match(routeSource, /当前出口/)
 assert.doesNotMatch(routeSource, /useNavigate/)
 assert.doesNotMatch(routeSource, /<Button/)
 
+console.log('[通过] Windows TUN/热点启动安全门禁已纳入发行回归')
 console.log('[通过] PID 占位值不会再冒充已识别程序')
 console.log('[通过] 同 PID 的完整路径会修复占位连接记录')
-console.log('[通过] 详情抽屉使用独立滚动区和固定操作栏')
+console.log('[通过] 连接详情使用自适应 list-detail，不再依赖模态抽屉')
 console.log('[通过] Fake-IP IPv6 TCP 本地端点可归属到 Nstbrowser.exe')
 console.log('[通过] Fake-IP UDP 可在端点地址变化时按唯一源端口归属')
 console.log('[通过] 已结束 UDP 可使用最近唯一源端口补全应用')
@@ -200,5 +206,5 @@ console.log('[通过] 已结束连接继续接受系统归因更新并保留身�
 console.log('[通过] 本轮端点冲突时不会退回历史缓存继续猜测')
 console.log('[通过] 同一源端口存在多个应用时停止猜测')
 console.log('[通过] 未识别应用以目标为主标题，并通过统一入口调整分流')
-console.log('[通过] 长程序路径使用独立整行显示，不再挤压技术字段')
+console.log('[通过] 长程序路径与技术字段使用纵向信息流完整展示')
 console.log('[通过] 已打开详情持续订阅连接，列表以应用为主，路由摘要无重复按钮')
