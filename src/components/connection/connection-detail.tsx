@@ -430,9 +430,7 @@ const InnerConnectionDetail = ({
               flex: '0 0 auto',
               borderRadius: 2,
               bgcolor: hasApplication ? 'primary.main' : 'action.selected',
-              color: hasApplication
-                ? 'primary.contrastText'
-                : 'text.secondary',
+              color: hasApplication ? 'primary.contrastText' : 'text.secondary',
             }}
           >
             {hasApplication ? <AppsRounded /> : <RouteRounded />}
