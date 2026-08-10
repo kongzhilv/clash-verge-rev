@@ -84,8 +84,8 @@ requireText(
 )
 requireText(
   'connectionDetail',
-  "const DETAIL_PANE_WIDTH = 'clamp(420px, 30vw, 520px)'",
-  'wide-screen detail pane has bounded inspector width',
+  "const DETAIL_PANE_WIDTH = 'clamp(460px, 31vw, 560px)'",
+  'wide-screen detail pane has a readable but bounded inspector width',
 )
 requireText(
   'connectionDetail',
@@ -119,8 +119,33 @@ requireText(
 )
 requireText(
   'connectionDetail',
-  "gridTemplateColumns:\n                  'repeat(auto-fit, minmax(min(160px, 100%), 1fr))'",
+  'component="header"',
+  'connection inspector has a stable semantic header',
+)
+requireText(
+  'connectionDetail',
+  '<Chip',
+  'connection state and protocol metadata use compact status chips',
+)
+requireText(
+  'connectionDetail',
+  'title="实时流量"',
+  'traffic metrics are grouped into a named information section',
+)
+requireText(
+  'connectionDetail',
+  "'repeat(auto-fit, minmax(min(150px, 100%), 1fr))'",
   'traffic metrics adapt from columns to rows using available width',
+)
+requireText(
+  'connectionDetail',
+  'title="网络与进程"',
+  'technical metadata is grouped into a readable network and process section',
+)
+requireText(
+  'connectionDetail',
+  '<InformationRow key={item.label} item={item} />',
+  'technical values use reusable stacked key-value rows',
 )
 requireText(
   'connectionDetail',
@@ -129,13 +154,18 @@ requireText(
 )
 requireText(
   'connectionDetail',
-  'pl: 3.75',
-  'technical values use a stacked key-value layout instead of competing columns',
+  "overflowWrap: 'anywhere'",
+  'connection detail allows long paths, IPv6 endpoints and rule names to wrap',
+)
+requireText(
+  'connectionDetail',
+  'component="footer"',
+  'connection inspector keeps primary actions in a stable footer',
 )
 requireText(
   'connectionDetail',
   "flexWrap: 'wrap'",
-  'detail actions can wrap without clipping',
+  'detail metadata and actions can wrap without clipping',
 )
 requireText(
   'connectionDetail',
@@ -146,6 +176,11 @@ forbidText(
   'connectionDetail',
   '<Drawer',
   'connection details must not return to the modal drawer implementation',
+)
+forbidText(
+  'connectionDetail',
+  '<Accordion',
+  'core connection metadata must not be hidden behind an accordion',
 )
 forbidText(
   'connectionDetail',
