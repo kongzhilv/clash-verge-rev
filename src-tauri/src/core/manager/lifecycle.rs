@@ -51,6 +51,11 @@ impl CoreManager {
             return Ok(());
         }
 
+        // Windows TUN 在创建自动路由前先等待 ICS/移动热点产生的默认路由稳定，
+        // 并把本次运行时配置固定到真实物理出口，避免 Wi-Fi Direct/TUN 互相抢路由。
+        #[cfg(target_os = "windows")]
+        self.prepare_windows_tun_runtime_for_start().await?;
+
         self.prepare_startup().await;
         defer! {
             self.after_core_process();
@@ -116,7 +121,6 @@ impl CoreManager {
         if !IVerge::VALID_CLASH_CORES.contains(&clash_core.as_str()) {
             return Err(format!("Invalid clash core: {}", clash_core).into());
         }
-
         Config::verge().await.edit_draft(|d| {
             d.clash_core = Some(clash_core.to_owned());
         });
