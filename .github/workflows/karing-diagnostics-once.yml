@@ -40,7 +40,7 @@ env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
-  RELEASE_TAG: v2.5.4-karing.7
+  RELEASE_TAG: v2.5.4-karing.9
   RELEASE_BRANCH: feature/karing-style-diversion
 
 concurrency:
@@ -118,6 +118,9 @@ jobs:
       - name: 构建前端
         run: pnpm run web:build
 
+      - name: 运行 Windows TUN/热点安全专项回归
+        run: node scripts/check-windows-tun-safety.mjs
+
       - name: 运行程序归因专项回归
         run: node scripts/check-karing-process-attribution.mjs
 
@@ -172,10 +175,16 @@ jobs:
           check_contains src/services/process-connections.ts 'PID_PLACEHOLDER_PATTERN' 'PID 占位值不会被当成程序名'
           check_contains src/services/process-connections.ts 'INACTIVE_TCP_STATES' '失效 TCP 状态不会污染程序归因'
           check_not_contains src-tauri/src/cmd/process_connections.rs 'format!("PID {pid}")' '后端不再制造 PID 假程序名'
-          check_contains src/components/connection/connection-detail.tsx "height: '100dvh'" '详情抽屉使用完整动态视口高度'
+          check_contains src-tauri/src/core/manager/config.rs 'core is stopped; staged configuration without starting it' '后台配置更新不会偷偷启动已关闭内核'
+          check_contains src-tauri/src/core/manager/lifecycle.rs 'prepare_windows_tun_runtime_for_start' 'Windows TUN 启动前执行物理出口稳定检查'
+          check_contains src-tauri/src/utils/windows_network.rs 'const STABLE_SAMPLES: usize = 6;' 'Windows 默认路由需通过稳定窗口'
+          check_contains src-tauri/src/utils/windows_network.rs 'Value::from("auto-detect-interface"), Value::from(false)' 'Windows TUN 运行时固定物理出口并关闭自动抖动探测'
+          check_contains src/components/connection/connection-detail.tsx 'const TWO_PANE_QUERY' '连接详情使用自适应 list-detail 双栏阈值'
+          check_contains src/components/connection/connection-detail.tsx "position: 'absolute'" '普通窗口详情替换连接工作区而不是模态覆盖'
+          check_contains src/components/connection/connection-detail.tsx 'ArrowBackRounded' '单栏详情提供返回连接列表导航'
           check_contains src/components/connection/connection-detail.tsx "flex: '1 1 0'" '详情正文拥有独立可收缩滚动区'
           check_contains src/components/connection/connection-detail.tsx "scrollbarGutter: 'stable'" '详情滚动条不会挤压内容'
-          check_contains src/components/connection/connection-detail.tsx "position: 'sticky'" '详情底部操作栏固定可见'
+          check_not_contains src/components/connection/connection-detail.tsx '<Drawer' '连接详情已彻底移除旧模态 Drawer'
           check_contains src/components/base/adaptive-dialog.tsx "useMediaQuery(theme.breakpoints.down('sm'))" '复杂对话框仅在小屏切换全屏'
           check_contains src/components/rule/diversion-manager/project-panel.tsx 'MoreVertRounded' '应用规则低频操作已收进更多菜单'
           check_not_contains src/components/connection/connection-rule-assistant.tsx '打开分流中心' '连接分流助手不再重复分流中心入口'
@@ -583,14 +592,14 @@ jobs:
           cat > release-assets/release-notes.md <<EOF
           # Clash Verge Rev Karing v${{ needs.review.outputs.version }}
 
-          本轮集中完成前端成熟化与关联关系收敛：
+          本轮优先解决 Windows 热点/TUN 最终断网，并重做连接详情布局：
 
-          - 新增统一自适应对话框：手机全屏，桌面保持有边界的大型窗口和独立滚动正文。
-          - 连接详情、连接列表、应用名称、程序路径、规则和出口不再依赖固定单行宽度，长文本可完整阅读。
-          - 应用规则行只保留启用与编辑；查看连接、查看出口和删除收进“更多”菜单，消除按钮墙。
-          - “应用规则 → 当前出口”关系直接展示，低频跳转统一收纳，不再重复堆叠连接/编辑/出口图标。
-          - 连接分流助手移除重复“打开分流中心”入口，域名测试、规则提供者、匹配器和出口选择器统一窗口行为。
-          - Windows 程序归因与短命 UDP/冲突保护专项回归继续保留，避免 UI 重构破坏真实分流链路。
+          - 修复代理总开关关闭时后台订阅/配置更新因 API pipe 不存在而意外重启核心的问题；关闭态只暂存配置，不再偷偷创建 TUN。
+          - Windows TUN 在启动或热重载前等待真实 IPv4 默认路由稳定，排除 Mihomo、Wi-Fi Direct、热点与常见虚拟适配器，并把本次运行时出口固定到真实物理网卡。
+          - 自动管理出口时将 Mihomo `auto-detect-interface` 关闭；如果默认路由在限定窗口内仍不稳定，则阻止 TUN 启动而不是冒险把系统网络带入失效状态。
+          - 连接详情舍弃旧 temporary Drawer/遮罩方案，改成成熟的 adaptive list-detail：宽屏双栏，普通窗口详情在连接工作区内单栏接管，并提供明确返回导航。
+          - 技术详情统一为纵向 key/value 信息流，流量指标使用 auto-fit 网格，长路径、IPv6、规则和出口不再与标签抢同一行宽度。
+          - Windows TUN/热点安全、程序归因与 UI 成熟度均加入发行专项回归门禁。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
 
@@ -639,13 +648,13 @@ jobs:
           gh release create "${RELEASE_TAG}" \
             release-assets/*.exe \
             release-assets/*.dmg \
-            release-assets/*.deb \
             release-assets/*.rpm \
+            release-assets/*.deb \
             release-assets/SHA256SUMS.txt \
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }}" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Network Safety + List Detail" \
             --notes-file release-assets/release-notes.md \
             --latest
 
