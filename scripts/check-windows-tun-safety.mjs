@@ -4,6 +4,7 @@ const files = {
   manager: 'src-tauri/src/core/manager/config.rs',
   lifecycle: 'src-tauri/src/core/manager/lifecycle.rs',
   windowsNetwork: 'src-tauri/src/utils/windows_network.rs',
+  manifest: 'src-tauri/Cargo.toml',
   utils: 'src-tauri/src/utils/mod.rs',
 }
 
@@ -48,7 +49,7 @@ requireText(
 requireText(
   'manager',
   'tokio::task::spawn_blocking(detect_stable_upstream)',
-  'Windows route inspection does not block the async runtime',
+  'native Windows route inspection does not block the async runtime',
 )
 requireText(
   'lifecycle',
@@ -65,25 +66,48 @@ requireText(
   'const MAX_SAMPLES: usize = 24;',
   'route selection has a bounded retry window',
 )
+for (const api of [
+  'GetIpForwardTable2',
+  'GetIfTable2',
+  'GetUnicastIpAddressTable',
+  'GetIpInterfaceEntry',
+  'FreeMibTable',
+]) {
+  requireText(
+    'windowsNetwork',
+    api,
+    `Windows route guard uses native IP Helper API ${api}`,
+  )
+}
 requireText(
-  'windowsNetwork',
-  'Get-NetRoute -AddressFamily IPv4',
-  'route guard observes the Windows active IPv4 routing table',
+  'manifest',
+  '"Win32_NetworkManagement_Ndis"',
+  'native adapter status types are enabled without shelling out',
 )
 requireText(
   'windowsNetwork',
-  'wi-?fi direct virtual adapter',
-  'Windows hotspot private virtual adapter is excluded from uplink selection',
+  'is_hotspot_side',
+  'Windows hotspot private-side interfaces are identified',
 )
 requireText(
   'windowsNetwork',
-  'mihomo|clash',
-  'proxy virtual adapters are excluded from uplink selection',
+  'wi-fi direct virtual adapter',
+  'Wi-Fi Direct hotspot adapters are classified without locale-specific commands',
 )
 requireText(
   'windowsNetwork',
-  'format!(\n            "{}|{}|{}"',
-  'route stability includes interface, source address and gateway',
+  'route-exclude-address',
+  'LAN and hotspot subnets are protected from TUN auto-route',
+)
+requireText(
+  'windowsNetwork',
+  'exclude-interface',
+  'hotspot-side interfaces can be excluded from TUN routing',
+)
+requireText(
+  'windowsNetwork',
+  'include-interface',
+  'explicit include-interface is preserved to avoid conflicting Mihomo options',
 )
 requireText(
   'windowsNetwork',
@@ -96,15 +120,30 @@ requireText(
   'managed Windows TUN disables route-flapping interface autodetection',
 )
 requireText(
+  'windowsNetwork',
+  'route_exclude_addresses.join(",")',
+  'stability signature includes hotspot and LAN exclusions',
+)
+requireText(
   'utils',
   'pub mod windows_network;',
   'Windows route guard is compiled into the app',
 )
-forbidText(
-  'windowsNetwork',
-  'Microsoft Wi-Fi Direct Virtual Adapter"',
-  'route filtering should remain case-insensitive and pattern based',
-)
+
+for (const forbidden of [
+  'powershell.exe',
+  'POWERSHELL_ROUTE_QUERY',
+  'ExecutionPolicy',
+  'Get-NetRoute',
+  'Get-NetAdapter',
+  'std::process::Command',
+]) {
+  forbidText(
+    'windowsNetwork',
+    forbidden,
+    'Windows TUN safety must not spawn PowerShell or depend on shell cmdlets',
+  )
+}
 
 if (failures.length > 0) {
   console.error('Windows TUN safety regression failed:')
@@ -113,3 +152,6 @@ if (failures.length > 0) {
 }
 
 console.log('Windows TUN safety regression passed.')
+console.log('[通过] 启动阶段不再执行 PowerShell / ExecutionPolicy Bypass')
+console.log('[通过] 默认路由通过 Win32 IP Helper API 在进程内读取')
+console.log('[通过] Wi-Fi Direct/移动热点私网接口与 LAN CIDR 受 TUN 路由保护')
