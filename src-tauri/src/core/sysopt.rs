@@ -76,24 +76,37 @@ async fn get_bypass() -> String {
 }
 
 fn record_os_proxy_state(event: &str) {
-    let sys = Sysproxy::get_system_proxy();
-    let auto = Autoproxy::get_auto_proxy();
+    let (sysproxy, sysproxy_error) = match Sysproxy::get_system_proxy() {
+        Ok(value) => (
+            Some(json!({
+                "enabled": value.enable,
+                "host": value.host.as_str(),
+                "port": value.port,
+                "bypass_present": !value.bypass.trim().is_empty(),
+            })),
+            None,
+        ),
+        Err(error) => (None, Some(error.to_string())),
+    };
+    let (pac, pac_error) = match Autoproxy::get_auto_proxy() {
+        Ok(value) => (
+            Some(json!({
+                "enabled": value.enable,
+                "url_present": !value.url.trim().is_empty(),
+            })),
+            None,
+        ),
+        Err(error) => (None, Some(error.to_string())),
+    };
+
     diagnostics::info(
         "system-proxy",
         event,
         json!({
-            "sysproxy": sys.as_ref().ok().map(|value| json!({
-                "enabled": value.enable,
-                "host": value.host,
-                "port": value.port,
-                "bypass_present": !value.bypass.trim().is_empty(),
-            })),
-            "sysproxy_error": sys.err().map(|error| error.to_string()),
-            "pac": auto.as_ref().ok().map(|value| json!({
-                "enabled": value.enable,
-                "url_present": !value.url.trim().is_empty(),
-            })),
-            "pac_error": auto.err().map(|error| error.to_string()),
+            "sysproxy": sysproxy,
+            "sysproxy_error": sysproxy_error,
+            "pac": pac,
+            "pac_error": pac_error,
         }),
     );
 }
@@ -115,13 +128,21 @@ impl Sysopt {
         if !verge.enable_system_proxy.unwrap_or_default() {
             logging!(info, Type::Core, "System proxy is disabled.");
             self.access_guard().write().stop();
-            diagnostics::info("system-proxy", "guard-stopped", json!({"reason": "system-proxy-disabled"}));
+            diagnostics::info(
+                "system-proxy",
+                "guard-stopped",
+                json!({"reason": "system-proxy-disabled"}),
+            );
             return;
         }
         if !verge.enable_proxy_guard.unwrap_or_default() {
             logging!(info, Type::Core, "System proxy guard is disabled.");
             self.access_guard().write().stop();
-            diagnostics::info("system-proxy", "guard-stopped", json!({"reason": "guard-disabled"}));
+            diagnostics::info(
+                "system-proxy",
+                "guard-stopped",
+                json!({"reason": "guard-disabled"}),
+            );
             return;
         }
         logging!(
@@ -243,7 +264,11 @@ impl Sysopt {
                 Ok(())
             }
             Err(error) => {
-                diagnostics::error("system-proxy", "apply-failed", json!({"error": error.to_string()}));
+                diagnostics::error(
+                    "system-proxy",
+                    "apply-failed",
+                    json!({"error": error.to_string()}),
+                );
                 record_os_proxy_state("after-apply-failed");
                 Err(error)
             }
@@ -287,7 +312,11 @@ impl Sysopt {
                 Ok(())
             }
             Err(error) => {
-                diagnostics::error("system-proxy", "reset-failed", json!({"error": error.to_string()}));
+                diagnostics::error(
+                    "system-proxy",
+                    "reset-failed",
+                    json!({"error": error.to_string()}),
+                );
                 record_os_proxy_state("after-reset-failed");
                 Err(error)
             }
