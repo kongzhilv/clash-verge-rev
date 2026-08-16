@@ -75,6 +75,32 @@ pub async fn get_clash_mode() -> CmdResult<Option<String>> {
     Ok(saved.map(Into::into))
 }
 
+async fn prepare_runtime_before_start() -> CmdResult {
+    if matches!(
+        CoreManager::global().get_running_mode().as_ref(),
+        RunningMode::NotRunning
+    ) {
+        diagnostics::info("mode", "pre-start-runtime-regeneration-requested", serde_json::json!({}));
+        CoreManager::global().update_config_checked().await.stringify_err()?;
+        diagnostics::info("mode", "pre-start-runtime-regeneration-succeeded", serde_json::json!({}));
+    }
+    Ok(())
+}
+
+async fn verify_mode_after_start(stage: &str) -> CmdResult {
+    if let Err(error) = feat::verify_running_mode_state(stage).await {
+        diagnostics::error(
+            "mode",
+            "post-start-mode-verification-failed",
+            serde_json::json!({"stage": stage, "error": error.as_str()}),
+        );
+        let _ = CoreManager::global().stop_core().await;
+        handle::Handle::refresh_clash();
+        return Err(error);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn change_clash_core(clash_core: String) -> CmdResult<Option<String>> {
     logging!(info, Type::Config, "changing core to {clash_core}");
@@ -108,19 +134,24 @@ pub async fn change_clash_core(clash_core: String) -> CmdResult<Option<String>> 
 
 #[tauri::command]
 pub async fn start_core() -> CmdResult {
+    prepare_runtime_before_start().await?;
     let result = CoreManager::global().start_core().await.stringify_err();
     if result.is_ok() {
+        verify_mode_after_start("start-core").await?;
         handle::Handle::refresh_clash();
     }
     result
 }
 
-/// FlClash-style master switch: start the core, then restore the saved
-/// system proxy/PAC state. TUN is restored by the existing runtime config.
-/// No user preference, node selection, or routing rule is changed.
+/// FlClash-style master switch: regenerate the staged Runtime, start the core,
+/// verify the live Mihomo mode, then restore the saved system proxy/PAC state.
+/// TUN is restored by the Runtime config; routing rules and node selection are
+/// otherwise preserved.
 #[tauri::command]
 pub async fn start_proxy() -> CmdResult {
+    prepare_runtime_before_start().await?;
     CoreManager::global().start_core().await.stringify_err()?;
+    verify_mode_after_start("start-proxy").await?;
 
     if let Err(error) = Sysopt::global().update_sysproxy().await {
         logging!(
