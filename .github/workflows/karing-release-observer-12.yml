@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: karing-release-observer-12
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   recover-and-verify:
@@ -139,19 +139,17 @@ jobs:
             sha256sum --check SHA256SUMS.txt
           )
 
-          cat >> release-assets/release-notes.md <<EOF
+          cat >> release-assets/release-notes.md <<'EOF'
 
           ## Mode consistency fix
 
           - 修复 Core 停止时切换 Global/Rule/Direct 后旧 Runtime 未重生成、下次启动仍使用旧 mode 的问题。
           - 模式切换现在对 Mihomo live state、磁盘配置与 App 内存配置执行事务式提交；持久化失败会回滚 live mode。
-          - 每次启动前重新生成 Runtime，启动后读取 Mihomo `/configs` 对照 saved / Runtime / live mode，并对单次偏差执行受控自愈。
-          - Global 模式记录 `GLOBAL` 组当前选择；若实际选择 DIRECT 会写入诊断警告，但不会擅自改写用户选择。
+          - 每次启动前重新生成 Runtime，启动后读取 Mihomo /configs 对照 saved / Runtime / live mode，并对单次偏差执行受控自愈。
+          - Global 模式记录 GLOBAL 组当前选择；若实际选择 DIRECT 会写入诊断警告，但不会擅自改写用户选择。
           - Core 已停止时退出流程不再向已消失的 named pipe 发送 TUN disable，避免误导性告警。
-
-          构建源码：`${SOURCE_SHA}`
-          发行标签：`${RELEASE_TAG}`
           EOF
+          printf '\n构建源码：%s\n发行标签：%s\n' "$SOURCE_SHA" "$RELEASE_TAG" >> release-assets/release-notes.md
 
       - name: 拒绝覆盖历史标签或 Release
         shell: bash
