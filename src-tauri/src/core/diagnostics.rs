@@ -134,6 +134,7 @@ pub fn event(level: Level, category: &str, name: &str, fields: Value) {
     if level == Level::Error {
         let _ = file_writer.flush();
     }
+    drop(guard);
 }
 
 pub fn info(category: &str, name: &str, fields: Value) {
@@ -146,12 +147,6 @@ pub fn warn(category: &str, name: &str, fields: Value) {
 
 pub fn error(category: &str, name: &str, fields: Value) {
     event(Level::Error, category, name, fields);
-}
-
-pub fn flush() {
-    if let Some(writer) = writer().lock().as_ref() {
-        let _ = writer.flush();
-    }
 }
 
 #[cfg(test)]
