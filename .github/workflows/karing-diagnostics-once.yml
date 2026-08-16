@@ -40,7 +40,7 @@ env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
-  RELEASE_TAG: v2.5.4-karing.9
+  RELEASE_TAG: v2.5.4-karing.11
   RELEASE_BRANCH: feature/karing-style-diversion
 
 concurrency:
@@ -103,6 +103,9 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
+      - name: 检查 Rust 格式
+        run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
+
       - name: 检查前端格式
         run: pnpm format:check
 
@@ -164,6 +167,19 @@ jobs:
           fi
           echo '[通过] Android 不在本次发行范围内'
 
+          check_contains src-tauri/src/core/diagnostics.rs 'basename("diagnostic")' '独立诊断日志已落盘'
+          check_contains src-tauri/src/core/diagnostics.rs 'Cleanup::KeepLogFiles' '诊断日志启用轮转保留策略'
+          check_contains src-tauri/src/core/diagnostics.rs '<redacted>' '诊断日志敏感字段脱敏测试存在'
+          check_contains src-tauri/src/core/manager/config.rs 'saved-app-network-settings' '配置生成前记录软件网络开关'
+          check_contains src-tauri/src/core/manager/config.rs 'saved-clash-before-generate' '配置生成前记录 Clash 网络快照'
+          check_contains src-tauri/src/core/manager/config.rs 'runtime-generated' '配置生成后记录 Runtime 网络快照'
+          check_contains src-tauri/src/core/manager/config.rs '"ipv6": config.get("ipv6")' 'Runtime 快照记录 IPv6 实际值'
+          check_contains src-tauri/src/core/manager/config.rs '"enhanced_mode": yaml_str(dns, "enhanced-mode")' 'Runtime 快照记录 DNS 模式'
+          check_contains src-tauri/src/core/sysopt.rs 'record_os_proxy_state("before-apply")' '系统代理写入前记录 OS 状态'
+          check_contains src-tauri/src/core/sysopt.rs 'record_os_proxy_state("after-apply")' '系统代理写入后回读 OS 状态'
+          check_contains src-tauri/src/core/manager/lifecycle.rs 'prepare_windows_tun_runtime_for_start' 'Windows TUN 启动前执行物理出口稳定检查'
+          check_contains src-tauri/src/utils/windows_network.rs 'const STABLE_SAMPLES: usize = 6;' 'Windows 默认路由需通过稳定窗口'
+          check_contains src-tauri/src/utils/windows_network.rs 'Value::from("auto-detect-interface"), Value::from(false)' 'Windows TUN 运行时固定物理出口并关闭自动抖动探测'
           check_contains src-tauri/src/cmd/clash.rs 'pub async fn start_proxy()' '后端已实现启动主代理命令'
           check_contains src-tauri/src/cmd/clash.rs 'pub async fn stop_proxy()' '后端已实现停止主代理命令'
           check_contains src-tauri/src/lib.rs 'cmd::start_proxy' '已注册启动主代理命令'
@@ -176,9 +192,6 @@ jobs:
           check_contains src/services/process-connections.ts 'INACTIVE_TCP_STATES' '失效 TCP 状态不会污染程序归因'
           check_not_contains src-tauri/src/cmd/process_connections.rs 'format!("PID {pid}")' '后端不再制造 PID 假程序名'
           check_contains src-tauri/src/core/manager/config.rs 'core is stopped; staged configuration without starting it' '后台配置更新不会偷偷启动已关闭内核'
-          check_contains src-tauri/src/core/manager/lifecycle.rs 'prepare_windows_tun_runtime_for_start' 'Windows TUN 启动前执行物理出口稳定检查'
-          check_contains src-tauri/src/utils/windows_network.rs 'const STABLE_SAMPLES: usize = 6;' 'Windows 默认路由需通过稳定窗口'
-          check_contains src-tauri/src/utils/windows_network.rs 'Value::from("auto-detect-interface"), Value::from(false)' 'Windows TUN 运行时固定物理出口并关闭自动抖动探测'
           check_contains src/components/connection/connection-detail.tsx 'const TWO_PANE_QUERY' '连接详情使用自适应 list-detail 双栏阈值'
           check_contains src/components/connection/connection-detail.tsx "position: 'absolute'" '普通窗口详情替换连接工作区而不是模态覆盖'
           check_contains src/components/connection/connection-detail.tsx 'ArrowBackRounded' '单栏详情提供返回连接列表导航'
@@ -237,7 +250,7 @@ jobs:
       - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-native-v5
+          prefix-key: karing-desktop-native-v6
           key: ${{ matrix.os }}-${{ matrix.target }}
           workspaces: |
             . -> target
@@ -347,7 +360,7 @@ jobs:
       - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-linux-arm-v5
+          prefix-key: karing-desktop-linux-arm-v6
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -471,7 +484,7 @@ jobs:
       - name: 恢复 Rust 构建缓存
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-desktop-fixed-webview2-v5
+          prefix-key: karing-desktop-fixed-webview2-v6
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
@@ -592,14 +605,15 @@ jobs:
           cat > release-assets/release-notes.md <<EOF
           # Clash Verge Rev Karing v${{ needs.review.outputs.version }}
 
-          本轮优先解决 Windows 热点/TUN 最终断网，并重做连接详情布局：
+          本轮在 Windows TUN 网络安全基础上新增结构化网络诊断时间线，并继续保留连接详情成熟化改造：
 
-          - 修复代理总开关关闭时后台订阅/配置更新因 API pipe 不存在而意外重启核心的问题；关闭态只暂存配置，不再偷偷创建 TUN。
-          - Windows TUN 在启动或热重载前等待真实 IPv4 默认路由稳定，排除 Mihomo、Wi-Fi Direct、热点与常见虚拟适配器，并把本次运行时出口固定到真实物理网卡。
-          - 自动管理出口时将 Mihomo `auto-detect-interface` 关闭；如果默认路由在限定窗口内仍不稳定，则阻止 TUN 启动而不是冒险把系统网络带入失效状态。
-          - 连接详情舍弃旧 temporary Drawer/遮罩方案，改成成熟的 adaptive list-detail：宽屏双栏，普通窗口详情在连接工作区内单栏接管，并提供明确返回导航。
-          - 技术详情统一为纵向 key/value 信息流，流量指标使用 auto-fit 网格，长路径、IPv6、规则和出口不再与标签抢同一行宽度。
-          - Windows TUN/热点安全、程序归因与 UI 成熟度均加入发行专项回归门禁。
+          - 新增独立、轮转的 `diagnostic.latest.log` 结构化事件时间线，带会话 ID、单调序号、版本/平台信息，并对 password/token/UUID/订阅等敏感字段递归脱敏。
+          - 在配置生成前记录保存的 TUN/系统代理/DNS 开关与 Clash 网络关键字段，生成后记录 Runtime 的 IPv6、TUN、DNS 摘要，可直接识别“UI 已关闭 IPv6 但 Runtime 被重新开启”等覆盖问题。
+          - Windows TUN 记录物理出口检测、网卡索引/网关/metric、排除接口与网段、托管出口写入后的 Runtime；系统代理记录 apply/reset 前后的实际 OS 读回状态。
+          - 修复 Windows TUN 现有严格 Clippy 门禁问题，并保持生产代码 `-D warnings`。
+          - 保留 Windows TUN 启动/热重载前的真实 IPv4 默认路由稳定检查、物理出口固定和热点/LAN 路由保护。
+          - 连接详情继续采用 adaptive list-detail：宽屏双栏，普通窗口详情在连接工作区内单栏接管，并提供明确返回导航。
+          - Windows TUN/热点安全、程序归因、UI 成熟度与诊断日志均纳入发行门禁。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
 
@@ -642,7 +656,8 @@ jobs:
           set -euo pipefail
 
           if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release delete "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag
+            echo "发行标签 ${RELEASE_TAG} 已存在，拒绝覆盖历史 Release"
+            exit 1
           fi
 
           gh release create "${RELEASE_TAG}" \
@@ -654,7 +669,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Network Safety + List Detail" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Network Diagnostics + TUN Safety" \
             --notes-file release-assets/release-notes.md \
             --latest
 

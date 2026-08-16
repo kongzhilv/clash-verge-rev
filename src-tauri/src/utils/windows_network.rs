@@ -8,9 +8,8 @@ use std::slice;
 use std::thread;
 use std::time::Duration;
 use windows::Win32::NetworkManagement::IpHelper::{
-    FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry,
-    GetUnicastIpAddressTable, MIB_IF_ROW2, MIB_IF_TABLE2, MIB_IPFORWARD_ROW2,
-    MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
+    FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry, GetUnicastIpAddressTable, MIB_IF_ROW2,
+    MIB_IF_TABLE2, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
     MIB_UNICASTIPADDRESS_TABLE,
 };
 use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
@@ -149,10 +148,8 @@ fn load_default_routes() -> Result<Vec<MIB_IPFORWARD_ROW2>> {
         rows.iter()
             .filter(|row| {
                 row.DestinationPrefix.PrefixLength == 0
-                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix)
-                        .is_some_and(|address| address.is_unspecified())
-                    && ipv4_from_sockaddr(&row.NextHop)
-                        .is_some_and(|address| !address.is_unspecified())
+                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix).is_some_and(|address| address.is_unspecified())
+                    && ipv4_from_sockaddr(&row.NextHop).is_some_and(|address| !address.is_unspecified())
             })
             .copied()
             .collect::<Vec<_>>()
@@ -233,10 +230,10 @@ fn managed_route_guards(
     let mut excluded_interfaces = BTreeSet::new();
     let mut excluded_cidrs = BTreeSet::new();
 
-    if let Some(cidr) = ipv4_cidr(upstream_address.address, upstream_address.prefix_length) {
-        if upstream_address.prefix_length >= 8 {
-            excluded_cidrs.insert(cidr);
-        }
+    if let Some(cidr) = ipv4_cidr(upstream_address.address, upstream_address.prefix_length)
+        && upstream_address.prefix_length >= 8
+    {
+        excluded_cidrs.insert(cidr);
     }
 
     for interface in interfaces.values().filter(|interface| interface.is_up) {
@@ -299,8 +296,7 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
             continue;
         };
         let effective_metric = route.Metric.saturating_add(interface_metric);
-        let (excluded_interfaces, route_exclude_addresses) =
-            managed_route_guards(&interfaces, &addresses, source);
+        let (excluded_interfaces, route_exclude_addresses) = managed_route_guards(&interfaces, &addresses, source);
 
         candidates.push(WindowsUpstreamRoute {
             interface_index: route.InterfaceIndex,
@@ -443,12 +439,7 @@ fn merge_string_sequence(mapping: &mut Mapping, key: &str, values: &[String]) {
         None => {
             mapping.insert(
                 yaml_key,
-                Value::Sequence(
-                    values
-                        .iter()
-                        .map(|value| Value::from(value.as_str()))
-                        .collect(),
-                ),
+                Value::Sequence(values.iter().map(|value| Value::from(value.as_str())).collect()),
             );
         }
     }
@@ -462,11 +453,7 @@ pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute
 
     if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
         tun.insert(Value::from("auto-detect-interface"), Value::from(false));
-        merge_string_sequence(
-            tun,
-            "route-exclude-address",
-            &route.route_exclude_addresses,
-        );
+        merge_string_sequence(tun, "route-exclude-address", &route.route_exclude_addresses);
 
         // Mihomo documents include-interface and exclude-interface as mutually exclusive.
         // Preserve an explicit include-interface instead of silently creating a conflict.
@@ -477,10 +464,9 @@ pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
-    use super::{
-        WindowsUpstreamRoute, apply_managed_upstream, ipv4_cidr, tun_needs_managed_upstream,
-    };
+    use super::{WindowsUpstreamRoute, apply_managed_upstream, ipv4_cidr, tun_needs_managed_upstream};
     use serde_yaml_ng::{Mapping, Value};
     use std::net::Ipv4Addr;
 
@@ -521,15 +507,9 @@ mod tests {
         let mut config = mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
         apply_managed_upstream(&mut config, &route());
 
-        assert_eq!(
-            config.get("interface-name").and_then(Value::as_str),
-            Some("WLAN")
-        );
+        assert_eq!(config.get("interface-name").and_then(Value::as_str), Some("WLAN"));
         let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
-        assert_eq!(
-            tun.get("auto-detect-interface").and_then(Value::as_bool),
-            Some(false)
-        );
+        assert_eq!(tun.get("auto-detect-interface").and_then(Value::as_bool), Some(false));
         assert_eq!(
             tun.get("exclude-interface")
                 .and_then(Value::as_sequence)
@@ -537,10 +517,7 @@ mod tests {
                 .and_then(Value::as_str),
             Some("Local Area Connection* 12")
         );
-        let routes = tun
-            .get("route-exclude-address")
-            .and_then(Value::as_sequence)
-            .unwrap();
+        let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
         assert!(routes.iter().any(|value| value.as_str() == Some("192.168.1.0/24")));
         assert!(routes.iter().any(|value| value.as_str() == Some("192.168.137.0/24")));
     }
@@ -554,10 +531,7 @@ mod tests {
 
         let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
         assert!(tun.get("exclude-interface").is_none());
-        let routes = tun
-            .get("route-exclude-address")
-            .and_then(Value::as_sequence)
-            .unwrap();
+        let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
         assert!(routes.iter().any(|value| value.as_str() == Some("10.0.0.0/8")));
         assert!(routes.iter().any(|value| value.as_str() == Some("192.168.137.0/24")));
     }
