@@ -121,11 +121,7 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
         match mihomo.get_base_config().await {
             Ok(base) => {
                 let actual = base.mode.to_string();
-                diagnostics::info(
-                    "mode",
-                    "mode-change-readback-before",
-                    json!({"actual": actual}),
-                );
+                diagnostics::info("mode", "mode-change-readback-before", json!({"actual": actual}));
                 mihomo_before = Some(actual.into());
             }
             Err(err) => {
@@ -180,10 +176,9 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
                             }),
                         );
                     }
-                    return Err(format!(
-                        "Mihomo mode readback mismatch: requested {requested_mode}, got {actual}"
-                    )
-                    .into());
+                    return Err(
+                        format!("Mihomo mode readback mismatch: requested {requested_mode}, got {actual}").into(),
+                    );
                 }
             }
             Err(err) => diagnostics::warn(
@@ -207,11 +202,7 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
                         }),
                     );
                     if selected.is_some_and(|name| name.eq_ignore_ascii_case("DIRECT")) {
-                        diagnostics::warn(
-                            "mode",
-                            "global-direct-selected",
-                            json!({"selected": selected}),
-                        );
+                        diagnostics::warn("mode", "global-direct-selected", json!({"selected": selected}));
                     }
                 }
                 Err(err) => diagnostics::warn(
@@ -285,10 +276,7 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
                     "mode-change-runtime-stage-failed",
                     json!({"requested": requested_mode.as_str(), "error": err.to_string()}),
                 );
-                return Err(format!(
-                    "Clash mode was saved, but Runtime regeneration failed: {err}"
-                )
-                .into());
+                return Err(format!("Clash mode was saved, but Runtime regeneration failed: {err}").into());
             }
         }
     }
@@ -441,10 +429,7 @@ pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
                     "actual": actual_after,
                 }),
             );
-            Err(format!(
-                "Mihomo mode remained {actual_after} after restoring expected mode {expected}"
-            )
-            .into())
+            Err(format!("Mihomo mode remained {actual_after} after restoring expected mode {expected}").into())
         }
         Err(err) => {
             diagnostics::warn(

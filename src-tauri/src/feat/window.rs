@@ -106,16 +106,8 @@ pub async fn clean_async() -> bool {
                 }
             }
         } else if tun_enabled {
-            logging!(
-                info,
-                Type::Window,
-                "核心已停止，跳过 TUN API 禁用请求"
-            );
-            diagnostics::info(
-                "shutdown",
-                "tun-disable-skipped-core-stopped",
-                serde_json::json!({}),
-            );
+            logging!(info, Type::Window, "核心已停止，跳过 TUN API 禁用请求");
+            diagnostics::info("shutdown", "tun-disable-skipped-core-stopped", serde_json::json!({}));
         }
 
         #[cfg(target_os = "windows")]

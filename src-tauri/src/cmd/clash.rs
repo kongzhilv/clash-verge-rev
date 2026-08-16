@@ -80,9 +80,17 @@ async fn prepare_runtime_before_start() -> CmdResult {
         CoreManager::global().get_running_mode().as_ref(),
         RunningMode::NotRunning
     ) {
-        diagnostics::info("mode", "pre-start-runtime-regeneration-requested", serde_json::json!({}));
+        diagnostics::info(
+            "mode",
+            "pre-start-runtime-regeneration-requested",
+            serde_json::json!({}),
+        );
         CoreManager::global().update_config_checked().await.stringify_err()?;
-        diagnostics::info("mode", "pre-start-runtime-regeneration-succeeded", serde_json::json!({}));
+        diagnostics::info(
+            "mode",
+            "pre-start-runtime-regeneration-succeeded",
+            serde_json::json!({}),
+        );
     }
     Ok(())
 }
