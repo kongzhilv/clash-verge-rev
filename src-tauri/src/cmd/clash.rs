@@ -72,7 +72,7 @@ pub async fn get_clash_mode() -> CmdResult<Option<String>> {
         }
     }
 
-    Ok(saved.map(Into::into))
+    Ok(saved)
 }
 
 async fn prepare_runtime_before_start() -> CmdResult {
