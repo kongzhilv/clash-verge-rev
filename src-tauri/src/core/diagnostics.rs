@@ -1,5 +1,4 @@
 use std::{
-    io::Write as _,
     sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
