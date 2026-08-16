@@ -24,7 +24,7 @@ jobs:
           toolchain: '1.95.0'
           components: rustfmt
 
-      - name: Apply focused release-prep patches
+      - name: Apply focused code patches
         shell: bash
         run: |
           python3 - <<'PY'
@@ -38,7 +38,6 @@ jobs:
                   raise SystemExit(f'{path}: expected one match, got {count}: {old[:80]!r}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          # Windows-only CI debt in the existing Karing TUN implementation.
           replace_once(
               'src-tauri/src/utils/windows_network.rs',
               '''    if let Some(cidr) = ipv4_cidr(upstream_address.address, upstream_address.prefix_length) {\n        if upstream_address.prefix_length >= 8 {\n            excluded_cidrs.insert(cidr);\n        }\n    }\n''',
@@ -50,7 +49,6 @@ jobs:
               '#[cfg(test)]\n#[allow(clippy::expect_used, clippy::unwrap_used)]\nmod tests {\n'
           )
 
-          # Add privacy-safe DNS summary to the runtime network snapshot.
           replace_once(
               'src-tauri/src/core/manager/config.rs',
               '    let tun = config.get("tun").and_then(serde_yaml_ng::Value::as_mapping);\n',
@@ -66,59 +64,27 @@ jobs:
               '''            "route_exclude_address": string_list("route-exclude-address"),\n        }\n    })\n}\n''',
               '''            "route_exclude_address": string_list("route-exclude-address"),\n        },\n        "dns": {\n            "enable": yaml_bool(dns, "enable"),\n            "listen": yaml_str(dns, "listen"),\n            "enhanced_mode": yaml_str(dns, "enhanced-mode"),\n            "nameserver_count": sequence_len(dns, "nameserver"),\n            "default_nameserver_count": sequence_len(dns, "default-nameserver"),\n            "proxy_server_nameserver_count": sequence_len(dns, "proxy-server-nameserver"),\n            "fallback_count": sequence_len(dns, "fallback"),\n            "fake_ip_range": yaml_str(dns, "fake-ip-range"),\n            "fake_ip_filter_count": sequence_len(dns, "fake-ip-filter"),\n        }\n    })\n}\n'''
           )
-
-          # Capture saved app/Clash network state immediately before generation.
           replace_once(
               'src-tauri/src/core/manager/config.rs',
               '''    async fn perform_config_update(&self) -> Result<ValidationOutcome> {\n        if let Err(err) = Config::generate().await {\n''',
               '''    async fn perform_config_update(&self) -> Result<ValidationOutcome> {\n        let verge = Config::verge().await.latest_arc();\n        diagnostics::info(\n            "config",\n            "saved-app-network-settings",\n            json!({\n                "enable_tun_mode": verge.enable_tun_mode,\n                "enable_system_proxy": verge.enable_system_proxy,\n                "enable_dns_settings": verge.enable_dns_settings,\n                "proxy_auto_config": verge.proxy_auto_config,\n                "mixed_port_override": verge.verge_mixed_port,\n            }),\n        );\n        drop(verge);\n\n        let saved_clash = Config::clash().await.latest_arc();\n        diagnostics::info(\n            "config",\n            "saved-clash-before-generate",\n            runtime_network_snapshot(&saved_clash.0),\n        );\n        drop(saved_clash);\n\n        if let Err(err) = Config::generate().await {\n'''
           )
-
-          # Move Karing release pipeline forward; never overwrite .9/.10.
-          release = Path('.github/workflows/karing-diagnostics-once.yml')
-          text = release.read_text(encoding='utf-8')
-          if text.count('RELEASE_TAG: v2.5.4-karing.9') != 1:
-              raise SystemExit('unexpected Karing release tag state')
-          text = text.replace('RELEASE_TAG: v2.5.4-karing.9', 'RELEASE_TAG: v2.5.4-karing.11', 1)
-          text = text.replace(
-              '本轮优先解决 Windows 热点/TUN 最终断网，并重做连接详情布局：',
-              '本轮在 Windows TUN 网络安全基础上新增结构化网络诊断时间线，并继续保留连接详情成熟化改造：',
-              1,
-          )
-          first_bullet = '- 修复代理总开关关闭时后台订阅/配置更新因 API pipe 不存在而意外重启核心的问题；关闭态只暂存配置，不再偷偷创建 TUN。'
-          diagnostics_bullets = '''- 新增独立、轮转的 `diagnostic.latest.log` 结构化事件时间线，带会话 ID、单调序号、版本/平台信息，并对 password/token/UUID/订阅等敏感字段递归脱敏。\n          - 在配置生成前记录保存的 TUN/系统代理/DNS 开关与 Clash 网络关键字段，生成后记录 Runtime 的 IPv6、TUN、DNS 摘要，可直接识别“UI 已关闭 IPv6 但 Runtime 被重新开启”等覆盖问题。\n          - Windows TUN 记录物理出口检测、网卡索引/网关/metric、排除接口与网段、托管出口写入后的 Runtime；系统代理记录 apply/reset 前后的实际 OS 读回状态。\n          ''' + first_bullet
-          if first_bullet not in text:
-              raise SystemExit('release notes anchor missing')
-          text = text.replace(first_bullet, diagnostics_bullets, 1)
-          text = text.replace(
-              '· Network Safety + List Detail',
-              '· Network Diagnostics + TUN Safety',
-              1,
-          )
-          audit_anchor = "          check_contains src-tauri/src/core/manager/config.rs 'core is stopped; staged configuration without starting it' '后台配置更新不会偷偷启动已关闭内核'\n"
-          audit_extra = """          check_contains src-tauri/src/core/diagnostics.rs 'basename(\"diagnostic\")' '独立诊断日志已落盘'\n          check_contains src-tauri/src/core/diagnostics.rs 'Cleanup::KeepLogFiles' '诊断日志启用轮转保留策略'\n          check_contains src-tauri/src/core/diagnostics.rs '<redacted>' '诊断日志敏感字段脱敏测试存在'\n          check_contains src-tauri/src/core/manager/config.rs 'saved-app-network-settings' '配置生成前记录软件网络开关'\n          check_contains src-tauri/src/core/manager/config.rs 'saved-clash-before-generate' '配置生成前记录 Clash 网络快照'\n          check_contains src-tauri/src/core/manager/config.rs 'runtime-generated' '配置生成后记录 Runtime 网络快照'\n          check_contains src-tauri/src/core/sysopt.rs 'before-apply' '系统代理写入前记录 OS 状态'\n          check_contains src-tauri/src/core/sysopt.rs 'after-apply' '系统代理写入后回读 OS 状态'\n"""
-          if audit_anchor not in text:
-              raise SystemExit('release audit anchor missing')
-          text = text.replace(audit_anchor, audit_extra + audit_anchor, 1)
-          release.write_text(text, encoding='utf-8')
           PY
 
       - name: Format Rust with repository toolchain
         run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all
 
-      - name: Commit focused changes and remove one-shot workflow
+      - name: Commit focused code changes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git rm .github/workflows/diagnostic-release-prep.yml
           git add \
             src-tauri/src/core/diagnostics.rs \
             src-tauri/src/core/manager/config.rs \
             src-tauri/src/core/mod.rs \
             src-tauri/src/core/sysopt.rs \
-            src-tauri/src/utils/windows_network.rs \
-            .github/workflows/karing-diagnostics-once.yml
-          git commit -m 'fix: harden diagnostic release pipeline'
+            src-tauri/src/utils/windows_network.rs
+          git commit -m 'fix: harden network diagnostics for release'
           git push origin HEAD:fix/diagnostic-log-bundle
