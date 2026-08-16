@@ -47,7 +47,7 @@ impl Default for Sysopt {
         Self {
             update_lock: TokioMutex::new(()),
             reset_sysproxy: AtomicBool::new(false),
-            inner_proxy: Arc::new(RwLock::new((Sysproxy::default(), Autoproxy::default())),
+            inner_proxy: Arc::new(RwLock::new((Sysproxy::default(), Autoproxy::default()))),
             guard: Arc::new(RwLock::new(GuardMonitor::new(GuardType::None, Duration::from_secs(30)))),
         }
     }
