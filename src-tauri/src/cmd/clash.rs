@@ -6,7 +6,8 @@ use crate::{
     config::{ClashInfo, Config},
     constants,
     core::{
-        CoreManager, handle,
+        CoreManager, diagnostics, handle,
+        manager::RunningMode,
         sysopt::Sysopt,
         validate::{CoreConfigValidator, ValidationOutcome},
     },
@@ -40,7 +41,38 @@ pub async fn patch_clash_mode(payload: String) -> CmdResult {
 
 #[tauri::command]
 pub async fn get_clash_mode() -> CmdResult<Option<String>> {
-    Ok(Config::clash().await.data_arc().get_mode().map(Into::into))
+    let saved = Config::clash().await.data_arc().get_mode();
+    let core_running = !matches!(
+        CoreManager::global().get_running_mode().as_ref(),
+        RunningMode::NotRunning
+    );
+
+    if core_running {
+        match handle::Handle::mihomo().await.get_base_config().await {
+            Ok(base) => {
+                let actual = base.mode.to_string();
+                diagnostics::info(
+                    "mode",
+                    "ui-mode-readback",
+                    serde_json::json!({
+                        "saved": saved.as_deref(),
+                        "actual": actual,
+                    }),
+                );
+                return Ok(Some(actual.into()));
+            }
+            Err(err) => diagnostics::warn(
+                "mode",
+                "ui-mode-readback-failed",
+                serde_json::json!({
+                    "saved": saved.as_deref(),
+                    "error": err.to_string(),
+                }),
+            ),
+        }
+    }
+
+    Ok(saved.map(Into::into))
 }
 
 #[tauri::command]
