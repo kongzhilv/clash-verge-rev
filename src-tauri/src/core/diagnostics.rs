@@ -120,11 +120,7 @@ pub fn event(level: Level, category: &str, name: &str, fields: Value) {
 
     let mut now = DeferredNow::default();
     let args = format_args!("{}", message);
-    let record = Record::builder()
-        .args(args)
-        .level(level)
-        .target("diagnostic")
-        .build();
+    let record = Record::builder().args(args).level(level).target("diagnostic").build();
     let _ = file_writer.write(&mut now, &record);
 }
 
