@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::core::{CoreManager, handle, sysopt};
+use crate::core::{CoreManager, diagnostics, handle, manager::RunningMode, sysopt};
 use crate::module::lightweight;
 use crate::utils;
 use crate::utils::window_manager::WindowManager;
@@ -70,7 +70,12 @@ pub async fn clean_async() -> bool {
     let core_task = tokio::task::spawn(async {
         logging!(info, Type::System, "disable tun");
         let tun_enabled = Config::verge().await.data_arc().enable_tun_mode.unwrap_or(false);
-        if tun_enabled {
+        let core_running = !matches!(
+            CoreManager::global().get_running_mode().as_ref(),
+            RunningMode::NotRunning
+        );
+
+        if tun_enabled && core_running {
             let disable_tun = serde_json::json!({ "tun": { "enable": false } });
 
             logging!(info, Type::System, "send disable tun request to mihomo");
@@ -85,6 +90,11 @@ pub async fn clean_async() -> bool {
                 }
                 Ok(Err(e)) => {
                     logging!(warn, Type::Window, "Warning: 禁用TUN模式失败: {e}");
+                    diagnostics::warn(
+                        "shutdown",
+                        "tun-disable-failed",
+                        serde_json::json!({"error": e.to_string()}),
+                    );
                 }
                 Err(_) => {
                     logging!(
@@ -92,8 +102,12 @@ pub async fn clean_async() -> bool {
                         Type::Window,
                         "Warning: 禁用TUN模式超时（可能系统正在关机），继续退出流程"
                     );
+                    diagnostics::warn("shutdown", "tun-disable-timeout", serde_json::json!({}));
                 }
             }
+        } else if tun_enabled {
+            logging!(info, Type::Window, "核心已停止，跳过 TUN API 禁用请求");
+            diagnostics::info("shutdown", "tun-disable-skipped-core-stopped", serde_json::json!({}));
         }
 
         #[cfg(target_os = "windows")]

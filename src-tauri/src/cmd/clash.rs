@@ -6,7 +6,8 @@ use crate::{
     config::{ClashInfo, Config},
     constants,
     core::{
-        CoreManager, handle,
+        CoreManager, diagnostics, handle,
+        manager::RunningMode,
         sysopt::Sysopt,
         validate::{CoreConfigValidator, ValidationOutcome},
     },
@@ -40,7 +41,72 @@ pub async fn patch_clash_mode(payload: String) -> CmdResult {
 
 #[tauri::command]
 pub async fn get_clash_mode() -> CmdResult<Option<String>> {
-    Ok(Config::clash().await.data_arc().get_mode().map(Into::into))
+    let saved = Config::clash().await.data_arc().get_mode().map(String::from);
+    let core_running = !matches!(
+        CoreManager::global().get_running_mode().as_ref(),
+        RunningMode::NotRunning
+    );
+
+    if core_running {
+        match handle::Handle::mihomo().await.get_base_config().await {
+            Ok(base) => {
+                let actual = base.mode.to_string();
+                diagnostics::info(
+                    "mode",
+                    "ui-mode-readback",
+                    serde_json::json!({
+                        "saved": saved.as_deref(),
+                        "actual": actual,
+                    }),
+                );
+                return Ok(Some(actual.into()));
+            }
+            Err(err) => diagnostics::warn(
+                "mode",
+                "ui-mode-readback-failed",
+                serde_json::json!({
+                    "saved": saved.as_deref(),
+                    "error": err.to_string(),
+                }),
+            ),
+        }
+    }
+
+    Ok(saved)
+}
+
+async fn prepare_runtime_before_start() -> CmdResult {
+    if matches!(
+        CoreManager::global().get_running_mode().as_ref(),
+        RunningMode::NotRunning
+    ) {
+        diagnostics::info(
+            "mode",
+            "pre-start-runtime-regeneration-requested",
+            serde_json::json!({}),
+        );
+        CoreManager::global().update_config_checked().await.stringify_err()?;
+        diagnostics::info(
+            "mode",
+            "pre-start-runtime-regeneration-succeeded",
+            serde_json::json!({}),
+        );
+    }
+    Ok(())
+}
+
+async fn verify_mode_after_start(stage: &str) -> CmdResult {
+    if let Err(error) = feat::verify_running_mode_state(stage).await {
+        diagnostics::error(
+            "mode",
+            "post-start-mode-verification-failed",
+            serde_json::json!({"stage": stage, "error": error.as_str()}),
+        );
+        let _ = CoreManager::global().stop_core().await;
+        handle::Handle::refresh_clash();
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -76,19 +142,24 @@ pub async fn change_clash_core(clash_core: String) -> CmdResult<Option<String>> 
 
 #[tauri::command]
 pub async fn start_core() -> CmdResult {
+    prepare_runtime_before_start().await?;
     let result = CoreManager::global().start_core().await.stringify_err();
     if result.is_ok() {
+        verify_mode_after_start("start-core").await?;
         handle::Handle::refresh_clash();
     }
     result
 }
 
-/// FlClash-style master switch: start the core, then restore the saved
-/// system proxy/PAC state. TUN is restored by the existing runtime config.
-/// No user preference, node selection, or routing rule is changed.
+/// FlClash-style master switch: regenerate the staged Runtime, start the core,
+/// verify the live Mihomo mode, then restore the saved system proxy/PAC state.
+/// TUN is restored by the Runtime config; routing rules and node selection are
+/// otherwise preserved.
 #[tauri::command]
 pub async fn start_proxy() -> CmdResult {
+    prepare_runtime_before_start().await?;
     CoreManager::global().start_core().await.stringify_err()?;
+    verify_mode_after_start("start-proxy").await?;
 
     if let Err(error) = Sysopt::global().update_sysproxy().await {
         logging!(
