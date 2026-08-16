@@ -1,6 +1,6 @@
 use crate::{
     config::Config,
-    core::{CoreManager, handle, manager::RunningMode, tray},
+    core::{CoreManager, diagnostics, handle, manager::RunningMode, tray},
     feat::clean_async,
     process::AsyncHandler,
     utils,
@@ -8,6 +8,7 @@ use crate::{
 use bytes::BytesMut;
 use clash_verge_logging::{Type, logging};
 use once_cell::sync::Lazy;
+use serde_json::json;
 use serde_yaml_ng::{Mapping, Value};
 use smartstring::alias::String;
 use std::sync::Arc;
@@ -79,46 +80,200 @@ fn after_change_clash_mode() {
     });
 }
 
-/// Change Clash mode (rule/global/direct/script).
+/// Change Clash mode (rule/global/direct).
 ///
-/// When the core is running, patch Mihomo first and persist only after success.
-/// When the core is stopped, persist the requested mode for the next start
-/// without attempting to connect to the absent named pipe.
+/// The running Mihomo state, persisted Clash config and in-memory config are
+/// committed as one logical transaction. If persistence fails after Mihomo was
+/// patched, the core is rolled back to its previous mode so a later Runtime
+/// regeneration cannot silently disagree with the currently running core.
 pub async fn change_clash_mode(mode: String) -> Result<(), String> {
-    let mut mapping = Mapping::new();
-    mapping.insert(Value::from("mode"), Value::from(mode.as_str()));
+    let requested_mode: String = mode.to_ascii_lowercase().into();
+    if !matches!(requested_mode.as_str(), "rule" | "global" | "direct") {
+        diagnostics::error(
+            "mode",
+            "mode-change-rejected",
+            json!({"requested": requested_mode.as_str(), "reason": "unsupported-mode"}),
+        );
+        return Err(format!("Unsupported Clash mode: {requested_mode}").into());
+    }
 
     let core_running = !matches!(
         CoreManager::global().get_running_mode().as_ref(),
         RunningMode::NotRunning
     );
+    let clash = Config::clash().await;
+    let saved_before = clash.data_arc().get_mode();
 
-    logging!(debug, Type::Core, "change clash mode to {mode}");
+    diagnostics::info(
+        "mode",
+        "mode-change-requested",
+        json!({
+            "requested": requested_mode.as_str(),
+            "saved_before": saved_before.as_deref(),
+            "core_running": core_running,
+        }),
+    );
+    logging!(debug, Type::Core, "change clash mode to {requested_mode}");
+
+    let mut mihomo_before: Option<String> = None;
     if core_running {
-        let json_value = serde_json::json!({
-            "mode": mode
-        });
-        if let Err(err) = handle::Handle::mihomo().await.patch_base_config(&json_value).await {
+        let mihomo = handle::Handle::mihomo().await;
+        match mihomo.get_base_config().await {
+            Ok(base) => {
+                let actual = base.mode.to_string();
+                diagnostics::info(
+                    "mode",
+                    "mode-change-readback-before",
+                    json!({"actual": actual}),
+                );
+                mihomo_before = Some(actual.into());
+            }
+            Err(err) => {
+                diagnostics::warn(
+                    "mode",
+                    "mode-change-readback-before-failed",
+                    json!({"error": err.to_string()}),
+                );
+            }
+        }
+
+        let patch = json!({"mode": requested_mode.as_str()});
+        if let Err(err) = mihomo.patch_base_config(&patch).await {
+            diagnostics::error(
+                "mode",
+                "mode-change-patch-failed",
+                json!({"requested": requested_mode.as_str(), "error": err.to_string()}),
+            );
             logging!(error, Type::Core, "{err}");
             return Err(err.to_string().into());
+        }
+        diagnostics::info(
+            "mode",
+            "mode-change-patch-succeeded",
+            json!({"requested": requested_mode.as_str()}),
+        );
+
+        match mihomo.get_base_config().await {
+            Ok(base) => {
+                let actual = base.mode.to_string();
+                diagnostics::info(
+                    "mode",
+                    "mode-change-readback",
+                    json!({"requested": requested_mode.as_str(), "actual": actual}),
+                );
+                if actual != requested_mode.as_str() {
+                    diagnostics::error(
+                        "mode",
+                        "mode-change-readback-mismatch",
+                        json!({"requested": requested_mode.as_str(), "actual": actual}),
+                    );
+                    if let Some(previous) = mihomo_before.as_deref() {
+                        let rollback = json!({"mode": previous});
+                        let rollback_result = mihomo.patch_base_config(&rollback).await;
+                        diagnostics::warn(
+                            "mode",
+                            "mode-change-core-rollback",
+                            json!({
+                                "target": previous,
+                                "succeeded": rollback_result.is_ok(),
+                                "error": rollback_result.err().map(|err| err.to_string()),
+                            }),
+                        );
+                    }
+                    return Err(format!(
+                        "Mihomo mode readback mismatch: requested {requested_mode}, got {actual}"
+                    )
+                    .into());
+                }
+            }
+            Err(err) => diagnostics::warn(
+                "mode",
+                "mode-change-readback-failed",
+                json!({"requested": requested_mode.as_str(), "error": err.to_string()}),
+            ),
+        }
+
+        if requested_mode == "global" {
+            match mihomo.get_proxy_by_name("GLOBAL").await {
+                Ok(global) => {
+                    let selected = global.now.as_deref();
+                    diagnostics::info(
+                        "mode",
+                        "global-selection-readback",
+                        json!({
+                            "selected": selected,
+                            "alive": global.alive,
+                            "type": global.proxy_type.as_str(),
+                        }),
+                    );
+                    if selected.is_some_and(|name| name.eq_ignore_ascii_case("DIRECT")) {
+                        diagnostics::warn(
+                            "mode",
+                            "global-direct-selected",
+                            json!({"selected": selected}),
+                        );
+                    }
+                }
+                Err(err) => diagnostics::warn(
+                    "mode",
+                    "global-selection-readback-failed",
+                    json!({"error": err.to_string()}),
+                ),
+            }
         }
     } else {
         logging!(
             info,
             Type::Core,
-            "core is stopped; saved Clash mode {mode} for the next start"
+            "core is stopped; saved Clash mode {requested_mode} for the next start"
         );
     }
 
-    let clash = Config::clash().await;
-    clash.edit_draft(|d| d.patch_config(&mapping));
-    clash.apply();
+    let mut mapping = Mapping::new();
+    mapping.insert(Value::from("mode"), Value::from(requested_mode.as_str()));
+    clash.edit_draft(|draft| draft.patch_config(&mapping));
 
-    let clash_data = clash.data_arc();
-    if clash_data.save_config().await.is_ok() {
-        handle::Handle::refresh_clash();
-        tray::Tray::global().update_menu_and_icon().await;
+    if let Err(err) = clash.latest_arc().save_config().await {
+        clash.discard();
+        diagnostics::error(
+            "mode",
+            "mode-change-persist-failed",
+            json!({"requested": requested_mode.as_str(), "error": err.to_string()}),
+        );
+
+        if core_running {
+            if let Some(previous) = mihomo_before.as_deref() {
+                let mihomo = handle::Handle::mihomo().await;
+                let rollback = json!({"mode": previous});
+                let rollback_result = mihomo.patch_base_config(&rollback).await;
+                diagnostics::warn(
+                    "mode",
+                    "mode-change-core-rollback",
+                    json!({
+                        "target": previous,
+                        "succeeded": rollback_result.is_ok(),
+                        "error": rollback_result.err().map(|error| error.to_string()),
+                    }),
+                );
+            }
+        }
+
+        return Err(format!("Failed to persist Clash mode {requested_mode}: {err}").into());
     }
+
+    clash.apply();
+    let saved_after = clash.data_arc().get_mode();
+    diagnostics::info(
+        "mode",
+        "mode-change-persisted",
+        json!({
+            "requested": requested_mode.as_str(),
+            "saved_after": saved_after.as_deref(),
+        }),
+    );
+
+    handle::Handle::refresh_clash();
+    tray::Tray::global().update_menu_and_icon().await;
 
     let is_auto_close_connection = Config::verge().await.data_arc().auto_close_connection.unwrap_or(false);
     if core_running && is_auto_close_connection {
