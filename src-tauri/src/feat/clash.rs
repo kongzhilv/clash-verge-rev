@@ -102,7 +102,7 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
         RunningMode::NotRunning
     );
     let clash = Config::clash().await;
-    let saved_before = clash.data_arc().get_mode();
+    let saved_before = clash.data_arc().get_mode().map(String::from);
 
     diagnostics::info(
         "mode",
@@ -253,7 +253,7 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
     }
 
     clash.apply();
-    let saved_after = clash.data_arc().get_mode();
+    let saved_after = clash.data_arc().get_mode().map(String::from);
     diagnostics::info(
         "mode",
         "mode-change-persisted",
@@ -304,7 +304,7 @@ pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let saved = Config::clash().await.data_arc().get_mode();
+    let saved = Config::clash().await.data_arc().get_mode().map(String::from);
     let runtime = Config::runtime()
         .await
         .latest_arc()

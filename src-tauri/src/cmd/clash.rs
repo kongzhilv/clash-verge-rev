@@ -41,7 +41,7 @@ pub async fn patch_clash_mode(payload: String) -> CmdResult {
 
 #[tauri::command]
 pub async fn get_clash_mode() -> CmdResult<Option<String>> {
-    let saved = Config::clash().await.data_arc().get_mode();
+    let saved = Config::clash().await.data_arc().get_mode().map(String::from);
     let core_running = !matches!(
         CoreManager::global().get_running_mode().as_ref(),
         RunningMode::NotRunning
