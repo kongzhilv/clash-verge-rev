@@ -3,8 +3,7 @@ use crate::{
     config::{Config, ConfigType, runtime::IRuntime},
     constants::timing,
     core::{
-        diagnostics,
-        handle,
+        diagnostics, handle,
         validate::{CoreConfigValidator, ValidationOutcome, ValidationSkipReason},
     },
     utils::{dirs, help},
@@ -191,7 +190,11 @@ impl CoreManager {
                 Ok(ValidationOutcome::Valid)
             }
             Ok(outcome) => {
-                diagnostics::error("config", "validation-rejected", json!({"outcome": outcome.to_string()}));
+                diagnostics::error(
+                    "config",
+                    "validation-rejected",
+                    json!({"outcome": outcome.to_string()}),
+                );
                 Config::runtime().await.discard();
                 Ok(outcome)
             }
@@ -253,12 +256,20 @@ impl CoreManager {
         let route = match tokio::task::spawn_blocking(detect_stable_upstream).await {
             Ok(Ok(route)) => route,
             Ok(Err(error)) => {
-                diagnostics::error("windows-tun", "upstream-detection-failed", json!({"error": error.to_string()}));
+                diagnostics::error(
+                    "windows-tun",
+                    "upstream-detection-failed",
+                    json!({"error": error.to_string()}),
+                );
                 return Err(error);
             }
             Err(error) => {
                 let error = anyhow!("Windows TUN route inspection task failed: {error}");
-                diagnostics::error("windows-tun", "upstream-task-failed", json!({"error": error.to_string()}));
+                diagnostics::error(
+                    "windows-tun",
+                    "upstream-task-failed",
+                    json!({"error": error.to_string()}),
+                );
                 return Err(error);
             }
         };
@@ -268,20 +279,24 @@ impl CoreManager {
             "upstream-detected",
             json!({
                 "interface_index": route.interface_index,
-                "interface_alias": route.interface_alias,
-                "interface_description": route.interface_description,
-                "source_address": route.source_address,
-                "gateway": route.gateway,
+                "interface_alias": &route.interface_alias,
+                "interface_description": &route.interface_description,
+                "source_address": &route.source_address,
+                "gateway": &route.gateway,
                 "route_metric": route.route_metric,
                 "interface_metric": route.interface_metric,
                 "effective_metric": route.effective_metric,
-                "excluded_interfaces": route.excluded_interfaces,
-                "route_exclude_addresses": route.route_exclude_addresses,
+                "excluded_interfaces": &route.excluded_interfaces,
+                "route_exclude_addresses": &route.route_exclude_addresses,
             }),
         );
 
         apply_managed_upstream(&mut config, &route);
-        diagnostics::info("windows-tun", "managed-upstream-applied", runtime_network_snapshot(&config));
+        diagnostics::info(
+            "windows-tun",
+            "managed-upstream-applied",
+            runtime_network_snapshot(&config),
+        );
         runtime.edit_draft(|draft| {
             draft.config = Some(config);
         });
@@ -342,7 +357,11 @@ impl CoreManager {
         }
 
         let path = dirs::path_to_str(&path)?;
-        diagnostics::info("core", "reload-requested", json!({"config_path_present": !path.is_empty()}));
+        diagnostics::info(
+            "core",
+            "reload-requested",
+            json!({"config_path_present": !path.is_empty()}),
+        );
         match self.reload_config(path).await {
             Ok(_) => {
                 Config::runtime().await.apply();
@@ -351,7 +370,11 @@ impl CoreManager {
                 Ok(())
             }
             Err(err) => {
-                diagnostics::warn("core", "reload-failed-restart-fallback", json!({"error": err.to_string()}));
+                diagnostics::warn(
+                    "core",
+                    "reload-failed-restart-fallback",
+                    json!({"error": err.to_string()}),
+                );
                 logging!(
                     warn,
                     Type::Core,
@@ -366,7 +389,11 @@ impl CoreManager {
                     }
                     Err(err) => {
                         logging!(error, Type::Core, "Failed to restart core: {}", err);
-                        diagnostics::error("core", "restart-fallback-failed", json!({"error": err.to_string()}));
+                        diagnostics::error(
+                            "core",
+                            "restart-fallback-failed",
+                            json!({"error": err.to_string()}),
+                        );
                         Config::runtime().await.discard();
                         Err(anyhow!("Failed to apply config: {}", err))
                     }
