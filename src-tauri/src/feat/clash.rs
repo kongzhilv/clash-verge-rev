@@ -225,7 +225,7 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
         logging!(
             info,
             Type::Core,
-            "core is stopped; saved Clash mode {requested_mode} for the next start"
+            "core is stopped; staging Clash mode {requested_mode} for the next start"
         );
     }
 
@@ -272,6 +272,27 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
         }),
     );
 
+    if !core_running {
+        match CoreManager::global().update_config_checked().await {
+            Ok(()) => diagnostics::info(
+                "mode",
+                "mode-change-runtime-staged",
+                json!({"requested": requested_mode.as_str()}),
+            ),
+            Err(err) => {
+                diagnostics::error(
+                    "mode",
+                    "mode-change-runtime-stage-failed",
+                    json!({"requested": requested_mode.as_str(), "error": err.to_string()}),
+                );
+                return Err(format!(
+                    "Clash mode was saved, but Runtime regeneration failed: {err}"
+                )
+                .into());
+            }
+        }
+    }
+
     handle::Handle::refresh_clash();
     tray::Tray::global().update_menu_and_icon().await;
 
@@ -281,6 +302,159 @@ pub async fn change_clash_mode(mode: String) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Compare the persisted app mode, generated Runtime mode and Mihomo's live
+/// mode. A live mismatch is repaired once using the app's persisted mode as
+/// the authority. Readback failures are diagnostic-only so a transient control
+/// API delay does not turn into a proxy startup failure.
+pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
+    if matches!(
+        CoreManager::global().get_running_mode().as_ref(),
+        RunningMode::NotRunning
+    ) {
+        return Ok(());
+    }
+
+    let saved = Config::clash().await.data_arc().get_mode();
+    let runtime = Config::runtime()
+        .await
+        .latest_arc()
+        .config
+        .as_ref()
+        .and_then(|config| config.get("mode"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let expected = saved.as_deref().or(runtime.as_deref());
+
+    if saved.as_deref() != runtime.as_deref() {
+        diagnostics::error(
+            "mode",
+            "saved-runtime-mode-mismatch",
+            json!({
+                "stage": stage,
+                "saved": saved.as_deref(),
+                "runtime": runtime.as_deref(),
+            }),
+        );
+    }
+
+    let mihomo = handle::Handle::mihomo().await;
+    let base = match mihomo.get_base_config().await {
+        Ok(base) => base,
+        Err(err) => {
+            diagnostics::warn(
+                "mode",
+                "active-mode-readback-failed",
+                json!({
+                    "stage": stage,
+                    "saved": saved.as_deref(),
+                    "runtime": runtime.as_deref(),
+                    "error": err.to_string(),
+                }),
+            );
+            return Ok(());
+        }
+    };
+    let actual = base.mode.to_string();
+
+    diagnostics::info(
+        "mode",
+        "active-mode-readback",
+        json!({
+            "stage": stage,
+            "saved": saved.as_deref(),
+            "runtime": runtime.as_deref(),
+            "actual": actual,
+        }),
+    );
+
+    if actual == "global" {
+        match mihomo.get_proxy_by_name("GLOBAL").await {
+            Ok(global) => {
+                let selected = global.now.as_deref();
+                diagnostics::info(
+                    "mode",
+                    "global-selection-readback",
+                    json!({
+                        "stage": stage,
+                        "selected": selected,
+                        "alive": global.alive,
+                        "type": global.proxy_type.as_str(),
+                    }),
+                );
+                if selected.is_some_and(|name| name.eq_ignore_ascii_case("DIRECT")) {
+                    diagnostics::warn(
+                        "mode",
+                        "global-direct-selected",
+                        json!({"stage": stage, "selected": selected}),
+                    );
+                }
+            }
+            Err(err) => diagnostics::warn(
+                "mode",
+                "global-selection-readback-failed",
+                json!({"stage": stage, "error": err.to_string()}),
+            ),
+        }
+    }
+
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    if actual == expected {
+        return Ok(());
+    }
+
+    diagnostics::error(
+        "mode",
+        "active-mode-mismatch",
+        json!({"stage": stage, "expected": expected, "actual": actual}),
+    );
+    let patch = json!({"mode": expected});
+    if let Err(err) = mihomo.patch_base_config(&patch).await {
+        diagnostics::error(
+            "mode",
+            "active-mode-self-heal-failed",
+            json!({"stage": stage, "expected": expected, "error": err.to_string()}),
+        );
+        return Err(format!("Failed to restore Mihomo mode to {expected}: {err}").into());
+    }
+
+    match mihomo.get_base_config().await {
+        Ok(base) if base.mode.to_string() == expected => {
+            diagnostics::warn(
+                "mode",
+                "active-mode-self-healed",
+                json!({"stage": stage, "expected": expected}),
+            );
+            Ok(())
+        }
+        Ok(base) => {
+            let actual_after = base.mode.to_string();
+            diagnostics::error(
+                "mode",
+                "active-mode-self-heal-mismatch",
+                json!({
+                    "stage": stage,
+                    "expected": expected,
+                    "actual": actual_after,
+                }),
+            );
+            Err(format!(
+                "Mihomo mode remained {actual_after} after restoring expected mode {expected}"
+            )
+            .into())
+        }
+        Err(err) => {
+            diagnostics::warn(
+                "mode",
+                "active-mode-self-heal-readback-failed",
+                json!({"stage": stage, "expected": expected, "error": err.to_string()}),
+            );
+            Ok(())
+        }
+    }
 }
 
 /// Test delay to a URL through proxy.
