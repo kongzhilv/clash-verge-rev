@@ -1,0 +1,53 @@
+name: Fix mode ownership once
+
+on:
+  push:
+    branches:
+      - fix/mode-state-diagnostics
+    paths:
+      - '.github/workflows/fix-mode-owned-strings-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/mode-state-diagnostics
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+          components: rustfmt
+      - name: Make mode snapshots owned and format
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src-tauri/src/feat/clash.rs')
+          s = p.read_text()
+          s = s.replace('let saved_before = clash.data_arc().get_mode();', 'let saved_before = clash.data_arc().get_mode().map(String::from);')
+          s = s.replace('let saved_after = clash.data_arc().get_mode();', 'let saved_after = clash.data_arc().get_mode().map(String::from);')
+          s = s.replace('let saved = Config::clash().await.data_arc().get_mode();', 'let saved = Config::clash().await.data_arc().get_mode().map(String::from);')
+          p.write_text(s)
+
+          p = Path('src-tauri/src/cmd/clash.rs')
+          s = p.read_text()
+          s = s.replace('let saved = Config::clash().await.data_arc().get_mode();', 'let saved = Config::clash().await.data_arc().get_mode().map(String::from);')
+          p.write_text(s)
+          PY
+          cargo fmt --manifest-path ./src-tauri/Cargo.toml --all
+      - name: Commit source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add src-tauri/src/feat/clash.rs src-tauri/src/cmd/clash.rs
+          git diff --cached --quiet && exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: own mode snapshots across async diagnostics'
+          git push origin HEAD:fix/mode-state-diagnostics
