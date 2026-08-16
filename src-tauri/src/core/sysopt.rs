@@ -138,11 +138,7 @@ impl Sysopt {
         if !verge.enable_proxy_guard.unwrap_or_default() {
             logging!(info, Type::Core, "System proxy guard is disabled.");
             self.access_guard().write().stop();
-            diagnostics::info(
-                "system-proxy",
-                "guard-stopped",
-                json!({"reason": "guard-disabled"}),
-            );
+            diagnostics::info("system-proxy", "guard-stopped", json!({"reason": "guard-disabled"}));
             return;
         }
         logging!(
@@ -264,11 +260,7 @@ impl Sysopt {
                 Ok(())
             }
             Err(error) => {
-                diagnostics::error(
-                    "system-proxy",
-                    "apply-failed",
-                    json!({"error": error.to_string()}),
-                );
+                diagnostics::error("system-proxy", "apply-failed", json!({"error": error.to_string()}));
                 record_os_proxy_state("after-apply-failed");
                 Err(error)
             }
@@ -312,11 +304,7 @@ impl Sysopt {
                 Ok(())
             }
             Err(error) => {
-                diagnostics::error(
-                    "system-proxy",
-                    "reset-failed",
-                    json!({"error": error.to_string()}),
-                );
+                diagnostics::error("system-proxy", "reset-failed", json!({"error": error.to_string()}));
                 record_os_proxy_state("after-reset-failed");
                 Err(error)
             }

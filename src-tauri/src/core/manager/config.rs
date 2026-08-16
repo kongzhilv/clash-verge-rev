@@ -18,6 +18,7 @@ use tauri_plugin_mihomo::Error as MihomoError;
 
 fn runtime_network_snapshot(config: &serde_yaml_ng::Mapping) -> JsonValue {
     let tun = config.get("tun").and_then(serde_yaml_ng::Value::as_mapping);
+    let dns = config.get("dns").and_then(serde_yaml_ng::Value::as_mapping);
     let yaml_bool = |mapping: Option<&serde_yaml_ng::Mapping>, key: &str| {
         mapping
             .and_then(|mapping| mapping.get(key))
@@ -41,6 +42,12 @@ fn runtime_network_snapshot(config: &serde_yaml_ng::Mapping) -> JsonValue {
             })
             .unwrap_or_default()
     };
+    let sequence_len = |mapping: Option<&serde_yaml_ng::Mapping>, key: &str| {
+        mapping
+            .and_then(|mapping| mapping.get(key))
+            .and_then(serde_yaml_ng::Value::as_sequence)
+            .map_or(0, Vec::len)
+    };
 
     json!({
         "mode": config.get("mode").and_then(serde_yaml_ng::Value::as_str),
@@ -55,6 +62,17 @@ fn runtime_network_snapshot(config: &serde_yaml_ng::Mapping) -> JsonValue {
             "include_interface": string_list("include-interface"),
             "exclude_interface": string_list("exclude-interface"),
             "route_exclude_address": string_list("route-exclude-address"),
+        },
+        "dns": {
+            "enable": yaml_bool(dns, "enable"),
+            "listen": yaml_str(dns, "listen"),
+            "enhanced_mode": yaml_str(dns, "enhanced-mode"),
+            "nameserver_count": sequence_len(dns, "nameserver"),
+            "default_nameserver_count": sequence_len(dns, "default-nameserver"),
+            "proxy_server_nameserver_count": sequence_len(dns, "proxy-server-nameserver"),
+            "fallback_count": sequence_len(dns, "fallback"),
+            "fake_ip_range": yaml_str(dns, "fake-ip-range"),
+            "fake_ip_filter_count": sequence_len(dns, "fake-ip-filter"),
         }
     })
 }
@@ -142,6 +160,28 @@ impl CoreManager {
     }
 
     async fn perform_config_update(&self) -> Result<ValidationOutcome> {
+        let verge = Config::verge().await.latest_arc();
+        diagnostics::info(
+            "config",
+            "saved-app-network-settings",
+            json!({
+                "enable_tun_mode": verge.enable_tun_mode,
+                "enable_system_proxy": verge.enable_system_proxy,
+                "enable_dns_settings": verge.enable_dns_settings,
+                "proxy_auto_config": verge.proxy_auto_config,
+                "mixed_port_override": verge.verge_mixed_port,
+            }),
+        );
+        drop(verge);
+
+        let saved_clash = Config::clash().await.latest_arc();
+        diagnostics::info(
+            "config",
+            "saved-clash-before-generate",
+            runtime_network_snapshot(&saved_clash.0),
+        );
+        drop(saved_clash);
+
         if let Err(err) = Config::generate().await {
             let message: String = err.to_string().into();
             diagnostics::error("config", "generate-failed", json!({"error": message.as_str()}));
@@ -190,11 +230,7 @@ impl CoreManager {
                 Ok(ValidationOutcome::Valid)
             }
             Ok(outcome) => {
-                diagnostics::error(
-                    "config",
-                    "validation-rejected",
-                    json!({"outcome": outcome.to_string()}),
-                );
+                diagnostics::error("config", "validation-rejected", json!({"outcome": outcome.to_string()}));
                 Config::runtime().await.discard();
                 Ok(outcome)
             }
@@ -389,11 +425,7 @@ impl CoreManager {
                     }
                     Err(err) => {
                         logging!(error, Type::Core, "Failed to restart core: {}", err);
-                        diagnostics::error(
-                            "core",
-                            "restart-fallback-failed",
-                            json!({"error": err.to_string()}),
-                        );
+                        diagnostics::error("core", "restart-fallback-failed", json!({"error": err.to_string()}));
                         Config::runtime().await.discard();
                         Err(anyhow!("Failed to apply config: {}", err))
                     }
