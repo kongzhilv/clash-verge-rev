@@ -1,5 +1,8 @@
 use std::{
-    sync::OnceLock,
+    sync::{
+        OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -17,6 +20,7 @@ const DIAGNOSTIC_MAX_SIZE_BYTES: u64 = 2 * 1024 * 1024;
 const DIAGNOSTIC_MAX_FILES: usize = 16;
 
 static SESSION_ID: OnceLock<String> = OnceLock::new();
+static EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static DIAGNOSTIC_WRITER: OnceLock<Mutex<Option<FileLogWriter>>> = OnceLock::new();
 
 fn session_id() -> &'static str {
@@ -99,7 +103,12 @@ fn writer() -> &'static Mutex<Option<FileLogWriter>> {
 pub fn event(level: Level, category: &str, name: &str, fields: Value) {
     let payload = sanitize_value(json!({
         "ts_ms": epoch_ms(),
+        "seq": EVENT_SEQUENCE.fetch_add(1, Ordering::Relaxed),
         "session": session_id(),
+        "pid": std::process::id(),
+        "app_version": env!("CARGO_PKG_VERSION"),
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
         "category": category,
         "event": name,
         "fields": fields,
@@ -122,6 +131,9 @@ pub fn event(level: Level, category: &str, name: &str, fields: Value) {
     let args = format_args!("{}", message);
     let record = Record::builder().args(args).level(level).target("diagnostic").build();
     let _ = file_writer.write(&mut now, &record);
+    if level == Level::Error {
+        let _ = file_writer.flush();
+    }
 }
 
 pub fn info(category: &str, name: &str, fields: Value) {
@@ -139,5 +151,30 @@ pub fn error(category: &str, name: &str, fields: Value) {
 pub fn flush() {
     if let Some(writer) = writer().lock().as_ref() {
         let _ = writer.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_value;
+    use serde_json::json;
+
+    #[test]
+    fn diagnostic_fields_redact_nested_secrets() {
+        let sanitized = sanitize_value(json!({
+            "mode": "global",
+            "token": "top-secret",
+            "nested": {
+                "uuid": "sensitive-id",
+                "gateway": "192.168.1.1",
+            },
+            "items": [{"password": "hidden"}],
+        }));
+
+        assert_eq!(sanitized["mode"], "global");
+        assert_eq!(sanitized["token"], "<redacted>");
+        assert_eq!(sanitized["nested"]["uuid"], "<redacted>");
+        assert_eq!(sanitized["nested"]["gateway"], "192.168.1.1");
+        assert_eq!(sanitized["items"][0]["password"], "<redacted>");
     }
 }
