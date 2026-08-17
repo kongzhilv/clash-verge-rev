@@ -1,35 +1,42 @@
 name: Karing 分阶段正式发行
-run-name: 发布已审查 Karing 构建 · ${{ github.event.workflow_run.head_sha }}
+run-name: 发布已审查 Karing 构建 · ${{ github.sha }}
 
 on:
-  workflow_run:
-    workflows:
-      - Karing 桌面版审查与发行
-    types:
-      - completed
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-staged-release.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
 
 permissions:
   actions: read
   contents: write
 
 concurrency:
-  group: karing-staged-release-${{ github.event.workflow_run.head_sha }}
+  group: karing-staged-release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
   publish:
     name: 复验主构建并发布 staged Release
-    if: ${{ github.event.workflow_run.head_branch == 'feature/karing-style-diversion' }}
     runs-on: ubuntu-22.04
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
-      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      SOURCE_SHA: ${{ github.sha }}
     steps:
-      - name: 检出主构建固定源码
+      - name: 检出本次固定源码
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: 读取并验证 staged Release tag
@@ -46,11 +53,31 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
-      - name: 复验主发行运行的全部硬门槛
+      - name: 定位同一源码提交的主发行运行
+        id: main
         shell: bash
         run: |
           set -euo pipefail
-          jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")
+          run_id=''
+          for attempt in $(seq 1 120); do
+            runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/karing-diagnostics-once.yml/runs?branch=feature%2Fkaring-style-diversion&per_page=30")
+            run_id=$(jq -r --arg sha "$SOURCE_SHA" '.workflow_runs[] | select(.head_sha == $sha and .event == "push") | .id' <<<"$runs" | head -n1)
+            if [ -n "$run_id" ]; then
+              echo "定位到主发行 run: $run_id"
+              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "没有找到源码 ${SOURCE_SHA} 对应的主发行 run" >&2
+          exit 1
+
+      - name: 等待并复验主发行全部硬门槛
+        env:
+          SOURCE_RUN_ID: ${{ steps.main.outputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
           required=(
             '审查并验证源码'
             '构建 Linux x64'
@@ -64,14 +91,34 @@ jobs:
             '构建固定 WebView2 x64'
             '汇总并审查发行产物'
           )
-          for name in "${required[@]}"; do
-            conclusion=$(jq -r --arg name "$name" '.jobs[] | select(.name == $name) | .conclusion' <<<"$jobs" | head -n1)
-            if [ "$conclusion" != success ]; then
-              echo "主发行硬门槛未通过: $name => ${conclusion:-missing}" >&2
-              exit 1
+
+          for attempt in $(seq 1 240); do
+            jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")
+            all_success=true
+            for name in "${required[@]}"; do
+              conclusion=$(jq -r --arg name "$name" '.jobs[] | select(.name == $name) | .conclusion // empty' <<<"$jobs" | head -n1)
+              case "$conclusion" in
+                success)
+                  ;;
+                failure|cancelled|timed_out|action_required|startup_failure)
+                  echo "主发行硬门槛失败: $name => $conclusion" >&2
+                  exit 1
+                  ;;
+                *)
+                  all_success=false
+                  ;;
+              esac
+            done
+
+            if [ "$all_success" = true ]; then
+              for name in "${required[@]}"; do echo "[通过] $name"; done
+              exit 0
             fi
-            echo "[通过] $name"
+            sleep 10
           done
+
+          echo "等待主发行硬门槛超时" >&2
+          exit 1
 
       - name: 下载主构建已审查的完整发行资产
         uses: actions/download-artifact@v8
@@ -79,7 +126,7 @@ jobs:
           name: karing-release-assets
           path: release-assets
           repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.main.outputs.run_id }}
           github-token: ${{ github.token }}
 
       - name: 独立复验安装包、SHA256 与源码锚点
@@ -117,6 +164,7 @@ jobs:
       - name: 生成本轮正式发行说明
         env:
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          SOURCE_RUN_ID: ${{ steps.main.outputs.run_id }}
         shell: bash
         run: |
           cat > release-assets/release-notes-staged.md <<EOF
@@ -129,7 +177,7 @@ jobs:
           - 新增 mihomo-control/control-read-retry、control-read-recovered、control-read-exhausted，以及 core/start-requested/start-succeeded/start-failed 结构化事件。
           - UI mode readback 与启动后的 saved/runtime/live 一致性校验共用同一 readiness 逻辑。
           - 不复制 Mihomo 的逐连接 service 日志，诊断扩展只覆盖缺失的控制面生命周期，继续保持脱敏与轮转。
-          - staged Release tag 由 .release/karing-release-tag.txt 显式声明；本工作流只消费主流水线已经完整审查并聚合的安装资产，并再次验证全部硬门槛、12 个安装文件、SHA256 与源码 Commit。
+          - staged Release tag 由 .release/karing-release-tag.txt 显式声明；本工作流按同一 source SHA 等待主流水线完成，并再次验证全部硬门槛、12 个安装文件、SHA256 与源码 Commit。
 
           Windows TUN 的当前物理出口保护保持不变；本轮日志显示其检测到的物理默认接口与 Mihomo 监视结果一致，因此没有用无证据的网络改动扩大回归面。
 
