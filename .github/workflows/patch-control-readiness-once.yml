@@ -49,5 +49,6 @@ jobs:
           git add src-tauri/src/feat/clash.rs src-tauri/src/cmd/clash.rs
           git diff --cached --quiet && exit 0
           git commit -m 'fix: wait for Mihomo control API readiness'
+          git restore .github/temporary/patch_control_readiness.py
           git pull --rebase origin fix/mihomo-control-readiness
           git push origin HEAD:fix/mihomo-control-readiness
