@@ -107,9 +107,11 @@ jobs:
           fi
           test "$(jq -r .version src-tauri/tauri.conf.json)" = '2.5.4'
           grep -Fq 'version = "2.5.4"' src-tauri/Cargo.toml
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "commit=$commit"
+            echo "release_tag=$release_tag"
+          } >> "$GITHUB_OUTPUT"
 
       - name: 检查 Rust 格式
         run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
@@ -271,7 +273,6 @@ jobs:
             . -> target
             .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
-          cache-workspace-crates: true
 
       - name: 安装 Linux 构建依赖
         if: matrix.platform == 'linux'
@@ -381,7 +382,6 @@ jobs:
             . -> target
             .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
-          cache-workspace-crates: true
 
       - name: 配置 Ubuntu 多架构软件源
         shell: bash
@@ -417,20 +417,25 @@ jobs:
           set -euo pipefail
           if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-gnu' ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-            echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"
-            echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"
-            echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++' >> "$GITHUB_ENV"
-            echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/' >> "$GITHUB_ENV"
-            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/' >> "$GITHUB_ENV"
+            {
+            echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc'
+            echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc'
+            echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++'
+            echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/'
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/'
+              echo 'PKG_CONFIG_ALLOW_CROSS=1'
+            } >> "$GITHUB_ENV"
           else
             sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"
-            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"
-            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++' >> "$GITHUB_ENV"
-            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/' >> "$GITHUB_ENV"
-            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/' >> "$GITHUB_ENV"
+            {
+            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc'
+            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc'
+            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++'
+            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/'
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/'
+              echo 'PKG_CONFIG_ALLOW_CROSS=1'
+            } >> "$GITHUB_ENV"
           fi
-          echo 'PKG_CONFIG_ALLOW_CROSS=1' >> "$GITHUB_ENV"
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v6
@@ -505,7 +510,6 @@ jobs:
             . -> target
             .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
-          cache-workspace-crates: true
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v6
@@ -603,7 +607,7 @@ jobs:
 
           (
             cd release-assets
-            sha256sum * > SHA256SUMS.txt
+            sha256sum -- * > SHA256SUMS.txt
           )
 
           cat > release-assets/BUILD_INFO.txt <<EOF
@@ -617,7 +621,7 @@ jobs:
           Android: intentionally not included
           EOF
 
-          cat > release-assets/release-notes.md <<EOF
+          cat > release-assets/release-notes.md <<'EOF'
           # Clash Verge Rev Karing v${{ needs.review.outputs.version }}
 
           本轮在 Windows TUN 网络安全基础上新增结构化网络诊断时间线，并继续保留连接详情成熟化改造：
