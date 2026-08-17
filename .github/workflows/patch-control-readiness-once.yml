@@ -6,6 +6,7 @@ on:
       - fix/mihomo-control-readiness
     paths:
       - '.github/temporary/patch_control_readiness.py'
+      - '.github/workflows/patch-control-readiness-once.yml'
 
 permissions:
   contents: write
