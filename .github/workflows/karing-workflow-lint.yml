@@ -1,0 +1,37 @@
+name: Karing workflow lint
+run-name: Karing release workflow semantic lint
+
+on:
+  pull_request:
+    branches:
+      - feature/karing-style-diversion
+      - dev
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - '.github/workflows/karing-workflow-lint.yml'
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - '.github/workflows/karing-workflow-lint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate Karing release workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color -oneline \
+            .github/workflows/karing-diagnostics-once.yml \
+            .github/workflows/karing-workflow-lint.yml
