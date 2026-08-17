@@ -11,7 +11,7 @@ use once_cell::sync::Lazy;
 use serde_json::json;
 use serde_yaml_ng::{Mapping, Value};
 use smartstring::alias::String;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 #[allow(clippy::expect_used)]
 static TLS_CONFIG: Lazy<Arc<rustls::ClientConfig>> = Lazy::new(|| {
@@ -23,6 +23,97 @@ static TLS_CONFIG: Lazy<Arc<rustls::ClientConfig>> = Lazy::new(|| {
         .with_no_client_auth();
     Arc::new(config)
 });
+
+const MIHOMO_CONTROL_MAX_ATTEMPTS: usize = 6;
+const MIHOMO_CONTROL_RETRY_DELAYS_MS: [u64; MIHOMO_CONTROL_MAX_ATTEMPTS - 1] = [50, 100, 150, 250, 400];
+
+fn classify_mihomo_control_error(error: &str) -> &'static str {
+    let normalized = error.to_ascii_lowercase();
+    if normalized.contains("decoding response body") {
+        "decode"
+    } else if normalized.contains("named pipe") || normalized.contains("local socket") {
+        "transport"
+    } else if normalized.contains("timed out") || normalized.contains("timeout") {
+        "timeout"
+    } else if normalized.contains("connection") {
+        "connection"
+    } else {
+        "other"
+    }
+}
+
+/// Read Mihomo's live mode through the control API with a short, bounded
+/// readiness retry window. Service-mode startup can report the process as
+/// started slightly before /configs is consistently decodable on the named
+/// pipe. Re-acquiring the plugin guard for every attempt also avoids keeping a
+/// long-lived read guard while sleeping between retries.
+pub async fn read_live_mihomo_mode(stage: &str) -> Result<String, String> {
+    let started = std::time::Instant::now();
+
+    for attempt in 1..=MIHOMO_CONTROL_MAX_ATTEMPTS {
+        let result = {
+            let mihomo = handle::Handle::mihomo().await;
+            mihomo.get_base_config().await
+        };
+
+        match result {
+            Ok(base) => {
+                let actual: String = base.mode.to_string().into();
+                if attempt > 1 {
+                    diagnostics::info(
+                        "mihomo-control",
+                        "control-read-recovered",
+                        json!({
+                            "stage": stage,
+                            "attempt": attempt,
+                            "max_attempts": MIHOMO_CONTROL_MAX_ATTEMPTS,
+                            "elapsed_ms": started.elapsed().as_millis(),
+                            "actual_mode": actual.as_str(),
+                        }),
+                    );
+                }
+                return Ok(actual);
+            }
+            Err(err) => {
+                let error: String = err.to_string().into();
+                let error_kind = classify_mihomo_control_error(error.as_str());
+                if attempt == MIHOMO_CONTROL_MAX_ATTEMPTS {
+                    diagnostics::warn(
+                        "mihomo-control",
+                        "control-read-exhausted",
+                        json!({
+                            "stage": stage,
+                            "attempt": attempt,
+                            "max_attempts": MIHOMO_CONTROL_MAX_ATTEMPTS,
+                            "elapsed_ms": started.elapsed().as_millis(),
+                            "error_kind": error_kind,
+                            "error": error.as_str(),
+                        }),
+                    );
+                    return Err(error);
+                }
+
+                let delay_ms = MIHOMO_CONTROL_RETRY_DELAYS_MS[attempt - 1];
+                diagnostics::info(
+                    "mihomo-control",
+                    "control-read-retry",
+                    json!({
+                        "stage": stage,
+                        "attempt": attempt,
+                        "max_attempts": MIHOMO_CONTROL_MAX_ATTEMPTS,
+                        "elapsed_ms": started.elapsed().as_millis(),
+                        "retry_delay_ms": delay_ms,
+                        "error_kind": error_kind,
+                        "error": error.as_str(),
+                    }),
+                );
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            }
+        }
+    }
+
+    Err("Mihomo control API readiness probe exhausted".into())
+}
 
 /// Restart the Clash core
 pub async fn restart_clash_core() {
@@ -110,17 +201,13 @@ async fn rollback_mihomo_mode(previous: &str) {
 }
 
 async fn read_mihomo_mode(success_event: &str, failure_event: &str) -> Option<String> {
-    let mihomo = handle::Handle::mihomo().await;
-    let result = mihomo.get_base_config().await;
-    drop(mihomo);
-    match result {
-        Ok(base) => {
-            let actual: String = base.mode.to_string().into();
+    match read_live_mihomo_mode(success_event).await {
+        Ok(actual) => {
             diagnostics::info("mode", success_event, json!({"actual": actual.as_str()}));
             Some(actual)
         }
-        Err(err) => {
-            diagnostics::warn("mode", failure_event, json!({"error": err.to_string()}));
+        Err(error) => {
+            diagnostics::warn("mode", failure_event, json!({"error": error.as_str()}));
             None
         }
     }
@@ -348,10 +435,9 @@ pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
         );
     }
 
-    let mihomo = handle::Handle::mihomo().await;
-    let base = match mihomo.get_base_config().await {
-        Ok(base) => base,
-        Err(err) => {
+    let actual = match read_live_mihomo_mode(stage).await {
+        Ok(actual) => actual,
+        Err(error) => {
             diagnostics::warn(
                 "mode",
                 "active-mode-readback-failed",
@@ -359,13 +445,12 @@ pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
                     "stage": stage,
                     "saved": saved.as_deref(),
                     "runtime": runtime.as_deref(),
-                    "error": err.to_string(),
+                    "error": error.as_str(),
                 }),
             );
             return Ok(());
         }
     };
-    let actual = base.mode.to_string();
 
     diagnostics::info(
         "mode",
@@ -374,38 +459,12 @@ pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
             "stage": stage,
             "saved": saved.as_deref(),
             "runtime": runtime.as_deref(),
-            "actual": actual,
+            "actual": actual.as_str(),
         }),
     );
 
     if actual == "global" {
-        match mihomo.get_proxy_by_name("GLOBAL").await {
-            Ok(global) => {
-                let selected = global.now.as_deref();
-                diagnostics::info(
-                    "mode",
-                    "global-selection-readback",
-                    json!({
-                        "stage": stage,
-                        "selected": selected,
-                        "alive": global.alive,
-                        "type": global.proxy_type.as_str(),
-                    }),
-                );
-                if selected.is_some_and(|name| name.eq_ignore_ascii_case("DIRECT")) {
-                    diagnostics::warn(
-                        "mode",
-                        "global-direct-selected",
-                        json!({"stage": stage, "selected": selected}),
-                    );
-                }
-            }
-            Err(err) => diagnostics::warn(
-                "mode",
-                "global-selection-readback-failed",
-                json!({"stage": stage, "error": err.to_string()}),
-            ),
-        }
+        record_global_selection(Some(stage)).await;
     }
 
     let Some(expected) = expected else {
@@ -421,7 +480,11 @@ pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
         json!({"stage": stage, "expected": expected, "actual": actual}),
     );
     let patch = json!({"mode": expected});
-    if let Err(err) = mihomo.patch_base_config(&patch).await {
+    let patch_result = {
+        let mihomo = handle::Handle::mihomo().await;
+        mihomo.patch_base_config(&patch).await
+    };
+    if let Err(err) = patch_result {
         diagnostics::error(
             "mode",
             "active-mode-self-heal-failed",
@@ -430,7 +493,12 @@ pub async fn verify_running_mode_state(stage: &str) -> Result<(), String> {
         return Err(format!("Failed to restore Mihomo mode to {expected}: {err}").into());
     }
 
-    match mihomo.get_base_config().await {
+    let self_heal_readback = {
+        let mihomo = handle::Handle::mihomo().await;
+        mihomo.get_base_config().await
+    };
+
+    match self_heal_readback {
         Ok(base) if base.mode.to_string() == expected => {
             diagnostics::warn(
                 "mode",

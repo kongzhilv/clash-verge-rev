@@ -48,25 +48,24 @@ pub async fn get_clash_mode() -> CmdResult<Option<String>> {
     );
 
     if core_running {
-        match handle::Handle::mihomo().await.get_base_config().await {
-            Ok(base) => {
-                let actual = base.mode.to_string();
+        match feat::read_live_mihomo_mode("ui-get-clash-mode").await {
+            Ok(actual) => {
                 diagnostics::info(
                     "mode",
                     "ui-mode-readback",
                     serde_json::json!({
                         "saved": saved.as_deref(),
-                        "actual": actual,
+                        "actual": actual.as_str(),
                     }),
                 );
-                return Ok(Some(actual.into()));
+                return Ok(Some(actual));
             }
-            Err(err) => diagnostics::warn(
+            Err(error) => diagnostics::warn(
                 "mode",
                 "ui-mode-readback-failed",
                 serde_json::json!({
                     "saved": saved.as_deref(),
-                    "error": err.to_string(),
+                    "error": error.as_str(),
                 }),
             ),
         }
@@ -75,7 +74,7 @@ pub async fn get_clash_mode() -> CmdResult<Option<String>> {
     Ok(saved)
 }
 
-async fn prepare_runtime_before_start() -> CmdResult {
+async fn prepare_runtime_before_start(stage: &str) -> CmdResult {
     if matches!(
         CoreManager::global().get_running_mode().as_ref(),
         RunningMode::NotRunning
@@ -83,13 +82,13 @@ async fn prepare_runtime_before_start() -> CmdResult {
         diagnostics::info(
             "mode",
             "pre-start-runtime-regeneration-requested",
-            serde_json::json!({}),
+            serde_json::json!({"stage": stage}),
         );
         CoreManager::global().update_config_checked().await.stringify_err()?;
         diagnostics::info(
             "mode",
             "pre-start-runtime-regeneration-succeeded",
-            serde_json::json!({}),
+            serde_json::json!({"stage": stage}),
         );
     }
     Ok(())
@@ -142,11 +141,16 @@ pub async fn change_clash_core(clash_core: String) -> CmdResult<Option<String>> 
 
 #[tauri::command]
 pub async fn start_core() -> CmdResult {
-    prepare_runtime_before_start().await?;
+    let stage = "start-core";
+    prepare_runtime_before_start(stage).await?;
+    diagnostics::info("core", "start-requested", serde_json::json!({"stage": stage}));
     let result = CoreManager::global().start_core().await.stringify_err();
     if result.is_ok() {
-        verify_mode_after_start("start-core").await?;
+        diagnostics::info("core", "start-succeeded", serde_json::json!({"stage": stage}));
+        verify_mode_after_start(stage).await?;
         handle::Handle::refresh_clash();
+    } else {
+        diagnostics::error("core", "start-failed", serde_json::json!({"stage": stage}));
     }
     result
 }
@@ -157,9 +161,19 @@ pub async fn start_core() -> CmdResult {
 /// otherwise preserved.
 #[tauri::command]
 pub async fn start_proxy() -> CmdResult {
-    prepare_runtime_before_start().await?;
-    CoreManager::global().start_core().await.stringify_err()?;
-    verify_mode_after_start("start-proxy").await?;
+    let stage = "start-proxy";
+    prepare_runtime_before_start(stage).await?;
+    diagnostics::info("core", "start-requested", serde_json::json!({"stage": stage}));
+    if let Err(error) = CoreManager::global().start_core().await {
+        diagnostics::error(
+            "core",
+            "start-failed",
+            serde_json::json!({"stage": stage, "error": error.to_string()}),
+        );
+        return Err(error.to_string().into());
+    }
+    diagnostics::info("core", "start-succeeded", serde_json::json!({"stage": stage}));
+    verify_mode_after_start(stage).await?;
 
     if let Err(error) = Sysopt::global().update_sysproxy().await {
         logging!(
