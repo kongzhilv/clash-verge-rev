@@ -18,9 +18,10 @@ jobs:
         with:
           ref: fix/mihomo-control-readiness
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@1.95
-        with:
-          components: rustfmt
+      - name: Install pinned Rust formatter
+        run: |
+          rustup toolchain install 1.95 --profile minimal --component rustfmt
+          rustup default 1.95
       - name: Apply targeted patch
         run: python3 .github/temporary/patch_control_readiness.py
       - name: Format and inspect diff
