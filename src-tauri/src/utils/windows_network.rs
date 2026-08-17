@@ -446,13 +446,12 @@ fn merge_string_sequence(mapping: &mut Mapping, key: &str, values: &[String]) {
 }
 
 pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute) {
-    config.insert(
-        Value::from("interface-name"),
-        Value::from(route.interface_alias.as_str()),
-    );
-
     if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
-        tun.insert(Value::from("auto-detect-interface"), Value::from(false));
+        // Do not pin the top-level outbound interface here. Windows can lose and
+        // restore connectivity on another physical adapter while Mihomo keeps
+        // running; keeping auto detection enabled lets Mihomo's own network
+        // monitor follow that change instead of dialing through a dead adapter.
+        tun.insert(Value::from("auto-detect-interface"), Value::from(true));
         merge_string_sequence(tun, "route-exclude-address", &route.route_exclude_addresses);
 
         // Mihomo documents include-interface and exclude-interface as mutually exclusive.
@@ -503,13 +502,13 @@ mod tests {
     }
 
     #[test]
-    fn managed_upstream_pins_interface_and_protects_lan_and_hotspot_routes() {
+    fn managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes() {
         let mut config = mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
         apply_managed_upstream(&mut config, &route());
 
-        assert_eq!(config.get("interface-name").and_then(Value::as_str), Some("WLAN"));
+        assert!(config.get("interface-name").is_none());
         let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
-        assert_eq!(tun.get("auto-detect-interface").and_then(Value::as_bool), Some(false));
+        assert_eq!(tun.get("auto-detect-interface").and_then(Value::as_bool), Some(true));
         assert_eq!(
             tun.get("exclude-interface")
                 .and_then(Value::as_sequence)

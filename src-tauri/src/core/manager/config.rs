@@ -340,12 +340,24 @@ impl CoreManager {
         logging!(
             info,
             Type::Core,
-            "Windows TUN safety: pinned outbound interface={} index={} source={} gateway={} metric={} (auto-detect-interface=false)",
+            "Windows TUN safety: verified stable physical upstream={} index={} source={} gateway={} metric={}; Mihomo auto-detect-interface remains enabled for reconnect/failover",
             route.interface_alias,
             route.interface_index,
             route.source_address,
             route.gateway,
             route.effective_metric
+        );
+        diagnostics::info(
+            "windows-tun",
+            "dynamic-upstream-enabled",
+            json!({
+                "observed_interface": route.interface_alias.as_str(),
+                "observed_interface_index": route.interface_index,
+                "observed_source": route.source_address.as_str(),
+                "observed_gateway": route.gateway.as_str(),
+                "auto_detect_interface": true,
+                "top_level_interface_pinned": false,
+            }),
         );
         Ok(true)
     }

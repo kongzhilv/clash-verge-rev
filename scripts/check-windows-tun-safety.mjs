@@ -52,6 +52,16 @@ requireText(
   'native Windows route inspection does not block the async runtime',
 )
 requireText(
+  'manager',
+  'dynamic-upstream-enabled',
+  'managed Windows TUN records that runtime outbound selection remains dynamic',
+)
+requireText(
+  'manager',
+  'top_level_interface_pinned',
+  'diagnostics make stale-interface pinning directly observable',
+)
+requireText(
   'lifecycle',
   'self.prepare_windows_tun_runtime_for_start().await?;',
   'stable upstream validation happens before core startup',
@@ -109,15 +119,20 @@ requireText(
   'include-interface',
   'explicit include-interface is preserved to avoid conflicting Mihomo options',
 )
-requireText(
+forbidText(
   'windowsNetwork',
-  'Value::from("interface-name")',
-  'stable physical uplink is pinned into Mihomo runtime config',
+  'config.insert(\n        Value::from("interface-name")',
+  'automatic Windows TUN must not pin the top-level outbound interface to the adapter seen at startup',
 )
 requireText(
   'windowsNetwork',
-  'Value::from("auto-detect-interface"), Value::from(false)',
-  'managed Windows TUN disables route-flapping interface autodetection',
+  'Value::from("auto-detect-interface"), Value::from(true)',
+  'managed Windows TUN keeps Mihomo interface auto-detection enabled for reconnect and failover',
+)
+requireText(
+  'windowsNetwork',
+  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
+  'Rust regression explicitly covers dynamic outbound selection plus LAN/hotspot guards',
 )
 requireText(
   'windowsNetwork',
@@ -155,3 +170,6 @@ console.log('Windows TUN safety regression passed.')
 console.log('[通过] 启动阶段不再执行 PowerShell / ExecutionPolicy Bypass')
 console.log('[通过] 默认路由通过 Win32 IP Helper API 在进程内读取')
 console.log('[通过] Wi-Fi Direct/移动热点私网接口与 LAN CIDR 受 TUN 路由保护')
+console.log(
+  '[通过] TUN 不再钉死启动时物理网卡，断网恢复/切网继续由 Mihomo 动态跟随出口',
+)
