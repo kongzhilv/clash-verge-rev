@@ -188,8 +188,7 @@ jobs:
           check_contains src-tauri/src/core/manager/lifecycle.rs 'prepare_windows_tun_runtime_for_start' 'Windows TUN 启动前执行物理出口稳定检查'
           check_contains src-tauri/src/utils/windows_network.rs 'const STABLE_SAMPLES: usize = 6;' 'Windows 默认路由需通过稳定窗口'
           check_contains src-tauri/src/utils/windows_network.rs 'Value::from("auto-detect-interface"), Value::from(true)' 'Windows TUN 保持 Mihomo 动态出口检测以恢复断网/切网'
-          check_not_contains src-tauri/src/utils/windows_network.rs 'config.insert(
-        Value::from("interface-name")' 'Windows TUN 不再写死顶层物理出口接口'
+          check_not_contains src-tauri/src/utils/windows_network.rs 'Value::from("interface-name")' 'Windows TUN 自动托管路径不再写死顶层物理出口接口'
           check_contains src-tauri/src/core/manager/config.rs 'dynamic-upstream-enabled' 'Windows TUN 记录动态出口恢复策略'
           check_contains src-tauri/src/feat/clash.rs 'MIHOMO_CONTROL_MAX_ATTEMPTS' 'Mihomo 控制 API 启动就绪采用有界重试'
           check_contains src-tauri/src/feat/clash.rs 'control-read-retry' '控制 API 瞬态失败记录重试诊断'
