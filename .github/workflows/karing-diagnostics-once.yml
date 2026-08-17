@@ -16,6 +16,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/**'
+      - '.release/**'
   push:
     branches:
       - feature/karing-style-diversion
@@ -30,6 +31,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/**'
+      - '.release/**'
   workflow_dispatch:
 
 permissions:
@@ -40,7 +42,6 @@ env:
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: short
   NODE_OPTIONS: --max_old_space_size=4096
-  RELEASE_TAG: v2.5.4-karing.11
   RELEASE_BRANCH: feature/karing-style-diversion
 
 concurrency:
@@ -54,6 +55,7 @@ jobs:
     outputs:
       version: ${{ steps.meta.outputs.version }}
       commit: ${{ steps.meta.outputs.commit }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
     steps:
       - name: 检出本次运行对应的代码
         uses: actions/checkout@v7
@@ -97,11 +99,17 @@ jobs:
           set -euo pipefail
           version=$(jq -r .version package.json)
           commit=$(git rev-parse HEAD)
+          release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
           test "$version" = '2.5.4'
+          if [[ ! "$release_tag" =~ ^v${version}-karing\.[0-9]+$ ]]; then
+            echo "非法 Karing Release tag: $release_tag" >&2
+            exit 1
+          fi
           test "$(jq -r .version src-tauri/tauri.conf.json)" = '2.5.4'
           grep -Fq 'version = "2.5.4"' src-tauri/Cargo.toml
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: 检查 Rust 格式
         run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
@@ -179,7 +187,15 @@ jobs:
           check_contains src-tauri/src/core/sysopt.rs 'record_os_proxy_state("after-apply")' '系统代理写入后回读 OS 状态'
           check_contains src-tauri/src/core/manager/lifecycle.rs 'prepare_windows_tun_runtime_for_start' 'Windows TUN 启动前执行物理出口稳定检查'
           check_contains src-tauri/src/utils/windows_network.rs 'const STABLE_SAMPLES: usize = 6;' 'Windows 默认路由需通过稳定窗口'
-          check_contains src-tauri/src/utils/windows_network.rs 'Value::from("auto-detect-interface"), Value::from(false)' 'Windows TUN 运行时固定物理出口并关闭自动抖动探测'
+          check_contains src-tauri/src/utils/windows_network.rs 'Value::from("auto-detect-interface"), Value::from(true)' 'Windows TUN 保持 Mihomo 动态出口检测以恢复断网/切网'
+          check_not_contains src-tauri/src/utils/windows_network.rs 'config.insert(
+        Value::from("interface-name")' 'Windows TUN 不再写死顶层物理出口接口'
+          check_contains src-tauri/src/core/manager/config.rs 'dynamic-upstream-enabled' 'Windows TUN 记录动态出口恢复策略'
+          check_contains src-tauri/src/feat/clash.rs 'MIHOMO_CONTROL_MAX_ATTEMPTS' 'Mihomo 控制 API 启动就绪采用有界重试'
+          check_contains src-tauri/src/feat/clash.rs 'control-read-retry' '控制 API 瞬态失败记录重试诊断'
+          check_contains src-tauri/src/feat/clash.rs 'control-read-recovered' '控制 API 恢复后记录就绪耗时'
+          check_contains src-tauri/src/cmd/clash.rs 'ui-get-clash-mode' 'UI mode 读取复用控制 API 就绪逻辑'
+          check_contains src-tauri/src/cmd/clash.rs '"start-requested"' '核心启动生命周期进入结构化诊断'
           check_contains src-tauri/src/cmd/clash.rs 'pub async fn start_proxy()' '后端已实现启动主代理命令'
           check_contains src-tauri/src/cmd/clash.rs 'pub async fn stop_proxy()' '后端已实现停止主代理命令'
           check_contains src-tauri/src/lib.rs 'cmd::start_proxy' '已注册启动主代理命令'
@@ -596,7 +612,7 @@ jobs:
           Event: ${GITHUB_EVENT_NAME}
           Commit: ${{ needs.review.outputs.commit }}
           Version: ${{ needs.review.outputs.version }}
-          Release tag: ${RELEASE_TAG}
+          Release tag: ${{ needs.review.outputs.release_tag }}
           Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
           Signing: unsigned fork build; no upstream Apple notarization or updater signature
           Android: intentionally not included
@@ -609,11 +625,14 @@ jobs:
 
           - 新增独立、轮转的 `diagnostic.latest.log` 结构化事件时间线，带会话 ID、单调序号、版本/平台信息，并对 password/token/UUID/订阅等敏感字段递归脱敏。
           - 在配置生成前记录保存的 TUN/系统代理/DNS 开关与 Clash 网络关键字段，生成后记录 Runtime 的 IPv6、TUN、DNS 摘要，可直接识别“UI 已关闭 IPv6 但 Runtime 被重新开启”等覆盖问题。
-          - Windows TUN 记录物理出口检测、网卡索引/网关/metric、排除接口与网段、托管出口写入后的 Runtime；系统代理记录 apply/reset 前后的实际 OS 读回状态。
+          - Windows TUN 记录物理出口检测、网卡索引/网关/metric、排除接口与网段、动态出口策略写入后的 Runtime；系统代理记录 apply/reset 前后的实际 OS 读回状态。
           - 修复 Windows TUN 现有严格 Clippy 门禁问题，并保持生产代码 `-D warnings`。
-          - 保留 Windows TUN 启动/热重载前的真实 IPv4 默认路由稳定检查、物理出口固定和热点/LAN 路由保护。
+          - 保留 Windows TUN 启动/热重载前的真实 IPv4 默认路由稳定检查和热点/LAN 路由保护，但不再固定顶层出口；Mihomo `auto-detect-interface` 保持开启，可在断网恢复或以太网/WLAN 切换后自动跟随新出口。
           - 连接详情继续采用 adaptive list-detail：宽屏双栏，普通窗口详情在连接工作区内单栏接管，并提供明确返回导航。
           - Windows TUN/热点安全、程序归因、UI 成熟度与诊断日志均纳入发行门禁。
+          - Mihomo 控制 API 在 Core 启动后采用短窗口有界 readiness 重试，修复 named-pipe 已建立但 `/configs` 尚不可稳定解码时的首次 mode readback 竞态；仅记录控制面重试/恢复，不重复采集逐连接流量日志。
+          - 修复 Windows TUN 运行中断网再联网/以太网与 WLAN 切换后的出站失效：不再把顶层 `interface-name` 钉死到启动时网卡，保持 Mihomo 动态出口监视能力。
+          - Release tag 改为 `.release/karing-release-tag.txt` 显式 staging，正式流水线不再硬编码历史标签。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
 
@@ -641,6 +660,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ needs.review.outputs.release_tag }}
     steps:
       - name: 下载已审查的发行资产
         uses: actions/download-artifact@v8
@@ -669,7 +690,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Network Diagnostics + TUN Safety" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Control Readiness + Mode Consistency" \
             --notes-file release-assets/release-notes.md \
             --latest
 
