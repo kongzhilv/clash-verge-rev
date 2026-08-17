@@ -1,0 +1,173 @@
+name: Karing 分阶段正式发行
+run-name: 发布已审查 Karing 构建 · ${{ github.event.workflow_run.head_sha }}
+
+on:
+  workflow_run:
+    workflows:
+      - Karing 桌面版审查与发行
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: karing-staged-release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 复验主构建并发布 staged Release
+    if: ${{ github.event.workflow_run.head_branch == 'feature/karing-style-diversion' }}
+    runs-on: ubuntu-22.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: 检出主构建固定源码
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: 读取并验证 staged Release tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
+          if [[ ! "$release_tag" =~ ^v${version}-karing\.[0-9]+$ ]]; then
+            echo "非法 staged Karing Release tag: $release_tag" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+
+      - name: 复验主发行运行的全部硬门槛
+        shell: bash
+        run: |
+          set -euo pipefail
+          jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/jobs?per_page=100")
+          required=(
+            '审查并验证源码'
+            '构建 Linux x64'
+            '构建 Linux ARMv7'
+            '构建 macOS Apple Silicon'
+            '构建 Windows ARM64'
+            '构建 macOS Intel'
+            '构建 Windows x64'
+            '构建固定 WebView2 ARM64'
+            '构建 Linux ARM64'
+            '构建固定 WebView2 x64'
+            '汇总并审查发行产物'
+          )
+          for name in "${required[@]}"; do
+            conclusion=$(jq -r --arg name "$name" '.jobs[] | select(.name == $name) | .conclusion' <<<"$jobs" | head -n1)
+            if [ "$conclusion" != success ]; then
+              echo "主发行硬门槛未通过: $name => ${conclusion:-missing}" >&2
+              exit 1
+            fi
+            echo "[通过] $name"
+          done
+
+      - name: 下载主构建已审查的完整发行资产
+        uses: actions/download-artifact@v8
+        with:
+          name: karing-release-assets
+          path: release-assets
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: 独立复验安装包、SHA256 与源码锚点
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=$(find release-assets -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
+          test "$count" -eq 12
+          test -f release-assets/SHA256SUMS.txt
+          test -f release-assets/BUILD_INFO.txt
+          grep -Fxq "Commit: ${SOURCE_SHA}" release-assets/BUILD_INFO.txt
+          (
+            cd release-assets
+            sha256sum -c SHA256SUMS.txt
+          )
+          sed -i -E "s|^Release tag: .*|Release tag: ${RELEASE_TAG}|" release-assets/BUILD_INFO.txt
+
+      - name: 拒绝覆盖已有标签或 Release
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG 已存在，拒绝覆盖" >&2
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG 已存在，拒绝覆盖" >&2
+            exit 1
+          fi
+
+      - name: 生成本轮正式发行说明
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        shell: bash
+        run: |
+          cat > release-assets/release-notes-staged.md <<EOF
+          # Clash Verge Rev Karing $RELEASE_TAG
+
+          本轮依据实际 Windows 日志继续收敛控制面与发行链：
+
+          - 修复 Core 刚启动后 Mihomo named-pipe 已建立、但 /configs 首次响应尚不可稳定解码时的 mode readback 竞态。
+          - 控制 API 读取采用短窗口、有界退避重试；每次重试重新获取 Mihomo guard，不使用固定长 sleep。
+          - 新增 mihomo-control/control-read-retry、control-read-recovered、control-read-exhausted，以及 core/start-requested/start-succeeded/start-failed 结构化事件。
+          - UI mode readback 与启动后的 saved/runtime/live 一致性校验共用同一 readiness 逻辑。
+          - 不复制 Mihomo 的逐连接 service 日志，诊断扩展只覆盖缺失的控制面生命周期，继续保持脱敏与轮转。
+          - staged Release tag 由 .release/karing-release-tag.txt 显式声明；本工作流只消费主流水线已经完整审查并聚合的安装资产，并再次验证全部硬门槛、12 个安装文件、SHA256 与源码 Commit。
+
+          Windows TUN 的当前物理出口保护保持不变；本轮日志显示其检测到的物理默认接口与 Mihomo 监视结果一致，因此没有用无证据的网络改动扩大回归面。
+
+          Source commit: $SOURCE_SHA
+          Source workflow run: $SOURCE_RUN_ID
+          EOF
+
+      - name: 发布正式 Latest Release
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            release-assets/*.exe \
+            release-assets/*.dmg \
+            release-assets/*.rpm \
+            release-assets/*.deb \
+            release-assets/SHA256SUMS.txt \
+            release-assets/BUILD_INFO.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "Clash Verge Rev Karing v${VERSION} · Control Readiness + Mode Consistency" \
+            --notes-file release-assets/release-notes-staged.md \
+            --latest
+
+      - name: 独立核验公开 Release、标签与资产
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")
+          test "$(jq '.assets | length' <<<"$release_json")" -eq 14
+          test "$(jq -r '.target_commitish' <<<"$release_json")" = "$SOURCE_SHA"
+          test "$(jq -r '.draft' <<<"$release_json")" = false
+          test "$(jq -r '.prerelease' <<<"$release_json")" = false
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')" = "$RELEASE_TAG"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')" = "$SOURCE_SHA"
+          jq '{url: .html_url, tag: .tag_name, target: .target_commitish, assets: [.assets[].name]}' <<<"$release_json"
