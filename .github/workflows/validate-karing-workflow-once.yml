@@ -6,6 +6,7 @@ on:
       - fix/karing-release-workflow-validation
     paths:
       - '.github/workflows/validate-karing-workflow-once.yml'
+      - '.github/workflows/karing-diagnostics-once.yml'
 
 permissions:
   contents: read
