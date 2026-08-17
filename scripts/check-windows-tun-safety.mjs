@@ -170,4 +170,6 @@ console.log('Windows TUN safety regression passed.')
 console.log('[通过] 启动阶段不再执行 PowerShell / ExecutionPolicy Bypass')
 console.log('[通过] 默认路由通过 Win32 IP Helper API 在进程内读取')
 console.log('[通过] Wi-Fi Direct/移动热点私网接口与 LAN CIDR 受 TUN 路由保护')
-console.log('[通过] TUN 不再钉死启动时物理网卡，断网恢复/切网继续由 Mihomo 动态跟随出口')
+console.log(
+  '[通过] TUN 不再钉死启动时物理网卡，断网恢复/切网继续由 Mihomo 动态跟随出口',
+)
