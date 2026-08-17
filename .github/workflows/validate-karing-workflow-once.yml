@@ -1,0 +1,24 @@
+name: Validate Karing release workflow once
+
+on:
+  push:
+    branches:
+      - fix/karing-release-workflow-validation
+    paths:
+      - '.github/workflows/validate-karing-workflow-once.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/karing-release-workflow-validation
+      - name: Validate workflow semantics with actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color -oneline .github/workflows/karing-diagnostics-once.yml
