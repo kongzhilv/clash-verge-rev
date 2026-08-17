@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/validate-karing-workflow-once.yml'
       - '.github/workflows/karing-diagnostics-once.yml'
+      - '.github/workflows/karing-workflow-lint.yml'
 
 permissions:
   contents: read
@@ -18,9 +19,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: fix/karing-release-workflow-validation
-      - name: Validate committed release workflow
+      - name: Validate committed release workflows
         shell: bash
         run: |
           set -euo pipefail
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color -oneline .github/workflows/karing-diagnostics-once.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color -oneline \
+            .github/workflows/karing-diagnostics-once.yml \
+            .github/workflows/karing-workflow-lint.yml
           git diff --check
