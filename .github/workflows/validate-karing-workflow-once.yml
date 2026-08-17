@@ -45,11 +45,37 @@ jobs:
               raise SystemExit(f'cache-workspace-crates: expected 3 matches, found {count}')
           text = text.replace('          cache-workspace-crates: true\n', '')
 
-          replace_once(
-              '''          if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-gnu' ]; then\n            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu\n            echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"\n            echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc' >> "$GITHUB_ENV"\n            echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++' >> "$GITHUB_ENV"\n            echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/' >> "$GITHUB_ENV"\n            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/' >> "$GITHUB_ENV"\n          else\n            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf\n            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"\n            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc' >> "$GITHUB_ENV"\n            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++' >> "$GITHUB_ENV"\n            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/' >> "$GITHUB_ENV"\n            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/' >> "$GITHUB_ENV"\n          fi\n          echo 'PKG_CONFIG_ALLOW_CROSS=1' >> "$GITHUB_ENV"\n''',
-              '''          if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-gnu' ]; then\n            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu\n            {\n              echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc'\n              echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc'\n              echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++'\n              echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/'\n              echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/'\n              echo 'PKG_CONFIG_ALLOW_CROSS=1'\n            } >> "$GITHUB_ENV"\n          else\n            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf\n            {\n              echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc'\n              echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc'\n              echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++'\n              echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/'\n              echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/'\n              echo 'PKG_CONFIG_ALLOW_CROSS=1'\n            } >> "$GITHUB_ENV"\n          fi\n''',
-              'group GITHUB_ENV writes',
-          )
+          step_start = text.index('      - name: 安装交叉编译器\n')
+          step_end = text.index('      - name: 安装 pnpm\n', step_start)
+          block = text[step_start:step_end]
+          lines = block.splitlines(keepends=True)
+          rewritten = []
+          group_open = False
+          for line in lines:
+              stripped = line.strip()
+              if stripped == "echo 'PKG_CONFIG_ALLOW_CROSS=1' >> \"$GITHUB_ENV\"":
+                  continue
+              if stripped.startswith('sudo apt-get install -y gcc-'):
+                  rewritten.append(line)
+                  rewritten.append('            {\n')
+                  group_open = True
+                  continue
+              if group_open and stripped.startswith("echo '") and line.rstrip().endswith('>> "$GITHUB_ENV"'):
+                  rewritten.append(line.replace(' >> "$GITHUB_ENV"', ''))
+                  continue
+              if group_open and stripped in {'else', 'fi'}:
+                  rewritten.append("              echo 'PKG_CONFIG_ALLOW_CROSS=1'\n")
+                  rewritten.append('            } >> "$GITHUB_ENV"\n')
+                  group_open = False
+                  rewritten.append(line)
+                  continue
+              rewritten.append(line)
+          if group_open:
+              raise SystemExit('GITHUB_ENV group remained open')
+          new_block = ''.join(rewritten)
+          if new_block == block:
+              raise SystemExit('cross compiler block was not transformed')
+          text = text[:step_start] + new_block + text[step_end:]
 
           replace_once(
               '            sha256sum * > SHA256SUMS.txt\n',
