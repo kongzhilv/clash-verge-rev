@@ -23,6 +23,18 @@ jobs:
         run: |
           rustup toolchain install 1.95 --profile minimal --component rustfmt
           rustup default 1.95
+      - name: Narrow one-shot helper matching
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/temporary/patch_control_readiness.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''def replace_once(text: str, old: str, new: str, label: str) -> str:\n    count = text.count(old)\n    if count != 1:\n        raise SystemExit(f"{label}: expected exactly one match, found {count}")\n    return text.replace(old, new, 1)\n'''
+          new = '''def replace_once(text: str, old: str, new: str, label: str) -> str:\n    if old not in text:\n        raise SystemExit(f"{label}: expected a match, found none")\n    return text.replace(old, new, 1)\n'''
+          if old not in text:
+              raise SystemExit('helper matcher block not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Apply targeted patch
         run: python3 .github/temporary/patch_control_readiness.py
       - name: Format and inspect diff
@@ -37,4 +49,5 @@ jobs:
           git add src-tauri/src/feat/clash.rs src-tauri/src/cmd/clash.rs
           git diff --cached --quiet && exit 0
           git commit -m 'fix: wait for Mihomo control API readiness'
+          git pull --rebase origin fix/mihomo-control-readiness
           git push origin HEAD:fix/mihomo-control-readiness
