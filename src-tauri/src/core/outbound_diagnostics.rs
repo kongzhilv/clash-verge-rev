@@ -753,8 +753,8 @@ mod tests {
         assert_eq!(selected.selected_hint.as_deref(), Some("🇹🇼台湾静态三网|家宽3"));
         assert_eq!(selected.target, "r.bing.com:443");
 
-        let global = parse_route("[TCP] 198.18.0.1:57701 --> r.bing.com:443 using GLOBAL")
-            .expect("global route should parse");
+        let global =
+            parse_route("[TCP] 198.18.0.1:57701 --> r.bing.com:443 using GLOBAL").expect("global route should parse");
         assert_eq!(global.outbound, "GLOBAL");
         assert!(global.selected_hint.is_none());
     }
