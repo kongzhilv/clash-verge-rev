@@ -4,6 +4,9 @@ const files = {
   manager: 'src-tauri/src/core/manager/config.rs',
   lifecycle: 'src-tauri/src/core/manager/lifecycle.rs',
   windowsNetwork: 'src-tauri/src/utils/windows_network.rs',
+  outboundDiagnostics: 'src-tauri/src/core/outbound_diagnostics.rs',
+  coreMod: 'src-tauri/src/core/mod.rs',
+  coreManager: 'src-tauri/src/core/manager/mod.rs',
   manifest: 'src-tauri/Cargo.toml',
   utils: 'src-tauri/src/utils/mod.rs',
 }
@@ -160,16 +163,87 @@ for (const forbidden of [
   )
 }
 
+requireText(
+  'coreMod',
+  'pub mod outbound_diagnostics;',
+  'outbound failure diagnostics module is compiled into the core',
+)
+requireText(
+  'coreManager',
+  'crate::core::outbound_diagnostics::ensure_monitor_running();',
+  'outbound diagnostics monitor starts once with CoreManager initialization',
+)
+for (const marker of [
+  'outbound-failure-summary',
+  'outbound-connection-churn',
+  'proxy-group-health-check-triggered',
+]) {
+  requireText(
+    'outboundDiagnostics',
+    marker,
+    `structured outbound diagnostic event ${marker} is present`,
+  )
+}
+requireText(
+  'outboundDiagnostics',
+  'RunningMode::Service',
+  'outbound diagnostics covers service mode logs',
+)
+requireText(
+  'outboundDiagnostics',
+  'service_latest.log',
+  'service mode diagnostics tails the service rolling log',
+)
+requireText(
+  'outboundDiagnostics',
+  'RunningMode::Sidecar',
+  'outbound diagnostics covers sidecar mode logs',
+)
+requireText(
+  'outboundDiagnostics',
+  'sidecar_latest.log',
+  'sidecar mode diagnostics tails the sidecar rolling log',
+)
+requireText(
+  'outboundDiagnostics',
+  'tokio::fs::read_to_string',
+  'outbound diagnostics tails logs without blocking the async runtime',
+)
+requireText(
+  'outboundDiagnostics',
+  'MAX_DIMENSION_VALUES',
+  'outbound diagnostic aggregation has a bounded cardinality',
+)
+requireText(
+  'outboundDiagnostics',
+  'SAMPLE_ERROR_MAX_CHARS',
+  'outbound diagnostic error samples are length bounded',
+)
+requireText(
+  'outboundDiagnostics',
+  '?<query-redacted>',
+  'outbound diagnostic error samples redact URL query strings',
+)
+requireText(
+  'outboundDiagnostics',
+  'heuristic": true',
+  'connection churn is explicitly marked as a heuristic rather than a proven failure',
+)
+
 if (failures.length > 0) {
-  console.error('Windows TUN safety regression failed:')
+  console.error('Windows TUN and outbound diagnostics regression failed:')
   for (const failure of failures) console.error(`- ${failure}`)
   process.exit(1)
 }
 
-console.log('Windows TUN safety regression passed.')
+console.log('Windows TUN and outbound diagnostics regression passed.')
 console.log('[通过] 启动阶段不再执行 PowerShell / ExecutionPolicy Bypass')
 console.log('[通过] 默认路由通过 Win32 IP Helper API 在进程内读取')
 console.log('[通过] Wi-Fi Direct/移动热点私网接口与 LAN CIDR 受 TUN 路由保护')
 console.log(
   '[通过] TUN 不再钉死启动时物理网卡，断网恢复/切网继续由 Mihomo 动态跟随出口',
 )
+console.log(
+  '[通过] Service/Sidecar 出站失败、健康检查与短时连接抖动进入有界结构化诊断',
+)
+console.log('[通过] 出站错误样本限制长度并移除 URL query，连接抖动明确标记为 heuristic')
