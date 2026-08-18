@@ -1,7 +1,6 @@
 use std::{
     cmp::Reverse,
     collections::{HashMap, HashSet},
-    fs,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -670,7 +669,7 @@ async fn monitor_loop() {
             continue;
         };
 
-        let content = match fs::read_to_string(path) {
+        let content = match tokio::fs::read_to_string(path).await {
             Ok(content) => content,
             Err(_) => continue,
         };
