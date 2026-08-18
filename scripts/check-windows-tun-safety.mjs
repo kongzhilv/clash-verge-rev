@@ -246,4 +246,6 @@ console.log(
 console.log(
   '[通过] Service/Sidecar 出站失败、健康检查与短时连接抖动进入有界结构化诊断',
 )
-console.log('[通过] 出站错误样本限制长度并移除 URL query，连接抖动明确标记为 heuristic')
+console.log(
+  '[通过] 出站错误样本限制长度并移除 URL query，连接抖动明确标记为 heuristic',
+)
