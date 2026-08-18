@@ -1,0 +1,33 @@
+name: Karing 正式发行门禁
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/karing-release-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: karing-release-gate
+  cancel-in-progress: false
+
+jobs:
+  dispatch-release:
+    name: 调度 Karing 正式发行
+    if: ${{ github.repository == 'kongzhilv/clash-verge-rev' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 触发完整审查与发行工作流
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run karing-diagnostics-once.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref feature/karing-style-diversion
