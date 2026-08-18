@@ -140,6 +140,7 @@ impl CoreManager {
 
     pub fn init(&self) {
         self.set_running_mode(RunningMode::NotRunning);
+        crate::core::outbound_diagnostics::ensure_monitor_running();
         logging!(
             info,
             Type::Core,
