@@ -6,6 +6,7 @@ pub mod hotkey;
 pub mod logger;
 pub mod manager;
 mod notification;
+pub mod outbound_diagnostics;
 pub mod service;
 pub mod sysopt;
 pub mod timer;
