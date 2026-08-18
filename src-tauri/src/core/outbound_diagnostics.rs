@@ -148,15 +148,31 @@ fn top_values(map: &HashMap<String, u32>) -> Vec<Value> {
         .collect()
 }
 
+fn redact_url_query(token: &str) -> String {
+    let Some(scheme_index) = token.find("://") else {
+        return token.to_string();
+    };
+    let query_search_start = scheme_index + 3;
+    let Some(query_offset) = token.get(query_search_start..).and_then(|rest| rest.find('?')) else {
+        return token.to_string();
+    };
+    let query_index = query_search_start + query_offset;
+    format!("{}?<query-redacted>", &token[..query_index])
+}
+
 fn compact_error(error: &str) -> String {
-    error
-        .replace(['\r', '\n', '\t'], " ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(SAMPLE_ERROR_MAX_CHARS)
-        .collect()
+    let normalized = error.replace(['\r', '\n', '\t'], " ");
+    let mut compact = String::new();
+    for token in normalized.split_whitespace() {
+        if !compact.is_empty() {
+            compact.push(' ');
+        }
+        compact.push_str(redact_url_query(token).as_str());
+        if compact.chars().count() >= SAMPLE_ERROR_MAX_CHARS {
+            break;
+        }
+    }
+    compact.chars().take(SAMPLE_ERROR_MAX_CHARS).collect()
 }
 
 fn parse_host_port(value: &str) -> (String, Option<u16>) {
@@ -696,9 +712,17 @@ pub fn ensure_monitor_running() {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::{ChurnBucket, RouteEvent, classify_error, parse_failure, parse_health_check_group, parse_route};
     use std::time::Instant;
+
+    #[test]
+    fn error_samples_redact_url_queries() {
+        let compact = super::compact_error(r#"requesting https://doh.pub:443/dns-query?dns=SECRET payload"#);
+        assert!(compact.contains("https://doh.pub:443/dns-query?<query-redacted>"));
+        assert!(!compact.contains("SECRET"));
+    }
 
     #[test]
     fn parses_proxy_timeout_failure() {
