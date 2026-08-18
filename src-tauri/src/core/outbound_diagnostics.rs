@@ -221,7 +221,9 @@ fn classify_error(error: &str, outbound: &str) -> (&'static str, &'static str) {
     let normalized = error.to_ascii_lowercase();
     let family = if normalized.contains("dns resolve failed") || normalized.contains("all dns requests failed") {
         "dns"
-    } else if normalized.contains("only one usage of each socket address") || normalized.contains("address already in use") {
+    } else if normalized.contains("only one usage of each socket address")
+        || normalized.contains("address already in use")
+    {
         "socket_exhaustion"
     } else if normalized.contains("network is unreachable") || normalized.contains("unreachable host") {
         "network_unreachable"
@@ -322,7 +324,9 @@ fn parse_route(line: &str) -> Option<RouteEvent> {
     let using_index = right.rfind(" using ")?;
     let before_using = right.get(..using_index)?;
     let selection = right.get(using_index + " using ".len()..)?;
-    let target = before_using.split_once(" match ").map_or(before_using, |(target, _)| target);
+    let target = before_using
+        .split_once(" match ")
+        .map_or(before_using, |(target, _)| target);
     let (target_host, target_port) = parse_host_port(target);
     let target = target_port.map_or(target_host.clone(), |port| format!("{target_host}:{port}"));
     let (outbound, selected_hint) = parse_selection(selection);
@@ -377,7 +381,9 @@ impl FailureBucket {
     }
 
     fn ready(&self, now: Instant, force: bool) -> bool {
-        force || now.duration_since(self.first_seen) >= FAILURE_WINDOW || now.duration_since(self.last_seen) >= FAILURE_IDLE_FLUSH
+        force
+            || now.duration_since(self.first_seen) >= FAILURE_WINDOW
+            || now.duration_since(self.last_seen) >= FAILURE_IDLE_FLUSH
     }
 }
 
@@ -496,8 +502,12 @@ impl LogCursor {
 
 fn active_log(mode: &RunningMode) -> Option<(&'static str, PathBuf)> {
     match mode {
-        RunningMode::Service => dirs::service_log_dir().ok().map(|path| ("service", path.join("service_latest.log"))),
-        RunningMode::Sidecar => dirs::sidecar_log_dir().ok().map(|path| ("sidecar", path.join("sidecar_latest.log"))),
+        RunningMode::Service => dirs::service_log_dir()
+            .ok()
+            .map(|path| ("service", path.join("service_latest.log"))),
+        RunningMode::Sidecar => dirs::sidecar_log_dir()
+            .ok()
+            .map(|path| ("sidecar", path.join("sidecar_latest.log"))),
         RunningMode::NotRunning => None,
     }
 }
@@ -687,9 +697,7 @@ pub fn ensure_monitor_running() {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ChurnBucket, RouteEvent, classify_error, parse_failure, parse_health_check_group, parse_route,
-    };
+    use super::{ChurnBucket, RouteEvent, classify_error, parse_failure, parse_health_check_group, parse_route};
     use std::time::Instant;
 
     #[test]
@@ -731,11 +739,17 @@ mod tests {
     #[test]
     fn classifies_windows_network_and_socket_failures() {
         assert_eq!(
-            classify_error("dial tcp 1.1.1.1:443: connectex: A socket operation was attempted to an unreachable host.", "DIRECT"),
+            classify_error(
+                "dial tcp 1.1.1.1:443: connectex: A socket operation was attempted to an unreachable host.",
+                "DIRECT"
+            ),
             ("network_unreachable", "direct_destination")
         );
         assert_eq!(
-            classify_error("connectex: Only one usage of each socket address (protocol/network address/port) is normally permitted.", "Proxy"),
+            classify_error(
+                "connectex: Only one usage of each socket address (protocol/network address/port) is normally permitted.",
+                "Proxy"
+            ),
             ("socket_exhaustion", "outbound_transport")
         );
     }
