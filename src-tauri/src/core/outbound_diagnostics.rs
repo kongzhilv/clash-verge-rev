@@ -281,7 +281,7 @@ fn classify_error(error: &str, outbound: &str) -> (&'static str, &'static str) {
     (family, stage)
 }
 
-fn network_marker<'a>(line: &'a str, dial: bool) -> Option<(&'static str, &'a str)> {
+fn network_marker(line: &str, dial: bool) -> Option<(&'static str, &str)> {
     let tcp = if dial { "[TCP] dial " } else { "[TCP] " };
     let udp = if dial { "[UDP] dial " } else { "[UDP] " };
     if let Some(index) = line.find(tcp) {
@@ -300,7 +300,7 @@ fn parse_failure(line: &str) -> Option<FailureEvent> {
     let (outbound, rule, source) = parse_failure_left(left)?;
     let (error_family, stage) = classify_error(error, outbound.as_str());
     let (target_host, target_port) = parse_host_port(target);
-    let target = target_port.map_or(target_host.clone(), |port| format!("{target_host}:{port}"));
+    let target = target_port.map_or_else(|| target_host.clone(), |port| format!("{target_host}:{port}"));
 
     Some(FailureEvent {
         network,
@@ -343,7 +343,7 @@ fn parse_route(line: &str) -> Option<RouteEvent> {
         .split_once(" match ")
         .map_or(before_using, |(target, _)| target);
     let (target_host, target_port) = parse_host_port(target);
-    let target = target_port.map_or(target_host.clone(), |port| format!("{target_host}:{port}"));
+    let target = target_port.map_or_else(|| target_host.clone(), |port| format!("{target_host}:{port}"));
     let (outbound, selected_hint) = parse_selection(selection);
 
     Some(RouteEvent {
@@ -547,7 +547,7 @@ async fn resolve_selection(outbound: &str) -> SelectionSnapshot {
                 break;
             }
         };
-        let Some(next) = proxy.now.map(|value| value.to_string()) else {
+        let Some(next) = proxy.now else {
             break;
         };
         if next.is_empty() || !seen.insert(next.clone()) {
@@ -718,7 +718,7 @@ mod tests {
 
     #[test]
     fn error_samples_redact_url_queries() {
-        let compact = super::compact_error(r#"requesting https://doh.pub:443/dns-query?dns=SECRET payload"#);
+        let compact = super::compact_error("requesting https://doh.pub:443/dns-query?dns=SECRET payload");
         assert!(compact.contains("https://doh.pub:443/dns-query?<query-redacted>"));
         assert!(!compact.contains("SECRET"));
     }
@@ -738,7 +738,7 @@ mod tests {
 
     #[test]
     fn parses_direct_dns_failure() {
-        let line = r#"[TCP] dial DIRECT (match DomainSuffix/cn) 198.18.0.1:52402(wpscloudsvr.exe) --> account.wps.cn:443 error: dns resolve failed: context deadline exceeded"#;
+        let line = "[TCP] dial DIRECT (match DomainSuffix/cn) 198.18.0.1:52402(wpscloudsvr.exe) --> account.wps.cn:443 error: dns resolve failed: context deadline exceeded";
         let parsed = parse_failure(line).expect("failure line should parse");
         assert_eq!(parsed.outbound, "DIRECT");
         assert_eq!(parsed.error_family, "dns");
@@ -747,13 +747,13 @@ mod tests {
 
     #[test]
     fn parses_selected_route_and_global_route() {
-        let selected = parse_route(r#"[TCP] 198.18.0.1:50696(twinkstar.exe) --> r.bing.com:443 match DomainKeyword(bing) using CVR-当前选择[🇹🇼台湾静态三网|家宽3]"#)
+        let selected = parse_route("[TCP] 198.18.0.1:50696(twinkstar.exe) --> r.bing.com:443 match DomainKeyword(bing) using CVR-当前选择[🇹🇼台湾静态三网|家宽3]")
             .expect("selected route should parse");
         assert_eq!(selected.outbound, "CVR-当前选择");
         assert_eq!(selected.selected_hint.as_deref(), Some("🇹🇼台湾静态三网|家宽3"));
         assert_eq!(selected.target, "r.bing.com:443");
 
-        let global = parse_route(r#"[TCP] 198.18.0.1:57701 --> r.bing.com:443 using GLOBAL"#)
+        let global = parse_route("[TCP] 198.18.0.1:57701 --> r.bing.com:443 using GLOBAL")
             .expect("global route should parse");
         assert_eq!(global.outbound, "GLOBAL");
         assert!(global.selected_hint.is_none());
