@@ -15,10 +15,10 @@ use windows::Win32::{
     Foundation::HANDLE,
     NetworkManagement::{
         IpHelper::{
-            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry, GetUnicastIpAddressTable,
-            MIB_IF_ROW2, MIB_IF_TABLE2, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW,
-            MIB_NOTIFICATION_TYPE, MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE, NotifyIpInterfaceChange,
-            NotifyRouteChange2, NotifyUnicastIpAddressChange,
+            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry, GetUnicastIpAddressTable, MIB_IF_ROW2,
+            MIB_IF_TABLE2, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE,
+            MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE, NotifyIpInterfaceChange, NotifyRouteChange2,
+            NotifyUnicastIpAddressChange,
         },
         Ndis::IfOperStatusUp,
     },
@@ -227,8 +227,7 @@ fn load_default_routes() -> Result<Vec<MIB_IPFORWARD_ROW2>> {
         rows.iter()
             .filter(|row| {
                 row.DestinationPrefix.PrefixLength == 0
-                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix)
-                        .is_some_and(|address| address.is_unspecified())
+                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix).is_some_and(|address| address.is_unspecified())
                     && ipv4_from_sockaddr(&row.NextHop).is_some_and(|address| !address.is_unspecified())
             })
             .copied()
@@ -310,10 +309,7 @@ fn capture_topology() -> Result<WindowsTopologySnapshot> {
         .iter()
         .map(|interface| (interface.index, interface))
         .collect::<BTreeMap<_, _>>();
-    let default_route_indices = routes
-        .iter()
-        .map(|route| route.InterfaceIndex)
-        .collect::<BTreeSet<_>>();
+    let default_route_indices = routes.iter().map(|route| route.InterfaceIndex).collect::<BTreeSet<_>>();
 
     let mut interface_snapshots = interfaces
         .iter()
@@ -442,19 +438,13 @@ fn register_notifications() -> [u32; 3] {
         )
     };
     let address_status = unsafe {
-        NotifyUnicastIpAddressChange(
-            AF_INET,
-            Some(address_change_callback),
-            None,
-            false,
-            &mut address_handle,
-        )
+        NotifyUnicastIpAddressChange(AF_INET, Some(address_change_callback), None, false, &mut address_handle)
     };
     let route_status = unsafe {
         NotifyRouteChange2(
             AF_INET,
             Some(route_change_callback),
-            None,
+            std::ptr::null(),
             false,
             &mut route_handle,
         )
@@ -519,19 +509,22 @@ async fn monitor_loop() {
 
     loop {
         interval.tick().await;
+        let baseline_generations = generations;
         let current_generations = Generations::load();
-        let event_changed = current_generations != generations;
+        let event_changed = current_generations != baseline_generations;
         let watchdog_due = last_watchdog.elapsed() >= WATCHDOG_INTERVAL;
         if !event_changed && !watchdog_due {
             continue;
         }
 
-        let delta = current_generations.delta(generations);
-        generations = current_generations;
-        if event_changed {
+        let settled_generations = if event_changed {
             tokio::time::sleep(EVENT_DEBOUNCE).await;
-            generations = Generations::load();
-        }
+            Generations::load()
+        } else {
+            current_generations
+        };
+        let delta = settled_generations.delta(baseline_generations);
+        generations = settled_generations;
         last_watchdog = Instant::now();
 
         let current = match capture_snapshot().await {
