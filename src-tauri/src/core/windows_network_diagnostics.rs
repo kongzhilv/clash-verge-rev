@@ -109,7 +109,7 @@ impl Generations {
         }
     }
 
-    fn delta(self, previous: Self) -> Self {
+    const fn delta(self, previous: Self) -> Self {
         Self {
             interfaces: self.interfaces.saturating_sub(previous.interfaces),
             addresses: self.addresses.saturating_sub(previous.addresses),
