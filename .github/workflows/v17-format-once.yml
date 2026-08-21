@@ -1,6 +1,9 @@
 name: v17 format once
 
 on:
+  pull_request:
+    branches:
+      - feature/karing-style-diversion
   push:
     branches:
       - fix/windows-hotspot-self-capture-v17
@@ -10,7 +13,7 @@ permissions:
 
 jobs:
   format:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event_name == 'push' || github.event.pull_request.head.ref == 'fix/windows-hotspot-self-capture-v17'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
