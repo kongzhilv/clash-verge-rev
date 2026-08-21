@@ -4,6 +4,8 @@ const files = {
   manager: 'src-tauri/src/core/manager/config.rs',
   lifecycle: 'src-tauri/src/core/manager/lifecycle.rs',
   windowsNetwork: 'src-tauri/src/utils/windows_network.rs',
+  windowsTopologyDiagnostics:
+    'src-tauri/src/core/windows_network_diagnostics.rs',
   outboundDiagnostics: 'src-tauri/src/core/outbound_diagnostics.rs',
   coreMod: 'src-tauri/src/core/mod.rs',
   coreManager: 'src-tauri/src/core/manager/mod.rs',
@@ -230,6 +232,59 @@ requireText(
   'connection churn is explicitly marked as a heuristic rather than a proven failure',
 )
 
+requireText(
+  'coreMod',
+  'pub mod windows_network_diagnostics;',
+  'Windows runtime topology diagnostics module is compiled into the core',
+)
+requireText(
+  'coreManager',
+  'crate::core::windows_network_diagnostics::ensure_monitor_running();',
+  'Windows runtime topology diagnostics starts once with CoreManager initialization',
+)
+for (const api of [
+  'NotifyIpInterfaceChange',
+  'NotifyUnicastIpAddressChange',
+  'NotifyRouteChange2',
+]) {
+  requireText(
+    'windowsTopologyDiagnostics',
+    api,
+    `Windows runtime topology monitor subscribes to ${api}`,
+  )
+}
+for (const marker of [
+  'topology-monitor-started',
+  'topology-baseline',
+  'topology-changed',
+  'hotspot_present',
+  'hotspot_subnets',
+  'physical_upstream',
+  'default_routes_changed',
+  'physical_upstream_changed',
+]) {
+  requireText(
+    'windowsTopologyDiagnostics',
+    marker,
+    `Windows hotspot topology diagnostic marker ${marker} is present`,
+  )
+}
+requireText(
+  'windowsTopologyDiagnostics',
+  'wi-fi direct virtual adapter',
+  'runtime topology diagnostics recognizes Wi-Fi Direct hotspot adapters',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'WATCHDOG_INTERVAL',
+  'runtime topology diagnostics has a bounded low-frequency notification fallback',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'tokio::task::spawn_blocking(capture_topology)',
+  'runtime topology snapshots do not block the async runtime',
+)
+
 if (failures.length > 0) {
   console.error('Windows TUN and outbound diagnostics regression failed:')
   for (const failure of failures) console.error(`- ${failure}`)
@@ -248,4 +303,7 @@ console.log(
 )
 console.log(
   '[通过] 出站错误样本限制长度并移除 URL query，连接抖动明确标记为 heuristic',
+)
+console.log(
+  '[通过] Windows 运行期接口/IP/路由与 Wi-Fi Direct 热点拓扑变化进入结构化诊断',
 )

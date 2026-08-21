@@ -14,5 +14,7 @@ pub mod tray;
 pub mod updater;
 pub mod validate;
 pub mod win_uwp;
+#[cfg(target_os = "windows")]
+pub mod windows_network_diagnostics;
 
 pub use self::{manager::CoreManager, timer::Timer, updater::SilentUpdater};
