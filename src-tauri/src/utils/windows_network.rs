@@ -501,7 +501,7 @@ fn merge_string_sequence(mapping: &mut Mapping, key: &str, values: &[String]) {
 }
 
 fn apply_interface_name_if_unset(mapping: &mut Mapping, interface_alias: &str) -> bool {
-    let key = Value::from("interface-name");
+    let key = Value::String("interface-name".to_owned());
     match mapping.get(&key) {
         Some(Value::String(value)) if !value.trim().is_empty() => false,
         Some(Value::String(_)) | None => {
@@ -550,7 +550,10 @@ fn apply_managed_proxy_bindings(
                 }
                 None => {
                     let mut override_map = Mapping::new();
-                    override_map.insert(Value::from("interface-name"), Value::from(interface_alias));
+                    override_map.insert(
+                        Value::String("interface-name".to_owned()),
+                        Value::from(interface_alias),
+                    );
                     provider.insert(override_key, Value::Mapping(override_map));
                     stats.provider_applied += 1;
                 }
@@ -674,7 +677,7 @@ mod tests {
     #[test]
     fn managed_proxy_sockets_bind_to_stable_physical_interface() {
         let mut config = mapping(
-            r#"
+            r"
 tun:
   enable: true
   auto-route: true
@@ -685,7 +688,7 @@ proxy-providers:
   remote:
     type: http
     url: https://example.test/provider.yaml
-"#,
+",
         );
         let stats = apply_managed_upstream(&mut config, &route());
         assert_eq!(
@@ -737,7 +740,7 @@ proxy-providers:
     #[test]
     fn explicit_provider_binding_is_preserved() {
         let mut config = mapping(
-            r#"
+            r"
 tun: {enable: true, auto-route: true}
 proxy-providers:
   remote:
@@ -745,7 +748,7 @@ proxy-providers:
     url: https://example.test/provider.yaml
     override:
       interface-name: Ethernet
-"#,
+",
         );
         let stats = apply_managed_upstream(&mut config, &route());
         assert_eq!(stats.provider_applied, 0);
