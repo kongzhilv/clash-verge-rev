@@ -32,6 +32,7 @@ struct WindowsIpv4Address {
     interface_index: u32,
     address: Ipv4Addr,
     prefix_length: u8,
+    skip_as_source: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,7 +117,7 @@ fn load_ipv4_addresses() -> Result<Vec<WindowsIpv4Address>> {
         let rows: &[MIB_UNICASTIPADDRESS_ROW] =
             slice::from_raw_parts(table_ref.Table.as_ptr(), table_ref.NumEntries as usize);
         rows.iter()
-            .filter(|row| row.DadState == IpDadStatePreferred && !row.SkipAsSource)
+            .filter(|row| row.DadState == IpDadStatePreferred)
             .filter_map(|row| {
                 let address = ipv4_from_sockaddr(&row.Address)?;
                 if address.is_unspecified() || address.is_loopback() || address.is_link_local() {
@@ -126,6 +127,7 @@ fn load_ipv4_addresses() -> Result<Vec<WindowsIpv4Address>> {
                     interface_index: row.InterfaceIndex,
                     address,
                     prefix_length: row.OnLinkPrefixLength,
+                    skip_as_source: row.SkipAsSource,
                 })
             })
             .collect::<Vec<_>>()
@@ -173,8 +175,29 @@ fn connected_interface_metric(interface_index: u32) -> Option<u32> {
     }
 }
 
+fn interface_identity(interface: &WindowsInterface) -> String {
+    format!("{} {}", interface.alias, interface.description).to_lowercase()
+}
+
+fn is_filter_component(identity: &str) -> bool {
+    [
+        "wfp native mac layer",
+        "wfp 802.3 mac layer",
+        "native wifi filter driver",
+        "virtual wifi filter driver",
+        "qos packet scheduler",
+        "lightweight filter",
+    ]
+    .iter()
+    .any(|marker| identity.contains(marker))
+}
+
 fn is_hotspot_side(interface: &WindowsInterface) -> bool {
-    let identity = format!("{} {}", interface.alias, interface.description).to_lowercase();
+    let identity = interface_identity(interface);
+    if is_filter_component(&identity) {
+        return false;
+    }
+
     [
         "wi-fi direct virtual adapter",
         "wifi direct virtual adapter",
@@ -191,7 +214,7 @@ fn is_virtual_or_tunnel(interface: &WindowsInterface) -> bool {
         return true;
     }
 
-    let identity = format!("{} {}", interface.alias, interface.description).to_lowercase();
+    let identity = interface_identity(interface);
     [
         "mihomo",
         "clash",
@@ -245,6 +268,8 @@ fn managed_route_guards(
             excluded_interfaces.insert(interface.alias.clone());
         }
 
+        // ICS/private-side addresses are route guards, not outbound source candidates.
+        // Do not discard them merely because Windows marks SkipAsSource.
         for address in addresses
             .iter()
             .filter(|address| address.interface_index == interface.index)
@@ -284,7 +309,7 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
 
         let Some(source) = addresses
             .iter()
-            .filter(|address| address.interface_index == route.InterfaceIndex)
+            .filter(|address| address.interface_index == route.InterfaceIndex && !address.skip_as_source)
             .min_by_key(|address| u32::from(address.address))
         else {
             continue;
@@ -465,9 +490,12 @@ pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
-    use super::{WindowsUpstreamRoute, apply_managed_upstream, ipv4_cidr, tun_needs_managed_upstream};
+    use super::{
+        WindowsInterface, WindowsIpv4Address, WindowsUpstreamRoute, apply_managed_upstream, ipv4_cidr, is_hotspot_side,
+        managed_route_guards, tun_needs_managed_upstream,
+    };
     use serde_yaml_ng::{Mapping, Value};
-    use std::net::Ipv4Addr;
+    use std::{collections::BTreeMap, net::Ipv4Addr};
 
     fn mapping(yaml: &str) -> Mapping {
         serde_yaml_ng::from_str(yaml).expect("test config should be valid")
@@ -533,6 +561,66 @@ mod tests {
         let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
         assert!(routes.iter().any(|value| value.as_str() == Some("10.0.0.0/8")));
         assert!(routes.iter().any(|value| value.as_str() == Some("192.168.137.0/24")));
+    }
+
+    #[test]
+    fn wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces() {
+        let real = WindowsInterface {
+            index: 27,
+            alias: "Local Area Connection* 10".into(),
+            description: "Microsoft Wi-Fi Direct Virtual Adapter #2".into(),
+            is_up: true,
+        };
+        let filter = WindowsInterface {
+            index: 33,
+            alias: "Local Area Connection* 10-WFP Native MAC Layer LightWeight Filter-0000".into(),
+            description: "Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000"
+                .into(),
+            is_up: true,
+        };
+        assert!(is_hotspot_side(&real));
+        assert!(!is_hotspot_side(&filter));
+    }
+
+    #[test]
+    fn hotspot_route_guards_keep_preferred_skip_as_source_addresses() {
+        let upstream = WindowsIpv4Address {
+            interface_index: 28,
+            address: Ipv4Addr::new(192, 168, 1, 13),
+            prefix_length: 24,
+            skip_as_source: false,
+        };
+        let hotspot = WindowsIpv4Address {
+            interface_index: 27,
+            address: Ipv4Addr::new(172, 31, 45, 1),
+            prefix_length: 24,
+            skip_as_source: true,
+        };
+        let interfaces = BTreeMap::from([
+            (
+                27,
+                WindowsInterface {
+                    index: 27,
+                    alias: "Local Area Connection* 10".into(),
+                    description: "Microsoft Wi-Fi Direct Virtual Adapter #2".into(),
+                    is_up: true,
+                },
+            ),
+            (
+                28,
+                WindowsInterface {
+                    index: 28,
+                    alias: "Ethernet".into(),
+                    description: "Physical Ethernet".into(),
+                    is_up: true,
+                },
+            ),
+        ]);
+        let (excluded_interfaces, excluded_routes) =
+            managed_route_guards(&interfaces, &[upstream.clone(), hotspot], &upstream);
+        assert_eq!(excluded_interfaces, vec!["Local Area Connection* 10"]);
+        assert!(excluded_routes.contains(&"192.168.1.0/24".to_string()));
+        assert!(excluded_routes.contains(&"172.31.45.0/24".to_string()));
     }
 
     #[test]
