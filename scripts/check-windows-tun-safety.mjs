@@ -198,8 +198,8 @@ requireText(
 )
 requireText(
   'windowsNetwork',
-  'Value::from("interface-name")',
-  'managed binding uses Mihomo interface-name',
+  'Value::String("interface-name".to_owned())',
+  'managed binding uses Mihomo interface-name without top-level pinning',
 )
 requireText(
   'windowsNetwork',
@@ -318,8 +318,8 @@ requireText(
 )
 requireText(
   'windowsTopologyDiagnostics',
-  'wait-for-ics-private-address-before-reload',
-  'half-initialized hotspot state cannot trigger a reload',
+  'wait-for-ics-private-address-before-any-topology-reload',
+  'half-initialized hotspot state suppresses all topology-driven reloads',
 )
 requireText(
   'windowsTopologyDiagnostics',
@@ -429,6 +429,7 @@ if (failures.length > 0) {
 
 console.log('Windows TUN/self-capture regression passed.')
 console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不再 reload')
+console.log('[通过] Starting 期间任何 topology-driven reload 都被抑制')
 console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
 console.log(
   '[通过] 未显式绑定的 proxy/provider 出站 socket 动态绑定稳定物理 NIC',
