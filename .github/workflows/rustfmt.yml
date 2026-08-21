@@ -18,6 +18,10 @@ permissions:
 env:
   HUSKY: 0
 
+concurrency:
+  group: v17-one-shot-repair
+  cancel-in-progress: true
+
 jobs:
   rustfmt:
     if: github.event_name == 'pull_request'
@@ -87,7 +91,7 @@ jobs:
             $script:text = $script:text.Replace($old, $new)
           }
 
-          $oldGate = 'check_not_contains src-tauri/src/utils/windows_network.rs ''Value::from("interface-name")'' ''Windows TUN 自动托管路径不再写死顶层物理出口接口'''
+          $oldGate = 'check_not_contains src-tauri/src/utils/windows_network.rs ''Value::from("interface-name")'' ''Windows TUN 自动托管路径不再写死顶层物理出口接口'''.Replace('\"','"')
           $newGate = @(
             'check_contains src-tauri/src/utils/windows_network.rs ''apply_managed_proxy_bindings'' ''Windows TUN 使用独立的每代理 socket 物理出口绑定''',
             'check_contains src-tauri/src/utils/windows_network.rs ''managed_proxy_sockets_bind_to_stable_physical_interface'' ''每代理 socket 绑定已有 Rust 回归覆盖''',
@@ -119,6 +123,29 @@ jobs:
             if (-not $text.Contains($marker)) { throw "release workflow missing $marker" }
           }
 
+      - name: Mature v17 release observer
+        shell: pwsh
+        run: |
+          $path = '.github/workflows/karing-release-observer.yml'
+          $text = [System.IO.File]::ReadAllText($path)
+          $replacements = @(
+            @('name: Karing .16 发行核验', 'name: Karing .17 发行核验'),
+            @('name: 核验 v2.5.4-karing.16 正式发行', 'name: 核验 v2.5.4-karing.17 正式发行'),
+            @("PR_NUMBER: '8'", "PR_NUMBER: '9'"),
+            @("STATUS_MARKER: '<!-- karing-v254-karing16-release-audit -->'", "STATUS_MARKER: '<!-- karing-v254-karing17-release-audit -->'"),
+            @('source_sha=$(git rev-parse HEAD^)', 'source_sha=$(git rev-parse HEAD)'),
+            @('test "$release_tag" = ''v2.5.4-karing.16''', 'test "$release_tag" = ''v2.5.4-karing.17''')
+          )
+          foreach ($pair in $replacements) {
+            $count = ([regex]::Matches($text, [regex]::Escape($pair[0]))).Count
+            if ($count -ne 1) { throw "observer replacement expected once: $($pair[0]); found $count" }
+            $text = $text.Replace($pair[0], $pair[1])
+          }
+          [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
+          foreach ($marker in @('Karing .17 发行核验', "PR_NUMBER: '9'", 'git rev-parse HEAD', 'v2.5.4-karing.17')) {
+            if (-not $text.Contains($marker)) { throw "release observer missing $marker" }
+          }
+
       - name: Restrict repair changes
         shell: pwsh
         run: |
@@ -128,6 +155,7 @@ jobs:
           $changed = @(git diff --name-only)
           $allowed = @(
             '.github/workflows/karing-diagnostics-once.yml',
+            '.github/workflows/karing-release-observer.yml',
             'src-tauri/src/core/windows_network_diagnostics.rs',
             'src-tauri/src/utils/windows_network.rs'
           )
@@ -153,9 +181,10 @@ jobs:
           }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/rustfmt.yml .github/workflows/karing-diagnostics-once.yml src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/utils/windows_network.rs
+          git add .github/workflows/rustfmt.yml .github/workflows/karing-diagnostics-once.yml .github/workflows/karing-release-observer.yml src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/utils/windows_network.rs
           git diff --cached --check
-          git commit -m 'fix(windows): verify v17 repair and mature release gate'
+          git commit -m 'fix(windows): verify v17 repair and mature release pipeline'
+          git pull --rebase origin fix/windows-hotspot-self-capture-v17
           git push origin HEAD:fix/windows-hotspot-self-capture-v17
 
   # taplo:
