@@ -25,12 +25,19 @@ use windows::Win32::{
     Networking::WinSock::{AF_INET, IpDadStatePreferred, SOCKADDR_INET},
 };
 
-use crate::{core::diagnostics, process::AsyncHandler};
+use crate::{
+    config::Config,
+    core::{
+        diagnostics,
+        manager::{CoreManager, RunningMode},
+    },
+    process::AsyncHandler,
+};
 
 const EVENT_DEBOUNCE: Duration = Duration::from_millis(750);
 const WATCHDOG_INTERVAL: Duration = Duration::from_secs(10);
 const LOOP_INTERVAL: Duration = Duration::from_millis(250);
-const MAX_INTERFACES: usize = 32;
+const MAX_INTERFACES: usize = 48;
 
 static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 static INTERFACE_GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -252,8 +259,25 @@ fn identity(interface: &InterfaceRow) -> String {
     format!("{} {}", interface.alias, interface.description).to_lowercase()
 }
 
+fn is_filter_component(identity: &str) -> bool {
+    [
+        "wfp native mac layer",
+        "wfp 802.3 mac layer",
+        "native wifi filter driver",
+        "virtual wifi filter driver",
+        "qos packet scheduler",
+        "lightweight filter",
+    ]
+    .iter()
+    .any(|marker| identity.contains(marker))
+}
+
 fn is_hotspot_side(interface: &InterfaceRow) -> bool {
     let identity = identity(interface);
+    if is_filter_component(&identity) {
+        return false;
+    }
+
     [
         "wi-fi direct virtual adapter",
         "wifi direct virtual adapter",
@@ -364,23 +388,24 @@ fn capture_topology() -> Result<WindowsTopologySnapshot> {
         )
     });
 
+    let mut hotspot_present = false;
     let mut hotspot_subnets = BTreeSet::new();
-    let hotspot_present = interfaces.iter().any(|interface| {
-        let active = interface.is_up && is_hotspot_side(interface);
-        if active {
-            for address in addresses
-                .iter()
-                .filter(|address| address.interface_index == interface.index && address.address.is_private())
+    for interface in interfaces
+        .iter()
+        .filter(|interface| interface.is_up && is_hotspot_side(interface))
+    {
+        hotspot_present = true;
+        for address in addresses
+            .iter()
+            .filter(|address| address.interface_index == interface.index && address.address.is_private())
+        {
+            if (8..=30).contains(&address.prefix_length)
+                && let Some(cidr) = ipv4_cidr(address.address, address.prefix_length)
             {
-                if (8..=30).contains(&address.prefix_length)
-                    && let Some(cidr) = ipv4_cidr(address.address, address.prefix_length)
-                {
-                    hotspot_subnets.insert(cidr);
-                }
+                hotspot_subnets.insert(cidr);
             }
         }
-        active
-    });
+    }
 
     let physical_upstream = routes
         .iter()
@@ -467,6 +492,63 @@ fn hotspot_state(snapshot: &WindowsTopologySnapshot) -> Vec<&InterfaceSnapshot> 
         .collect()
 }
 
+async fn refresh_hotspot_guards(previous: &WindowsTopologySnapshot, current: &WindowsTopologySnapshot) {
+    let manager = CoreManager::global();
+    if matches!(*manager.get_running_mode(), RunningMode::NotRunning) {
+        diagnostics::info(
+            "windows-hotspot-guard",
+            "refresh-skipped-core-stopped",
+            json!({
+                "previous_hotspot_present": previous.hotspot_present,
+                "current_hotspot_present": current.hotspot_present,
+                "previous_hotspot_subnets": &previous.hotspot_subnets,
+                "current_hotspot_subnets": &current.hotspot_subnets,
+            }),
+        );
+        return;
+    }
+
+    if !Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false) {
+        diagnostics::info(
+            "windows-hotspot-guard",
+            "refresh-skipped-tun-disabled",
+            json!({}),
+        );
+        return;
+    }
+
+    diagnostics::info(
+        "windows-hotspot-guard",
+        "refresh-requested",
+        json!({
+            "previous_hotspot_present": previous.hotspot_present,
+            "current_hotspot_present": current.hotspot_present,
+            "previous_hotspot_subnets": &previous.hotspot_subnets,
+            "current_hotspot_subnets": &current.hotspot_subnets,
+            "strategy": "regenerate-authoritative-runtime-and-recompute-managed-guards",
+            "physical_interface_pinned": false,
+        }),
+    );
+
+    match manager.update_config_forced().await {
+        Ok(outcome) if outcome.is_valid() => diagnostics::info(
+            "windows-hotspot-guard",
+            "refresh-succeeded",
+            json!({"outcome": outcome.to_string()}),
+        ),
+        Ok(outcome) => diagnostics::warn(
+            "windows-hotspot-guard",
+            "refresh-not-applied",
+            json!({"outcome": outcome.to_string()}),
+        ),
+        Err(error) => diagnostics::error(
+            "windows-hotspot-guard",
+            "refresh-failed",
+            json!({"error": error.to_string()}),
+        ),
+    }
+}
+
 async fn monitor_loop() {
     let registration = register_notifications();
     diagnostics::info(
@@ -479,6 +561,8 @@ async fn monitor_loop() {
             "route_registration_status": registration[2],
             "event_debounce_ms": EVENT_DEBOUNCE.as_millis(),
             "watchdog_interval_ms": WATCHDOG_INTERVAL.as_millis(),
+            "runtime_hotspot_guard": true,
+            "physical_interface_pinned": false,
         }),
     );
 
@@ -578,6 +662,10 @@ async fn monitor_loop() {
                 "snapshot": &current,
             }),
         );
+
+        if hotspot_changed {
+            refresh_hotspot_guards(&previous, &current).await;
+        }
         previous = current;
     }
 }
@@ -593,28 +681,76 @@ pub fn ensure_monitor_running() {
 
 #[cfg(test)]
 mod tests {
-    use super::{InterfaceRow, is_hotspot_side, is_virtual_or_tunnel};
+    use super::{AddressRow, InterfaceRow, capture_hotspot_test_state, is_hotspot_side};
+    use std::net::Ipv4Addr;
 
-    fn interface(alias: &str, description: &str) -> InterfaceRow {
+    fn interface(index: u32, alias: &str, description: &str, is_up: bool) -> InterfaceRow {
         InterfaceRow {
-            index: 1,
+            index,
             alias: alias.to_string(),
             description: description.to_string(),
-            is_up: true,
+            is_up,
         }
     }
 
+    fn capture_hotspot_test_state(interfaces: &[InterfaceRow], addresses: &[AddressRow]) -> (bool, Vec<String>) {
+        let mut present = false;
+        let mut subnets = std::collections::BTreeSet::new();
+        for interface in interfaces
+            .iter()
+            .filter(|interface| interface.is_up && is_hotspot_side(interface))
+        {
+            present = true;
+            for address in addresses
+                .iter()
+                .filter(|address| address.interface_index == interface.index && address.address.is_private())
+            {
+                if (8..=30).contains(&address.prefix_length)
+                    && let Some(cidr) = super::ipv4_cidr(address.address, address.prefix_length)
+                {
+                    subnets.insert(cidr);
+                }
+            }
+        }
+        (present, subnets.into_iter().collect())
+    }
+
     #[test]
-    fn recognizes_windows_hotspot_adapters() {
-        let adapter = interface("本地连接* 10", "Microsoft Wi-Fi Direct Virtual Adapter #2");
+    fn recognizes_windows_hotspot_base_adapter() {
+        let adapter = interface(27, "本地连接* 10", "Microsoft Wi-Fi Direct Virtual Adapter #2", true);
         assert!(is_hotspot_side(&adapter));
-        assert!(is_virtual_or_tunnel(&adapter));
+    }
+
+    #[test]
+    fn ignores_wifi_direct_filter_components() {
+        let filter = interface(
+            33,
+            "本地连接* 10-WFP Native MAC Layer LightWeight Filter-0000",
+            "Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000",
+            true,
+        );
+        assert!(!is_hotspot_side(&filter));
     }
 
     #[test]
     fn physical_wifi_is_not_classified_as_hotspot() {
-        let adapter = interface("WLAN", "Intel(R) Wi-Fi 6 AX101");
+        let adapter = interface(25, "WLAN", "Intel(R) Wi-Fi 6 AX101", true);
         assert!(!is_hotspot_side(&adapter));
-        assert!(!is_virtual_or_tunnel(&adapter));
+    }
+
+    #[test]
+    fn hotspot_subnets_do_not_short_circuit_on_first_active_adapter() {
+        let interfaces = [
+            interface(7, "本地连接* 9", "Microsoft Wi-Fi Direct Virtual Adapter", true),
+            interface(27, "本地连接* 10", "Microsoft Wi-Fi Direct Virtual Adapter #2", true),
+        ];
+        let addresses = [AddressRow {
+            interface_index: 27,
+            address: Ipv4Addr::new(172, 22, 44, 1),
+            prefix_length: 24,
+        }];
+        let (present, subnets) = capture_hotspot_test_state(&interfaces, &addresses);
+        assert!(present);
+        assert_eq!(subnets, vec!["172.22.44.0/24"]);
     }
 }
