@@ -19,7 +19,7 @@ env:
   HUSKY: 0
 
 concurrency:
-  group: v17-one-shot-repair
+  group: v17-one-shot-repair-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
