@@ -1,0 +1,35 @@
+name: v17 release status probe
+
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/v17-status-probe.yml']
+
+permissions:
+  actions: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    env:
+      TARGET_SHA: 1f9726c79eac6ab8bb5fdf53956fc3f2613ba760
+    steps:
+      - name: Probe current Karing run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/karing-diagnostics-once.yml/runs?branch=feature/karing-style-diversion&event=push&per_page=30")
+          row=$(jq -c --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.run_number) | last // empty' <<<"$runs")
+          if [ -z "$row" ]; then
+            gh pr comment 9 --repo "$GITHUB_REPOSITORY" --body "⚠️ v17 status probe: no push run found yet for \`${TARGET_SHA}\`."
+            exit 0
+          fi
+          id=$(jq -r '.id' <<<"$row")
+          status=$(jq -r '.status' <<<"$row")
+          conclusion=$(jq -r '.conclusion // "pending"' <<<"$row")
+          created=$(jq -r '.created_at' <<<"$row")
+          gh pr comment 9 --repo "$GITHUB_REPOSITORY" --body "🔎 v17 status probe: run **${id}**, status **${status}**, conclusion **${conclusion}**, created ${created}, commit \`${TARGET_SHA}\`."
