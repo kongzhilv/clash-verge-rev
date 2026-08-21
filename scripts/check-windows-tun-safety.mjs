@@ -6,8 +6,6 @@ const files = {
   windowsNetwork: 'src-tauri/src/utils/windows_network.rs',
   windowsTopologyDiagnostics:
     'src-tauri/src/core/windows_network_diagnostics.rs',
-  windowsHotspotGuard:
-    'src-tauri/src/core/windows_hotspot_runtime_guard.rs',
   outboundDiagnostics: 'src-tauri/src/core/outbound_diagnostics.rs',
   coreMod: 'src-tauri/src/core/mod.rs',
   coreManager: 'src-tauri/src/core/manager/mod.rs',
@@ -108,6 +106,38 @@ requireText(
 )
 requireText(
   'windowsNetwork',
+  'is_filter_component',
+  'Wi-Fi Direct filter components are not treated as real hotspot interfaces',
+)
+for (const marker of [
+  'wfp native mac layer',
+  'wfp 802.3 mac layer',
+  'native wifi filter driver',
+  'qos packet scheduler',
+]) {
+  requireText(
+    'windowsNetwork',
+    marker,
+    `Windows route guard ignores derived adapter component ${marker}`,
+  )
+}
+requireText(
+  'windowsNetwork',
+  'skip_as_source: row.SkipAsSource',
+  'Windows address inventory retains SkipAsSource metadata instead of discarding ICS addresses',
+)
+requireText(
+  'windowsNetwork',
+  '!address.skip_as_source',
+  'physical upstream source selection still rejects SkipAsSource addresses',
+)
+requireText(
+  'windowsNetwork',
+  'Do not discard them merely because Windows marks SkipAsSource.',
+  'hotspot route guards explicitly keep preferred private-side addresses even when SkipAsSource is set',
+)
+requireText(
+  'windowsNetwork',
   'wi-fi direct virtual adapter',
   'Wi-Fi Direct hotspot adapters are classified without locale-specific commands',
 )
@@ -143,6 +173,16 @@ requireText(
 )
 requireText(
   'windowsNetwork',
+  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
+  'Rust regression covers ICS private addresses marked SkipAsSource',
+)
+requireText(
+  'windowsNetwork',
+  'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
+  'Rust regression rejects Wi-Fi Direct WFP/QoS derived interfaces',
+)
+requireText(
+  'windowsNetwork',
   'route_exclude_addresses.join(",")',
   'stability signature includes hotspot and LAN exclusions',
 )
@@ -150,6 +190,11 @@ requireText(
   'utils',
   'pub mod windows_network;',
   'Windows route guard is compiled into the app',
+)
+forbidText(
+  'windowsNetwork',
+  '192.168.137.0/24\".into()\n        );',
+  'production Windows hotspot guard must not assume the common ICS subnet',
 )
 
 for (const forbidden of [
@@ -244,6 +289,16 @@ requireText(
   'crate::core::windows_network_diagnostics::ensure_monitor_running();',
   'Windows runtime topology diagnostics starts once with CoreManager initialization',
 )
+forbidText(
+  'coreMod',
+  'windows_hotspot_runtime_guard',
+  'hotspot repair must reuse the existing topology watcher instead of adding a second Windows network watcher',
+)
+forbidText(
+  'coreManager',
+  'windows_hotspot_runtime_guard',
+  'CoreManager must start only one Windows topology watcher',
+)
 for (const api of [
   'NotifyIpInterfaceChange',
   'NotifyUnicastIpAddressChange',
@@ -264,17 +319,50 @@ for (const marker of [
   'physical_upstream',
   'default_routes_changed',
   'physical_upstream_changed',
+  'refresh-requested',
+  'refresh-succeeded',
+  'refresh-failed',
 ]) {
   requireText(
     'windowsTopologyDiagnostics',
     marker,
-    `Windows hotspot topology diagnostic marker ${marker} is present`,
+    `Windows topology/hotspot runtime marker ${marker} is present`,
   )
 }
 requireText(
   'windowsTopologyDiagnostics',
-  'wi-fi direct virtual adapter',
-  'runtime topology diagnostics recognizes Wi-Fi Direct hotspot adapters',
+  'is_filter_component',
+  'topology diagnostics distinguishes the real Wi-Fi Direct base adapter from filter components',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'for interface in interfaces',
+  'hotspot subnet collection iterates all active hotspot adapters instead of short-circuiting on the first one',
+)
+forbidText(
+  'windowsTopologyDiagnostics',
+  'interfaces.iter().any(|interface|',
+  'hotspot subnet collection must not use side-effectful short-circuit any()',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'manager.update_config_forced().await',
+  'hotspot topology changes regenerate authoritative Runtime and recompute managed TUN guards',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'physical_interface_pinned": false',
+  'runtime hotspot refresh explicitly preserves dynamic physical upstream selection',
+)
+forbidText(
+  'windowsTopologyDiagnostics',
+  '192.168.137.0/24',
+  'topology watcher must derive hotspot subnet from actual adapter addressing',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot_subnets_do_not_short_circuit_on_first_active_adapter',
+  'Rust regression covers the v2.5.4-karing.15 hotspot_subnets short-circuit bug',
 )
 requireText(
   'windowsTopologyDiagnostics',
@@ -285,78 +373,6 @@ requireText(
   'windowsTopologyDiagnostics',
   'tokio::task::spawn_blocking(capture_topology)',
   'runtime topology snapshots do not block the async runtime',
-)
-
-requireText(
-  'coreMod',
-  'pub mod windows_hotspot_runtime_guard;',
-  'Windows runtime hotspot guard module is compiled into the core',
-)
-requireText(
-  'coreManager',
-  'crate::core::windows_hotspot_runtime_guard::ensure_monitor_running();',
-  'Windows runtime hotspot guard starts once with CoreManager initialization',
-)
-for (const api of ['NotifyIpInterfaceChange', 'NotifyUnicastIpAddressChange']) {
-  requireText(
-    'windowsHotspotGuard',
-    api,
-    `runtime hotspot guard subscribes to native ${api}`,
-  )
-}
-for (const marker of [
-  'hotspot-signature-changed',
-  'refresh-requested',
-  'refresh-succeeded',
-  'refresh-failed',
-]) {
-  requireText(
-    'windowsHotspotGuard',
-    marker,
-    `runtime hotspot guard diagnostic marker ${marker} is present`,
-  )
-}
-requireText(
-  'windowsHotspotGuard',
-  'manager.update_config_forced().await',
-  'hotspot changes regenerate the authoritative runtime before managed guards are recomputed',
-)
-requireText(
-  'windowsHotspotGuard',
-  'physical_interface_pinned": false',
-  'runtime hotspot refresh explicitly preserves dynamic physical upstream selection',
-)
-requireText(
-  'windowsHotspotGuard',
-  'is_filter_component',
-  'Wi-Fi Direct WFP/QoS/filter components are separated from the real hotspot adapter',
-)
-for (const marker of [
-  'wfp native mac layer',
-  'wfp 802.3 mac layer',
-  'native wifi filter driver',
-  'qos packet scheduler',
-]) {
-  requireText(
-    'windowsHotspotGuard',
-    marker,
-    `runtime hotspot guard ignores derived adapter component ${marker}`,
-  )
-}
-forbidText(
-  'windowsHotspotGuard',
-  '192.168.137.0/24',
-  'runtime hotspot guard must derive the ICS subnet instead of hardcoding the common Windows hotspot CIDR',
-)
-requireText(
-  'windowsHotspotGuard',
-  'ipv4_cidr(address.address, address.prefix_length)',
-  'runtime hotspot subnet is derived from the actual interface address and prefix',
-)
-requireText(
-  'windowsHotspotGuard',
-  'current == previous',
-  'runtime hotspot refresh is idempotent and only runs when the hotspot signature changes',
 )
 
 if (failures.length > 0) {
@@ -379,8 +395,5 @@ console.log(
   '[通过] 出站错误样本限制长度并移除 URL query，连接抖动明确标记为 heuristic',
 )
 console.log(
-  '[通过] Windows 运行期接口/IP/路由与 Wi-Fi Direct 热点拓扑变化进入结构化诊断',
-)
-console.log(
-  '[通过] 移动热点开关/IP 变化会从权威配置重生成 Runtime 并动态重算 TUN guard，不写死物理出口或 ICS 网段',
+  '[通过] 单一 Windows topology watcher 同时记录并动态修复移动热点 guard，且热点 CIDR/接口均来自运行期拓扑',
 )
