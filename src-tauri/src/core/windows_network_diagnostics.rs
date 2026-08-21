@@ -773,9 +773,11 @@ async fn monitor_loop() {
                 json!({
                     "reason": "hotspot-adapter-up-without-private-subnet",
                     "current_hotspot_subnets": &current.hotspot_subnets,
-                    "strategy": "wait-for-ics-private-address-before-reload",
+                    "strategy": "wait-for-ics-private-address-before-any-topology-reload",
                 }),
             );
+            previous = current;
+            continue;
         }
 
         if let Some(signature) = current_guard.clone()
