@@ -1,4 +1,4 @@
-name: Karing 发行观察器
+name: Karing .16 发行核验
 
 on:
   push:
@@ -9,71 +9,80 @@ on:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
   issues: write
   pull-requests: write
 
 concurrency:
   group: karing-release-observer-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  recover-and-verify:
-    name: 恢复 v2.5.4-karing.10 并完成最终核验
+  verify-release:
+    name: 核验 v2.5.4-karing.16 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      PR_NUMBER: '1'
-      RELEASE_TAG: v2.5.4-karing.10
-      RELEASE_BRANCH: feature/karing-style-diversion
       MAIN_WORKFLOW: karing-diagnostics-once.yml
-      SOURCE_SHA: 'd0817f329e1beb92e3bdeb27eefb5e23af769003'
-      RELEASE_TARGET_SHA: 'ed9c17860b8cfaafe037dd64f14259f56c0fd65d'
-      STATUS_MARKER: '<!-- karing-v254-release-observer -->'
+      RELEASE_BRANCH: feature/karing-style-diversion
+      PR_NUMBER: '8'
+      STATUS_MARKER: '<!-- karing-v254-karing16-release-audit -->'
     steps:
-      - name: 等待对应源码提交的主发行运行
-        id: main
+      - name: 检出发行分支
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: 等待并只读核验正式发行
         shell: bash
         run: |
           set -euo pipefail
 
+          source_sha=$(git rev-parse HEAD^)
+          release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
+          test "$release_tag" = 'v2.5.4-karing.16'
+
+          post_failure() {
+            local reason="$1"
+            gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "${STATUS_MARKER}
+          ### ❌ ${release_tag} 发行核验失败
+          - source: \`${source_sha}\`
+          - reason: ${reason}
+
+          观察器只读核验，未删除、覆盖或重建任何 Release。" >/dev/null || true
+          }
+          trap 'post_failure "observer step failed at line ${LINENO}"' ERR
+
           run_id=''
-          for attempt in $(seq 1 90); do
+          for attempt in $(seq 1 120); do
             run_id=$(gh api --method GET \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/${MAIN_WORKFLOW}/runs" \
-              -f branch="${RELEASE_BRANCH}" -f per_page=30 \
-              --jq ".workflow_runs[] | select(.head_sha == \"${SOURCE_SHA}\") | .id" | head -n1 || true)
+              -f branch="$RELEASE_BRANCH" -f event=push -f per_page=30 \
+              --jq ".workflow_runs[] | select(.head_sha == \"${source_sha}\") | .id" | head -n1 || true)
             if [ -n "$run_id" ]; then
               break
             fi
             sleep 10
           done
-
           test -n "$run_id"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
-      - name: 等待源码审查与平台构建完成
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          run_id='${{ steps.main.outputs.run_id }}'
           status=''
-          for attempt in $(seq 1 300); do
+          for attempt in $(seq 1 240); do
             status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
             if [ "$status" = 'completed' ]; then
               break
             fi
-            sleep 60
+            sleep 15
           done
           test "$status" = 'completed'
 
+          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")
+          conclusion=$(jq -r '.conclusion' <<<"$run_json")
+          test "$conclusion" = 'success'
+
           jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")
-          failed_jobs=$(jq -r '[.jobs[] | select(.name != "发布正式 GitHub Release") | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
-          if [ -n "$failed_jobs" ]; then
-            echo "Non-publish jobs are not green: $failed_jobs" >&2
-            exit 1
-          fi
+          failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
+          test -z "$failed_jobs"
 
           for required_job in \
             '审查并验证源码' \
@@ -86,143 +95,59 @@ jobs:
             '构建 Linux x64' \
             '构建 Linux ARM64' \
             '构建 Linux ARMv7' \
-            '汇总并审查发行产物'; do
+            '汇总并审查发行产物' \
+            '发布正式 GitHub Release'; do
             count=$(jq --arg name "$required_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$jobs_json")
-            test "$count" -ge 1
+            test "$count" -eq 1
           done
 
           artifact_count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100" \
             --jq '[.artifacts[] | select(.name == "karing-release-assets" and .expired == false)] | length')
           test "$artifact_count" -eq 1
 
-      - name: 下载并复验已审查发行资产
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          run_id='${{ steps.main.outputs.run_id }}'
-          rm -rf release-assets
-          gh run download "$run_id" \
-            --repo "$GITHUB_REPOSITORY" \
-            --name karing-release-assets \
-            --dir release-assets
-
-          test -f release-assets/SHA256SUMS.txt
-          test -f release-assets/BUILD_INFO.txt
-          test -f release-assets/release-notes.md
-          grep -Fqx "Commit: ${SOURCE_SHA}" release-assets/BUILD_INFO.txt
-
-          # The main build remains pinned to the already-audited .9 packaging workflow.
-          # Retag only metadata here; installer bytes and SHA256SUMS remain untouched.
-          sed -i -E "s/^Release tag: .*/Release tag: ${RELEASE_TAG}/" release-assets/BUILD_INFO.txt
-          sed -i "s/v2.5.4-karing.9/${RELEASE_TAG}/g" release-assets/release-notes.md
-          grep -Fqx "Release tag: ${RELEASE_TAG}" release-assets/BUILD_INFO.txt
-
-          installer_count=$(find release-assets -maxdepth 1 -type f \( \
-            -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
-            \) | wc -l)
-          checksum_lines=$(grep -cve '^$' release-assets/SHA256SUMS.txt)
-          test "$installer_count" -eq 12
-          test "$checksum_lines" -eq 12
-
-          (
-            cd release-assets
-            sha256sum --check SHA256SUMS.txt
-          )
-
-          printf '\n最终发行标签：`%s`\n构建源码：`%s`\n发行锚点：`%s`\n' \
-            "$RELEASE_TAG" "$SOURCE_SHA" "$RELEASE_TARGET_SHA" >> release-assets/release-notes.md
-
-      - name: 发布正式 Latest Release
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
-          fi
-
-          gh release create "$RELEASE_TAG" \
-            release-assets/*.exe \
-            release-assets/*.dmg \
-            release-assets/*.deb \
-            release-assets/*.rpm \
-            release-assets/SHA256SUMS.txt \
-            release-assets/BUILD_INFO.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$RELEASE_TARGET_SHA" \
-            --title "Clash Verge Rev Karing v2.5.4 · Native Network Guard + Adaptive Detail" \
-            --notes-file release-assets/release-notes.md \
-            --latest
-
-      - name: 核验公开 Release、标签与资产
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")
+          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}")
           asset_count=$(jq '.assets | length' <<<"$release_json")
           target=$(jq -r '.target_commitish' <<<"$release_json")
           draft=$(jq -r '.draft' <<<"$release_json")
           prerelease=$(jq -r '.prerelease' <<<"$release_json")
           latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
-          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${release_tag}" --jq '.object.sha')
 
           test "$asset_count" -eq 14
-          test "$target" = "$RELEASE_TARGET_SHA"
-          test "$tag_sha" = "$RELEASE_TARGET_SHA"
+          test "$target" = "$source_sha"
+          test "$tag_sha" = "$source_sha"
           test "$draft" = false
           test "$prerelease" = false
-          test "$latest_tag" = "$RELEASE_TAG"
+          test "$latest_tag" = "$release_tag"
 
           rm -rf release-audit
           mkdir -p release-audit
-          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern SHA256SUMS.txt --pattern BUILD_INFO.txt --dir release-audit
-          grep -Fqx "Commit: ${SOURCE_SHA}" release-audit/BUILD_INFO.txt
-          grep -Fqx "Release tag: ${RELEASE_TAG}" release-audit/BUILD_INFO.txt
+          gh release download "$release_tag" --repo "$GITHUB_REPOSITORY" --dir release-audit
+          test -f release-audit/SHA256SUMS.txt
+          test -f release-audit/BUILD_INFO.txt
+          grep -Fqx "Commit: ${source_sha}" release-audit/BUILD_INFO.txt
+          grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
+
+          installer_count=$(find release-audit -maxdepth 1 -type f \( \
+            -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
+            \) | wc -l)
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
+          test "$installer_count" -eq 12
           test "$checksum_lines" -eq 12
+          (
+            cd release-audit
+            sha256sum --check SHA256SUMS.txt
+          )
 
-      - name: 更新 PR 发行状态
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
+          release_url=$(jq -r '.html_url' <<<"$release_json")
+          gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "${STATUS_MARKER}
+          ### ✅ ${release_tag} 正式发行核验通过
+          - main run: \`${run_id}\` / \`${conclusion}\`
+          - source/tag target: \`${source_sha}\`
+          - public assets: **${asset_count}**（12 个安装文件 + SHA256SUMS + BUILD_INFO）
+          - Latest: \`${latest_tag}\`
+          - draft: \`${draft}\`；prerelease: \`${prerelease}\`
+          - SHA256: **12/12 verified**
+          - Release: ${release_url}
 
-          run_id='${{ steps.main.outputs.run_id }}'
-          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
-            --jq ".[] | select(.body | contains(\"${STATUS_MARKER}\")) | .id" | head -n1 || true)
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            release_url=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url --jq '.url')
-            body="${STATUS_MARKER}
-          ## Karing 2.5.4 发行状态
-
-          ✅ 原生 Windows 网络守卫、热点/ICS 路由保护与成熟化 List/Detail 连接详情已完成审查、全平台构建与正式发行。
-
-          - 构建源码：\`${SOURCE_SHA}\`
-          - 发行锚点：\`${RELEASE_TARGET_SHA}\`
-          - 主发行运行：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}
-          - Release：${release_url}
-          - 标签：\`${RELEASE_TAG}\`
-          - Release 资产：14 个；SHA256 安装文件记录：12 条
-          - Draft：否；Pre-release：否；Latest：是"
-          else
-            body="${STATUS_MARKER}
-          ## Karing 2.5.4 发行状态
-
-          ❌ 原生 Windows 网络守卫、热点/ICS 路由保护与成熟化 List/Detail 连接详情尚未完成正式发行。
-
-          - 构建源码：\`${SOURCE_SHA}\`
-          - 主发行运行：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${run_id}
-          - 恢复运行：https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          fi
-
-          if [ -n "$comment_id" ]; then
-            jq -n --arg body "$body" '{body: $body}' | \
-              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input - >/dev/null
-          else
-            jq -n --arg body "$body" '{body: $body}' | \
-              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input - >/dev/null
-          fi
+          观察器全程只读核验，没有删除、覆盖或重建 Release。" >/dev/null
