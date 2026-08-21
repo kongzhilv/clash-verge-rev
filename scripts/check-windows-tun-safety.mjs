@@ -6,6 +6,8 @@ const files = {
   windowsNetwork: 'src-tauri/src/utils/windows_network.rs',
   windowsTopologyDiagnostics:
     'src-tauri/src/core/windows_network_diagnostics.rs',
+  windowsHotspotGuard:
+    'src-tauri/src/core/windows_hotspot_runtime_guard.rs',
   outboundDiagnostics: 'src-tauri/src/core/outbound_diagnostics.rs',
   coreMod: 'src-tauri/src/core/mod.rs',
   coreManager: 'src-tauri/src/core/manager/mod.rs',
@@ -285,6 +287,78 @@ requireText(
   'runtime topology snapshots do not block the async runtime',
 )
 
+requireText(
+  'coreMod',
+  'pub mod windows_hotspot_runtime_guard;',
+  'Windows runtime hotspot guard module is compiled into the core',
+)
+requireText(
+  'coreManager',
+  'crate::core::windows_hotspot_runtime_guard::ensure_monitor_running();',
+  'Windows runtime hotspot guard starts once with CoreManager initialization',
+)
+for (const api of ['NotifyIpInterfaceChange', 'NotifyUnicastIpAddressChange']) {
+  requireText(
+    'windowsHotspotGuard',
+    api,
+    `runtime hotspot guard subscribes to native ${api}`,
+  )
+}
+for (const marker of [
+  'hotspot-signature-changed',
+  'refresh-requested',
+  'refresh-succeeded',
+  'refresh-failed',
+]) {
+  requireText(
+    'windowsHotspotGuard',
+    marker,
+    `runtime hotspot guard diagnostic marker ${marker} is present`,
+  )
+}
+requireText(
+  'windowsHotspotGuard',
+  'manager.update_config_forced().await',
+  'hotspot changes regenerate the authoritative runtime before managed guards are recomputed',
+)
+requireText(
+  'windowsHotspotGuard',
+  'physical_interface_pinned": false',
+  'runtime hotspot refresh explicitly preserves dynamic physical upstream selection',
+)
+requireText(
+  'windowsHotspotGuard',
+  'is_filter_component',
+  'Wi-Fi Direct WFP/QoS/filter components are separated from the real hotspot adapter',
+)
+for (const marker of [
+  'wfp native mac layer',
+  'wfp 802.3 mac layer',
+  'native wifi filter driver',
+  'qos packet scheduler',
+]) {
+  requireText(
+    'windowsHotspotGuard',
+    marker,
+    `runtime hotspot guard ignores derived adapter component ${marker}`,
+  )
+}
+forbidText(
+  'windowsHotspotGuard',
+  '192.168.137.0/24',
+  'runtime hotspot guard must derive the ICS subnet instead of hardcoding the common Windows hotspot CIDR',
+)
+requireText(
+  'windowsHotspotGuard',
+  'ipv4_cidr(address.address, address.prefix_length)',
+  'runtime hotspot subnet is derived from the actual interface address and prefix',
+)
+requireText(
+  'windowsHotspotGuard',
+  'current == previous',
+  'runtime hotspot refresh is idempotent and only runs when the hotspot signature changes',
+)
+
 if (failures.length > 0) {
   console.error('Windows TUN and outbound diagnostics regression failed:')
   for (const failure of failures) console.error(`- ${failure}`)
@@ -306,4 +380,7 @@ console.log(
 )
 console.log(
   '[通过] Windows 运行期接口/IP/路由与 Wi-Fi Direct 热点拓扑变化进入结构化诊断',
+)
+console.log(
+  '[通过] 移动热点开关/IP 变化会从权威配置重生成 Runtime 并动态重算 TUN guard，不写死物理出口或 ICS 网段',
 )
