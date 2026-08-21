@@ -15,9 +15,9 @@ use windows::Win32::{
     Foundation::HANDLE,
     NetworkManagement::{
         IpHelper::{
-            FreeMibTable, GetIfTable2, GetUnicastIpAddressTable, MIB_IF_ROW2, MIB_IF_TABLE2,
-            MIB_NOTIFICATION_TYPE, MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE,
-            NotifyIpInterfaceChange, NotifyUnicastIpAddressChange,
+            FreeMibTable, GetIfTable2, GetUnicastIpAddressTable, MIB_IF_ROW2, MIB_IF_TABLE2, MIB_NOTIFICATION_TYPE,
+            MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE, NotifyIpInterfaceChange,
+            NotifyUnicastIpAddressChange,
         },
         Ndis::IfOperStatusUp,
     },
@@ -365,11 +365,7 @@ async fn monitor_loop() {
             HotspotSignature::default()
         }
     };
-    diagnostics::info(
-        "windows-hotspot-guard",
-        "baseline",
-        json!({"signature": &previous}),
-    );
+    diagnostics::info("windows-hotspot-guard", "baseline", json!({"signature": &previous}));
 
     let mut generations = Generations::load();
     let mut last_watchdog = Instant::now();
@@ -462,9 +458,6 @@ mod tests {
 
     #[test]
     fn physical_wifi_is_not_hotspot_adapter() {
-        assert!(!is_hotspot_base_adapter(&interface(
-            "WLAN",
-            "Intel(R) Wi-Fi 6 AX101",
-        )));
+        assert!(!is_hotspot_base_adapter(&interface("WLAN", "Intel(R) Wi-Fi 6 AX101",)));
     }
 }
