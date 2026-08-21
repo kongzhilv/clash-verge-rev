@@ -39,6 +39,11 @@ requireText(
 )
 requireText(
   'manager',
+  'matches!(*self.get_running_mode(), RunningMode::NotRunning)',
+  'config application checks the actual core running state',
+)
+requireText(
+  'manager',
   'prepare_windows_tun_runtime_for_start',
   'Windows has a pre-start TUN safety path',
 )
@@ -51,6 +56,16 @@ requireText(
   'manager',
   'tokio::task::spawn_blocking(detect_stable_upstream)',
   'native route inspection stays off the async executor',
+)
+requireText(
+  'manager',
+  'dynamic-upstream-enabled',
+  'dynamic upstream behavior remains observable',
+)
+requireText(
+  'manager',
+  'top_level_interface_pinned',
+  'diagnostics still expose accidental top-level pinning',
 )
 requireText(
   'lifecycle',
@@ -134,6 +149,11 @@ requireText(
   'Value::from("auto-detect-interface"), Value::from(true)',
   'Mihomo physical route auto detection remains enabled',
 )
+requireText(
+  'windowsNetwork',
+  'route_exclude_addresses.join(",")',
+  'route stability signature includes dynamic LAN/hotspot exclusions',
+)
 forbidText(
   'windowsNetwork',
   'config.insert(\n        Value::from("interface-name")',
@@ -200,6 +220,16 @@ requireText(
   'windowsNetwork',
   'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
   'Rust regression keeps top-level route selection dynamic',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
+  'Rust regression retains ICS SkipAsSource coverage',
+)
+requireText(
+  'windowsNetwork',
+  'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
+  'Rust regression rejects derived Wi-Fi Direct filter interfaces',
 )
 forbidText(
   'windowsNetwork',
@@ -273,6 +303,16 @@ requireText(
 )
 requireText(
   'windowsTopologyDiagnostics',
+  'WATCHDOG_INTERVAL',
+  'topology watcher retains bounded watchdog sampling',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'is_filter_component',
+  'topology watcher filters derived Wi-Fi Direct components',
+)
+requireText(
+  'windowsTopologyDiagnostics',
   'hotspot-adapter-up-without-private-subnet',
   'adapter Up without an ICS subnet is explicitly Starting, not Ready',
 )
@@ -290,6 +330,11 @@ requireText(
   'windowsTopologyDiagnostics',
   '"physical-upstream-changed"',
   'managed proxy binding follows real physical upstream changes',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'physical_interface_pinned": false',
+  'runtime diagnostics make top-level pinning state explicit',
 )
 requireText(
   'windowsTopologyDiagnostics',
@@ -359,6 +404,11 @@ requireText(
   '?<query-redacted>',
   'diagnostic URL queries remain redacted',
 )
+requireText(
+  'outboundDiagnostics',
+  'heuristic": true',
+  'connection churn remains explicitly heuristic',
+)
 
 requireText(
   'utils',
@@ -380,7 +430,9 @@ if (failures.length > 0) {
 console.log('Windows TUN/self-capture regression passed.')
 console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不再 reload')
 console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
-console.log('[通过] 未显式绑定的 proxy/provider 出站 socket 动态绑定稳定物理 NIC')
+console.log(
+  '[通过] 未显式绑定的 proxy/provider 出站 socket 动态绑定稳定物理 NIC',
+)
 console.log('[通过] 用户显式 node/provider/interface 配置保持优先')
 console.log('[通过] 顶层 interface-name 仍不固定，物理切网由运行期稳定探测跟随')
 console.log('[通过] 热点 CIDR、接口名、代理 endpoint 均不写死')
