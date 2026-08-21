@@ -509,11 +509,7 @@ async fn refresh_hotspot_guards(previous: &WindowsTopologySnapshot, current: &Wi
     }
 
     if !Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false) {
-        diagnostics::info(
-            "windows-hotspot-guard",
-            "refresh-skipped-tun-disabled",
-            json!({}),
-        );
+        diagnostics::info("windows-hotspot-guard", "refresh-skipped-tun-disabled", json!({}));
         return;
     }
 
@@ -681,7 +677,7 @@ pub fn ensure_monitor_running() {
 
 #[cfg(test)]
 mod tests {
-    use super::{AddressRow, InterfaceRow, capture_hotspot_test_state, is_hotspot_side};
+    use super::{AddressRow, InterfaceRow, is_hotspot_side};
     use std::net::Ipv4Addr;
 
     fn interface(index: u32, alias: &str, description: &str, is_up: bool) -> InterfaceRow {
