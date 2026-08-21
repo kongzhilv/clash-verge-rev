@@ -79,6 +79,7 @@ jobs:
         run: |
           $path = '.github/workflows/karing-diagnostics-once.yml'
           $text = [System.IO.File]::ReadAllText($path)
+          $indent = '          '
 
           function Replace-Exact([string]$old, [string]$new, [string]$label) {
             $count = ([regex]::Matches($script:text, [regex]::Escape($old))).Count
@@ -86,35 +87,29 @@ jobs:
             $script:text = $script:text.Replace($old, $new)
           }
 
-          $oldGate = @'
-          check_not_contains src-tauri/src/utils/windows_network.rs 'Value::from("interface-name")' 'Windows TUN 自动托管路径不再写死顶层物理出口接口'
-'@
-          $newGate = @'
-          check_contains src-tauri/src/utils/windows_network.rs 'apply_managed_proxy_bindings' 'Windows TUN 使用独立的每代理 socket 物理出口绑定'
-          check_contains src-tauri/src/utils/windows_network.rs 'managed_proxy_sockets_bind_to_stable_physical_interface' '每代理 socket 绑定已有 Rust 回归覆盖'
-          check_contains src-tauri/src/utils/windows_network.rs 'explicit_provider_binding_is_preserved' '用户显式 provider interface-name 仍保持最高优先级'
-          check_contains scripts/check-windows-tun-safety.mjs 'managed Windows TUN must not pin the top-level outbound interface' '专项门禁继续禁止顶层 interface-name 固定出口'
-'@
+          $oldGate = 'check_not_contains src-tauri/src/utils/windows_network.rs ''Value::from("interface-name")'' ''Windows TUN 自动托管路径不再写死顶层物理出口接口'''
+          $newGate = @(
+            'check_contains src-tauri/src/utils/windows_network.rs ''apply_managed_proxy_bindings'' ''Windows TUN 使用独立的每代理 socket 物理出口绑定''',
+            'check_contains src-tauri/src/utils/windows_network.rs ''managed_proxy_sockets_bind_to_stable_physical_interface'' ''每代理 socket 绑定已有 Rust 回归覆盖''',
+            'check_contains src-tauri/src/utils/windows_network.rs ''explicit_provider_binding_is_preserved'' ''用户显式 provider interface-name 仍保持最高优先级''',
+            'check_contains scripts/check-windows-tun-safety.mjs ''managed Windows TUN must not pin the top-level outbound interface'' ''专项门禁继续禁止顶层 interface-name 固定出口'''
+          ) -join "`n$indent"
           Replace-Exact $oldGate $newGate 'release scope interface binding gate'
 
-          $oldBullet = @'
-          - 修复 Windows TUN 运行中断网再联网/以太网与 WLAN 切换后的出站失效：不再把顶层 `interface-name` 钉死到启动时网卡，保持 Mihomo 动态出口监视能力。
-'@
-          $newBullet = @'
-          - 修复 Windows TUN 运行中断网再联网/以太网与 WLAN 切换后的出站失效：不再把顶层 `interface-name` 钉死到启动时网卡，保持 Mihomo 动态出口监视能力。
-          - 修复 Windows 移动热点启动阶段的 TUN 自捕获竞态：Wi-Fi Direct 网卡仅 Up、但 ICS 私网 CIDR 尚未出现时明确视为 `Starting` 并延后 reload；Ready/Off 状态需连续多次快照确认后才应用。
-          - 对自动托管的 inline proxies 与 proxy-providers 使用 Mihomo 原生每代理 `interface-name` 绑定到当前稳定物理网卡，避免 Mihomo 自身代理 socket 被 TUN 捕获；用户显式 node/provider 绑定保持最高优先级，顶层 TUN 仍维持 `auto-detect-interface=true`。
-          - 物理默认出口真实切换后重新生成 Runtime，使托管的每代理绑定跟随新上游；继续复用单一 Windows IP Helper topology watcher，不硬编码热点接口、ICS 网段、provider 域名或 endpoint IP。
-'@
+          $oldBullet = '- 修复 Windows TUN 运行中断网再联网/以太网与 WLAN 切换后的出站失效：不再把顶层 `interface-name` 钉死到启动时网卡，保持 Mihomo 动态出口监视能力。'
+          $newBullet = @(
+            $oldBullet,
+            '- 修复 Windows 移动热点启动阶段的 TUN 自捕获竞态：Wi-Fi Direct 网卡仅 Up、但 ICS 私网 CIDR 尚未出现时明确视为 `Starting` 并延后 reload；Ready/Off 状态需连续多次快照确认后才应用。',
+            '- 对自动托管的 inline proxies 与 proxy-providers 使用 Mihomo 原生每代理 `interface-name` 绑定到当前稳定物理网卡，避免 Mihomo 自身代理 socket 被 TUN 捕获；用户显式 node/provider 绑定保持最高优先级，顶层 TUN 仍维持 `auto-detect-interface=true`。',
+            '- 物理默认出口真实切换后重新生成 Runtime，使托管的每代理绑定跟随新上游；继续复用单一 Windows IP Helper topology watcher，不硬编码热点接口、ICS 网段、provider 域名或 endpoint IP。'
+          ) -join "`n$indent"
           Replace-Exact $oldBullet $newBullet 'v17 release note bullets'
 
           Replace-Exact '--title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Control Readiness + Mode Consistency"' '--title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Hotspot Self-Capture Guard + Stable Proxy Binding"' 'release title'
 
           [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
 
-          if ($text.Contains("check_not_contains src-tauri/src/utils/windows_network.rs 'Value::from(`"interface-name`")'")) {
-            throw 'stale global interface-name prohibition remains in release gate'
-          }
+          if ($text.Contains($oldGate)) { throw 'stale global interface-name prohibition remains in release gate' }
           foreach ($marker in @(
             'apply_managed_proxy_bindings',
             'managed_proxy_sockets_bind_to_stable_physical_interface',
