@@ -1,20 +1,18 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde_yaml_ng::{Mapping, Value};
 use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::c_void,
     net::Ipv4Addr,
     ptr::null_mut,
-    slice,
-    thread,
+    slice, thread,
     time::Duration,
 };
 use windows::Win32::{
     NetworkManagement::{
         IpHelper::{
-            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry,
-            GetUnicastIpAddressTable, MIB_IF_ROW2, MIB_IF_TABLE2, MIB_IPFORWARD_ROW2,
-            MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
+            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry, GetUnicastIpAddressTable, MIB_IF_ROW2,
+            MIB_IF_TABLE2, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
             MIB_UNICASTIPADDRESS_TABLE,
         },
         Ndis::IfOperStatusUp,
@@ -166,10 +164,8 @@ fn load_default_routes() -> Result<Vec<MIB_IPFORWARD_ROW2>> {
         rows.iter()
             .filter(|row| {
                 row.DestinationPrefix.PrefixLength == 0
-                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix)
-                        .is_some_and(|address| address.is_unspecified())
-                    && ipv4_from_sockaddr(&row.NextHop)
-                        .is_some_and(|address| !address.is_unspecified())
+                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix).is_some_and(|address| address.is_unspecified())
+                    && ipv4_from_sockaddr(&row.NextHop).is_some_and(|address| !address.is_unspecified())
             })
             .copied()
             .collect::<Vec<_>>()
@@ -327,9 +323,7 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
 
         let Some(source) = addresses
             .iter()
-            .filter(|address| {
-                address.interface_index == route.InterfaceIndex && !address.skip_as_source
-            })
+            .filter(|address| address.interface_index == route.InterfaceIndex && !address.skip_as_source)
             .min_by_key(|address| u32::from(address.address))
         else {
             continue;
@@ -342,8 +336,7 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
         };
 
         let effective_metric = route.Metric.saturating_add(interface_metric);
-        let (excluded_interfaces, route_exclude_addresses) =
-            managed_route_guards(&interfaces, &addresses, source);
+        let (excluded_interfaces, route_exclude_addresses) = managed_route_guards(&interfaces, &addresses, source);
 
         candidates.push(WindowsUpstreamRoute {
             interface_index: route.InterfaceIndex,
@@ -435,10 +428,7 @@ pub fn tun_needs_managed_upstream(config: &Mapping, has_explicit_interface: bool
     };
 
     let enabled = tun.get("enable").and_then(Value::as_bool).unwrap_or(false);
-    let auto_route = tun
-        .get("auto-route")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
+    let auto_route = tun.get("auto-route").and_then(Value::as_bool).unwrap_or(false);
     enabled && auto_route
 }
 
@@ -489,12 +479,7 @@ fn merge_string_sequence(mapping: &mut Mapping, key: &str, values: &[String]) {
         None => {
             mapping.insert(
                 yaml_key,
-                Value::Sequence(
-                    values
-                        .iter()
-                        .map(|value| Value::from(value.as_str()))
-                        .collect(),
-                ),
+                Value::Sequence(values.iter().map(|value| Value::from(value.as_str())).collect()),
             );
         }
     }
@@ -512,10 +497,7 @@ fn apply_interface_name_if_unset(mapping: &mut Mapping, interface_alias: &str) -
     }
 }
 
-fn apply_managed_proxy_bindings(
-    config: &mut Mapping,
-    interface_alias: &str,
-) -> ManagedProxyBindingStats {
+fn apply_managed_proxy_bindings(config: &mut Mapping, interface_alias: &str) -> ManagedProxyBindingStats {
     let mut stats = ManagedProxyBindingStats::default();
 
     if let Some(Value::Sequence(proxies)) = config.get_mut("proxies") {
@@ -550,10 +532,7 @@ fn apply_managed_proxy_bindings(
                 }
                 None => {
                     let mut override_map = Mapping::new();
-                    override_map.insert(
-                        Value::String("interface-name".to_owned()),
-                        Value::from(interface_alias),
-                    );
+                    override_map.insert(Value::String("interface-name".to_owned()), Value::from(interface_alias));
                     provider.insert(override_key, Value::Mapping(override_map));
                     stats.provider_applied += 1;
                 }
@@ -564,20 +543,13 @@ fn apply_managed_proxy_bindings(
     stats
 }
 
-pub fn apply_managed_upstream(
-    config: &mut Mapping,
-    route: &WindowsUpstreamRoute,
-) -> ManagedProxyBindingStats {
+pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute) -> ManagedProxyBindingStats {
     if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
         // Keep top-level outbound selection dynamic. The managed per-proxy binding below
         // protects Mihomo's own proxy sockets from being captured by TUN without pinning
         // every DIRECT connection to a stale adapter.
         tun.insert(Value::from("auto-detect-interface"), Value::from(true));
-        merge_string_sequence(
-            tun,
-            "route-exclude-address",
-            &route.route_exclude_addresses,
-        );
+        merge_string_sequence(tun, "route-exclude-address", &route.route_exclude_addresses);
 
         // Mihomo documents include-interface and exclude-interface as mutually exclusive.
         // Preserve an explicit include-interface instead of silently creating a conflict.
@@ -596,9 +568,8 @@ pub fn apply_managed_upstream(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::{
-        ManagedProxyBindingStats, WindowsInterface, WindowsIpv4Address, WindowsUpstreamRoute,
-        apply_managed_upstream, ipv4_cidr, is_hotspot_side, managed_route_guards,
-        tun_needs_managed_upstream,
+        ManagedProxyBindingStats, WindowsInterface, WindowsIpv4Address, WindowsUpstreamRoute, apply_managed_upstream,
+        ipv4_cidr, is_hotspot_side, managed_route_guards, tun_needs_managed_upstream,
     };
     use serde_yaml_ng::{Mapping, Value};
     use std::{collections::BTreeMap, net::Ipv4Addr};
@@ -618,17 +589,13 @@ mod tests {
             interface_metric: 25,
             effective_metric: 25,
             excluded_interfaces: vec!["Local Area Connection* 12".into()],
-            route_exclude_addresses: vec![
-                "192.168.1.0/24".into(),
-                "172.22.44.0/24".into(),
-            ],
+            route_exclude_addresses: vec!["192.168.1.0/24".into(), "172.22.44.0/24".into()],
         }
     }
 
     #[test]
     fn managed_upstream_is_only_used_for_automatic_tun_routing() {
-        let tun =
-            mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
+        let tun = mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
         assert!(tun_needs_managed_upstream(&tun, false));
         assert!(!tun_needs_managed_upstream(&tun, true));
 
@@ -641,16 +608,12 @@ mod tests {
 
     #[test]
     fn managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes() {
-        let mut config =
-            mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
+        let mut config = mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
         apply_managed_upstream(&mut config, &route());
 
         assert!(config.get("interface-name").is_none());
         let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
-        assert_eq!(
-            tun.get("auto-detect-interface").and_then(Value::as_bool),
-            Some(true)
-        );
+        assert_eq!(tun.get("auto-detect-interface").and_then(Value::as_bool), Some(true));
         assert_eq!(
             tun.get("exclude-interface")
                 .and_then(Value::as_sequence)
@@ -658,20 +621,9 @@ mod tests {
                 .and_then(Value::as_str),
             Some("Local Area Connection* 12")
         );
-        let routes = tun
-            .get("route-exclude-address")
-            .and_then(Value::as_sequence)
-            .unwrap();
-        assert!(
-            routes
-                .iter()
-                .any(|value| value.as_str() == Some("192.168.1.0/24"))
-        );
-        assert!(
-            routes
-                .iter()
-                .any(|value| value.as_str() == Some("172.22.44.0/24"))
-        );
+        let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
+        assert!(routes.iter().any(|value| value.as_str() == Some("192.168.1.0/24")));
+        assert!(routes.iter().any(|value| value.as_str() == Some("172.22.44.0/24")));
     }
 
     #[test]
@@ -702,10 +654,7 @@ proxy-providers:
             }
         );
 
-        let proxies = config
-            .get("proxies")
-            .and_then(Value::as_sequence)
-            .unwrap();
+        let proxies = config.get("proxies").and_then(Value::as_sequence).unwrap();
         assert_eq!(
             proxies[0]
                 .as_mapping()
@@ -775,20 +724,9 @@ proxy-providers:
 
         let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
         assert!(tun.get("exclude-interface").is_none());
-        let routes = tun
-            .get("route-exclude-address")
-            .and_then(Value::as_sequence)
-            .unwrap();
-        assert!(
-            routes
-                .iter()
-                .any(|value| value.as_str() == Some("10.0.0.0/8"))
-        );
-        assert!(
-            routes
-                .iter()
-                .any(|value| value.as_str() == Some("172.22.44.0/24"))
-        );
+        let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
+        assert!(routes.iter().any(|value| value.as_str() == Some("10.0.0.0/8")));
+        assert!(routes.iter().any(|value| value.as_str() == Some("172.22.44.0/24")));
     }
 
     #[test]
@@ -801,11 +739,9 @@ proxy-providers:
         };
         let filter = WindowsInterface {
             index: 33,
-            alias: "Local Area Connection* 10-WFP Native MAC Layer LightWeight Filter-0000"
+            alias: "Local Area Connection* 10-WFP Native MAC Layer LightWeight Filter-0000".into(),
+            description: "Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000"
                 .into(),
-            description:
-                "Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000"
-                    .into(),
             is_up: true,
         };
         assert!(is_hotspot_side(&real));

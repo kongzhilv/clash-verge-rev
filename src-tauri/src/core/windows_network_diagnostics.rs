@@ -8,18 +8,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::Serialize;
 use serde_json::json;
 use windows::Win32::{
     Foundation::HANDLE,
     NetworkManagement::{
         IpHelper::{
-            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry,
-            GetUnicastIpAddressTable, MIB_IF_ROW2, MIB_IF_TABLE2, MIB_IPFORWARD_ROW2,
-            MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE,
-            MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE, NotifyIpInterfaceChange,
-            NotifyRouteChange2, NotifyUnicastIpAddressChange,
+            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry, GetUnicastIpAddressTable, MIB_IF_ROW2,
+            MIB_IF_TABLE2, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_NOTIFICATION_TYPE,
+            MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE, NotifyIpInterfaceChange, NotifyRouteChange2,
+            NotifyUnicastIpAddressChange,
         },
         Ndis::IfOperStatusUp,
     },
@@ -235,10 +234,7 @@ fn load_default_routes() -> Result<Vec<MIB_IPFORWARD_ROW2>> {
     let mut table: *mut MIB_IPFORWARD_TABLE2 = null_mut();
     let status = unsafe { GetIpForwardTable2(AF_INET, &mut table) };
     if status.0 != 0 || table.is_null() {
-        return Err(anyhow!(
-            "GetIpForwardTable2 failed with Windows error {}",
-            status.0
-        ));
+        return Err(anyhow!("GetIpForwardTable2 failed with Windows error {}", status.0));
     }
 
     let result = unsafe {
@@ -247,10 +243,8 @@ fn load_default_routes() -> Result<Vec<MIB_IPFORWARD_ROW2>> {
         rows.iter()
             .filter(|row| {
                 row.DestinationPrefix.PrefixLength == 0
-                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix)
-                        .is_some_and(|address| address.is_unspecified())
-                    && ipv4_from_sockaddr(&row.NextHop)
-                        .is_some_and(|address| !address.is_unspecified())
+                    && ipv4_from_sockaddr(&row.DestinationPrefix.Prefix).is_some_and(|address| address.is_unspecified())
+                    && ipv4_from_sockaddr(&row.NextHop).is_some_and(|address| !address.is_unspecified())
             })
             .copied()
             .collect::<Vec<_>>()
@@ -348,10 +342,7 @@ fn capture_topology() -> Result<WindowsTopologySnapshot> {
         .iter()
         .map(|interface| (interface.index, interface))
         .collect::<BTreeMap<_, _>>();
-    let default_route_indices = routes
-        .iter()
-        .map(|route| route.InterfaceIndex)
-        .collect::<BTreeSet<_>>();
+    let default_route_indices = routes.iter().map(|route| route.InterfaceIndex).collect::<BTreeSet<_>>();
 
     let mut interface_snapshots = interfaces
         .iter()
@@ -415,9 +406,7 @@ fn capture_topology() -> Result<WindowsTopologySnapshot> {
         hotspot_present = true;
         for address in addresses
             .iter()
-            .filter(|address| {
-                address.interface_index == interface.index && address.address.is_private()
-            })
+            .filter(|address| address.interface_index == interface.index && address.address.is_private())
         {
             if (8..=30).contains(&address.prefix_length)
                 && let Some(cidr) = ipv4_cidr(address.address, address.prefix_length)
@@ -483,13 +472,7 @@ fn register_notifications() -> [u32; 3] {
         )
     };
     let address_status = unsafe {
-        NotifyUnicastIpAddressChange(
-            AF_INET,
-            Some(address_change_callback),
-            None,
-            false,
-            &mut address_handle,
-        )
+        NotifyUnicastIpAddressChange(AF_INET, Some(address_change_callback), None, false, &mut address_handle)
     };
     let route_status = unsafe {
         NotifyRouteChange2(
@@ -510,9 +493,7 @@ async fn capture_snapshot() -> Result<WindowsTopologySnapshot> {
         .map_err(|error| anyhow!("Windows topology task failed: {error}"))?
 }
 
-fn hotspot_guard_signature(
-    snapshot: &WindowsTopologySnapshot,
-) -> Option<HotspotGuardSignature> {
+fn hotspot_guard_signature(snapshot: &WindowsTopologySnapshot) -> Option<HotspotGuardSignature> {
     if !snapshot.hotspot_present {
         return Some(HotspotGuardSignature {
             present: false,
@@ -544,9 +525,7 @@ fn hotspot_guard_signature(
     })
 }
 
-async fn confirm_guard_signature(
-    expected: &HotspotGuardSignature,
-) -> Result<Option<WindowsTopologySnapshot>> {
+async fn confirm_guard_signature(expected: &HotspotGuardSignature) -> Result<Option<WindowsTopologySnapshot>> {
     let mut latest = None;
     for sample in 0..GUARD_CONFIRM_SAMPLES {
         if sample > 0 {
@@ -583,12 +562,7 @@ async fn refresh_runtime_network_state(
         return true;
     }
 
-    if !Config::verge()
-        .await
-        .latest_arc()
-        .enable_tun_mode
-        .unwrap_or(false)
-    {
+    if !Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false) {
         diagnostics::info(
             "windows-hotspot-guard",
             "refresh-skipped-tun-disabled",
@@ -663,11 +637,7 @@ async fn monitor_loop() {
 
     let mut previous = match capture_snapshot().await {
         Ok(snapshot) => {
-            diagnostics::info(
-                "windows-network",
-                "topology-baseline",
-                json!({"snapshot": &snapshot}),
-            );
+            diagnostics::info("windows-network", "topology-baseline", json!({"snapshot": &snapshot}));
             snapshot
         }
         Err(error) => {
@@ -739,8 +709,7 @@ async fn monitor_loop() {
             || current.hotspot_subnets != previous.hotspot_subnets
             || current_guard != hotspot_guard_signature(&previous);
         let default_routes_changed = current.default_routes != previous.default_routes;
-        let physical_upstream_changed =
-            current.physical_upstream != previous.physical_upstream;
+        let physical_upstream_changed = current.physical_upstream != previous.physical_upstream;
 
         diagnostics::info(
             "windows-network",
@@ -793,13 +762,7 @@ async fn monitor_loop() {
                             "samples": GUARD_CONFIRM_SAMPLES,
                         }),
                     );
-                    if refresh_runtime_network_state(
-                        "hotspot-guard-state-changed",
-                        &previous,
-                        &confirmed,
-                    )
-                    .await
-                    {
+                    if refresh_runtime_network_state("hotspot-guard-state-changed", &previous, &confirmed).await {
                         last_applied_guard = Some(signature);
                     }
                 }
@@ -824,12 +787,7 @@ async fn monitor_loop() {
         } else if physical_upstream_changed {
             // Proxy nodes/providers are managed against the stable physical NIC. A real
             // upstream change must regenerate Runtime so those managed bindings follow it.
-            refresh_runtime_network_state(
-                "physical-upstream-changed",
-                &previous,
-                &current,
-            )
-            .await;
+            refresh_runtime_network_state("physical-upstream-changed", &previous, &current).await;
         }
 
         previous = current;
@@ -848,17 +806,12 @@ pub fn ensure_monitor_running() {
 #[cfg(test)]
 mod tests {
     use super::{
-        AddressRow, HotspotGuardSignature, InterfaceRow, InterfaceSnapshot,
-        WindowsTopologySnapshot, hotspot_guard_signature, is_hotspot_side,
+        AddressRow, HotspotGuardSignature, InterfaceRow, InterfaceSnapshot, WindowsTopologySnapshot,
+        hotspot_guard_signature, is_hotspot_side,
     };
     use std::net::Ipv4Addr;
 
-    fn interface(
-        index: u32,
-        alias: &str,
-        description: &str,
-        is_up: bool,
-    ) -> InterfaceRow {
+    fn interface(index: u32, alias: &str, description: &str, is_up: bool) -> InterfaceRow {
         InterfaceRow {
             index,
             alias: alias.to_string(),
@@ -867,10 +820,7 @@ mod tests {
         }
     }
 
-    fn capture_hotspot_test_state(
-        interfaces: &[InterfaceRow],
-        addresses: &[AddressRow],
-    ) -> (bool, Vec<String>) {
+    fn capture_hotspot_test_state(interfaces: &[InterfaceRow], addresses: &[AddressRow]) -> (bool, Vec<String>) {
         let mut present = false;
         let mut subnets = std::collections::BTreeSet::new();
         for interface in interfaces
@@ -878,12 +828,12 @@ mod tests {
             .filter(|interface| interface.is_up && is_hotspot_side(interface))
         {
             present = true;
-            for address in addresses.iter().filter(|address| {
-                address.interface_index == interface.index && address.address.is_private()
-            }) {
+            for address in addresses
+                .iter()
+                .filter(|address| address.interface_index == interface.index && address.address.is_private())
+            {
                 if (8..=30).contains(&address.prefix_length)
-                    && let Some(cidr) =
-                        super::ipv4_cidr(address.address, address.prefix_length)
+                    && let Some(cidr) = super::ipv4_cidr(address.address, address.prefix_length)
                 {
                     subnets.insert(cidr);
                 }
@@ -892,11 +842,7 @@ mod tests {
         (present, subnets.into_iter().collect())
     }
 
-    fn snapshot(
-        hotspot_present: bool,
-        hotspot_subnets: Vec<&str>,
-        interface_up: bool,
-    ) -> WindowsTopologySnapshot {
+    fn snapshot(hotspot_present: bool, hotspot_subnets: Vec<&str>, interface_up: bool) -> WindowsTopologySnapshot {
         WindowsTopologySnapshot {
             interfaces: vec![InterfaceSnapshot {
                 index: 27,
@@ -909,10 +855,7 @@ mod tests {
             }],
             default_routes: Vec::new(),
             hotspot_present,
-            hotspot_subnets: hotspot_subnets
-                .into_iter()
-                .map(str::to_string)
-                .collect(),
+            hotspot_subnets: hotspot_subnets.into_iter().map(str::to_string).collect(),
             physical_upstream: None,
         }
     }
@@ -966,8 +909,7 @@ mod tests {
             address: Ipv4Addr::new(172, 22, 44, 1),
             prefix_length: 24,
         }];
-        let (present, subnets) =
-            capture_hotspot_test_state(&interfaces, &addresses);
+        let (present, subnets) = capture_hotspot_test_state(&interfaces, &addresses);
         assert!(present);
         assert_eq!(subnets, vec!["172.22.44.0/24"]);
     }
@@ -980,11 +922,7 @@ mod tests {
     #[test]
     fn hotspot_guard_ready_state_contains_runtime_interface_and_subnet() {
         assert_eq!(
-            hotspot_guard_signature(&snapshot(
-                true,
-                vec!["172.22.44.0/24"],
-                true,
-            )),
+            hotspot_guard_signature(&snapshot(true, vec!["172.22.44.0/24"], true,)),
             Some(HotspotGuardSignature {
                 present: true,
                 interfaces: vec!["Local Area Connection* 10".into()],
