@@ -6,6 +6,7 @@ name: Check Formatting
 
 on:
   pull_request:
+  pull_request_target:
 
 permissions:
   contents: read
@@ -15,6 +16,7 @@ env:
 
 jobs:
   rustfmt:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -43,14 +45,15 @@ jobs:
         run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
 
   v17-audited-writeback:
-    if: github.event.pull_request.head.ref == 'fix/windows-hotspot-self-capture-v17'
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.number == 9 && github.event.pull_request.head.ref == 'fix/windows-hotspot-self-capture-v17'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: kongzhilv/clash-verge-rev
+          ref: fix/windows-hotspot-self-capture-v17
           fetch-depth: 0
 
       - name: install Rust stable and rustfmt
