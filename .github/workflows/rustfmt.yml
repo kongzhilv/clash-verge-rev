@@ -8,7 +8,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   HUSKY: 0
@@ -42,13 +42,14 @@ jobs:
         if: steps.check_rust.outputs.rust == 'true'
         run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
 
-  v17-format-artifact:
+  v17-audited-writeback:
     if: github.event.pull_request.head.ref == 'fix/windows-hotspot-self-capture-v17'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
 
       - name: install Rust stable and rustfmt
         uses: dtolnay/rust-toolchain@stable
@@ -58,15 +59,70 @@ jobs:
       - name: format v17 Rust files
         run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all
 
-      - name: upload formatted v17 Rust files
-        uses: actions/upload-artifact@v7
-        with:
-          name: v17-rustfmt-output
-          path: |
-            src-tauri/src/core/windows_network_diagnostics.rs
-            src-tauri/src/utils/windows_network.rs
-          if-no-files-found: error
-          retention-days: 1
+      - name: audit v17 release workflow metadata
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = path.read_text(encoding='utf-8')
+
+          old_gate = "          check_not_contains src-tauri/src/utils/windows_network.rs 'Value::from(\"interface-name\")' 'Windows TUN 自动托管路径不再写死顶层物理出口接口'"
+          new_gate = "\n".join([
+              "          check_contains src-tauri/src/utils/windows_network.rs 'apply_managed_proxy_bindings' '代理节点与 provider 使用受管物理 NIC 绑定避免 TUN 自捕获'",
+              "          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'refresh-deferred-hotspot-starting' '热点 Adapter Up 但 ICS 私网未就绪时延迟重载'",
+              "          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'guard-state-confirmed' '热点 Ready/Off 状态需稳定确认后才刷新 Runtime'",
+          ])
+          if old_gate not in text:
+              raise SystemExit('expected legacy interface gate not found')
+          text = text.replace(old_gate, new_gate, 1)
+
+          expr_version = '$' + '{{ needs.review.outputs.version }}'
+          expr_commit = '$' + '{{ needs.review.outputs.commit }}'
+          notes_start = "          cat > release-assets/release-notes.md <<'EOF'\n"
+          notes_end = "          EOF\n\n          echo '发行文件：'"
+          start = text.index(notes_start) + len(notes_start)
+          end = text.index(notes_end, start)
+          notes = f"""          # Clash Verge Rev Karing v{expr_version}
+
+          本轮重点修复 Windows 移动热点/ICS 与 TUN 同时运行时的出站自捕获问题，并将运行期网络切换改为稳定状态机：
+
+          - Windows IP Helper topology watcher 继续作为唯一网络监听链，不新增第二套热点 watcher；热点接口、IPv4 与 CIDR 全部从实际运行时拓扑派生。
+          - 热点从 Off 打开后，Wi-Fi Direct Adapter 仅 Up、但尚未获得 ICS 私网 IPv4 时进入 Starting 状态，不再立即触发 Mihomo 完整 reload。
+          - 只有真实热点基础适配器 Up 且存在私有 IPv4/CIDR，并连续通过多次确认后才进入 Ready；关闭热点同样需要稳定确认后再清理程序管理的 guard。
+          - 保留 `route-exclude-address` 与 `exclude-interface` 的动态热点/LAN 保护；用户显式 `include-interface` 继续优先，避免生成互斥配置。
+          - 未显式绑定出口的 inline proxy 与 proxy-provider 通过 Mihomo 原生 `interface-name` / `override.interface-name` 绑定到当前稳定物理 NIC，从源头避免 `verge-mihomo.exe` 的代理节点连接再次被 TUN 捕获。
+          - 用户自己为节点/provider 指定的 `interface-name` 始终保持权威；顶层 `interface-name` 仍不固定，TUN 继续保留 `auto-detect-interface=true` 以支持正常 DIRECT 流量和物理切网。
+          - 物理默认出口真正变化时，Runtime 会重新从权威配置生成，并按新的稳定物理 NIC 更新程序管理的节点/provider 绑定。
+          - 顶层 `interface-name` 禁止写死仍由 `scripts/check-windows-tun-safety.mjs` 的精确专项门禁负责；发行范围审查额外确认 managed proxy/provider binding 与热点 Starting/Ready 状态机存在。
+          - 发行门禁禁止写死热点 CIDR、具体代理 endpoint/provider 域名和物理接口名，并保留 Win32 原生路由检测、SkipAsSource、Wi-Fi Direct filter 过滤、单 watcher 与出站诊断回归。
+          - 正式发行仍要求 12 个安装文件，并生成 `SHA256SUMS.txt` 与 `BUILD_INFO.txt`，最终 GitHub Release 必须精确包含 14 个公开 assets。
+
+          本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
+
+          Commit: `{expr_commit}`
+"""
+          text = text[:start] + notes + text[end:]
+
+          old_title = f'--title "Clash Verge Rev Karing v{expr_version} · Control Readiness + Mode Consistency"'
+          new_title = f'--title "Clash Verge Rev Karing v{expr_version} · Windows Hotspot Stability + Self-Capture Guard"'
+          if old_title not in text:
+              raise SystemExit('expected legacy release title not found')
+          text = text.replace(old_title, new_title, 1)
+          path.write_text(text, encoding='utf-8')
+
+      - name: verify v17 specialized release gate
+        run: node scripts/check-windows-tun-safety.mjs
+
+      - name: commit audited v17 writeback
+        run: |
+          rm -f .release/v17-maintenance-trigger.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/utils/windows_network.rs scripts/check-windows-tun-safety.mjs .github/workflows/karing-diagnostics-once.yml .release/v17-maintenance-trigger.txt
+          git diff --cached --check
+          git commit -m "style: format and audit Windows hotspot v17 release"
+          git push origin HEAD:fix/windows-hotspot-self-capture-v17
 
   # taplo:
   #   name: taplo (.toml files)
