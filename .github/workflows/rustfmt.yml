@@ -6,7 +6,11 @@ name: Check Formatting
 
 on:
   pull_request:
-  pull_request_target:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - .github/workflows/rustfmt.yml
 
 permissions:
   contents: read
@@ -45,7 +49,7 @@ jobs:
         run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
 
   v17-audited-writeback:
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.number == 9 && github.event.pull_request.head.ref == 'fix/windows-hotspot-self-capture-v17'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/karing-style-diversion'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -61,8 +65,21 @@ jobs:
         with:
           components: rustfmt
 
-      - name: format v17 Rust files
-        run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all
+      - name: format v17 and apply Windows Clippy fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path ./src-tauri/Cargo.toml --all
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src-tauri/src/utils/windows_network.rs')
+          text = path.read_text(encoding='utf-8')
+          if text.count('r#"') != 2 or text.count('"#,') != 2:
+              raise SystemExit('expected exactly two needless raw string hash pairs')
+          text = text.replace('r#"', 'r"').replace('"#,', '",')
+          path.write_text(text, encoding='utf-8')
+          PY
+          cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
 
       - name: audit v17 release workflow metadata
         shell: python
@@ -120,11 +137,14 @@ jobs:
         run: node scripts/check-windows-tun-safety.mjs
 
       - name: commit audited v17 writeback
+        shell: bash
         run: |
+          set -euo pipefail
           rm -f .release/v17-maintenance-trigger.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/utils/windows_network.rs scripts/check-windows-tun-safety.mjs .github/workflows/karing-diagnostics-once.yml .release/v17-maintenance-trigger.txt
+          git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/utils/windows_network.rs .github/workflows/karing-diagnostics-once.yml
+          git add -A .release/v17-maintenance-trigger.txt
           git diff --cached --check
           git commit -m "style: format and audit Windows hotspot v17 release"
           git push origin HEAD:fix/windows-hotspot-self-capture-v17
@@ -134,13 +154,13 @@ jobs:
   #   runs-on: ubuntu-latest
   #   steps:
   #     - uses: actions/checkout@v6
-
+  #
   #     - name: install Rust stable
   #       uses: dtolnay/rust-toolchain@stable
-
+  #
   #     - name: install taplo-cli
   #       uses: taiki-e/install-action@v2.68.8
   #       with:
   #         tool: taplo-cli
-
+  #
   #     - run: taplo fmt --check --diff
