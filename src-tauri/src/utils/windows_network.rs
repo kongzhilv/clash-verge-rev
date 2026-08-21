@@ -491,8 +491,8 @@ pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::{
-        WindowsInterface, WindowsIpv4Address, WindowsUpstreamRoute, apply_managed_upstream, ipv4_cidr,
-        is_hotspot_side, managed_route_guards, tun_needs_managed_upstream,
+        WindowsInterface, WindowsIpv4Address, WindowsUpstreamRoute, apply_managed_upstream, ipv4_cidr, is_hotspot_side,
+        managed_route_guards, tun_needs_managed_upstream,
     };
     use serde_yaml_ng::{Mapping, Value};
     use std::{collections::BTreeMap, net::Ipv4Addr};
@@ -574,7 +574,8 @@ mod tests {
         let filter = WindowsInterface {
             index: 33,
             alias: "Local Area Connection* 10-WFP Native MAC Layer LightWeight Filter-0000".into(),
-            description: "Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000".into(),
+            description: "Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000"
+                .into(),
             is_up: true,
         };
         assert!(is_hotspot_side(&real));
