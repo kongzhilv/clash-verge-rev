@@ -37,6 +37,8 @@ use crate::{
 const EVENT_DEBOUNCE: Duration = Duration::from_millis(750);
 const WATCHDOG_INTERVAL: Duration = Duration::from_secs(10);
 const LOOP_INTERVAL: Duration = Duration::from_millis(250);
+const GUARD_CONFIRM_SAMPLES: usize = 3;
+const GUARD_CONFIRM_DELAY: Duration = Duration::from_millis(500);
 const MAX_INTERFACES: usize = 48;
 
 static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
@@ -98,6 +100,13 @@ struct WindowsTopologySnapshot {
     hotspot_present: bool,
     hotspot_subnets: Vec<String>,
     physical_upstream: Option<PhysicalUpstreamSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct HotspotGuardSignature {
+    present: bool,
+    interfaces: Vec<String>,
+    subnets: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -484,64 +493,124 @@ async fn capture_snapshot() -> Result<WindowsTopologySnapshot> {
         .map_err(|error| anyhow!("Windows topology task failed: {error}"))?
 }
 
-fn hotspot_state(snapshot: &WindowsTopologySnapshot) -> Vec<&InterfaceSnapshot> {
-    snapshot
+fn hotspot_guard_signature(snapshot: &WindowsTopologySnapshot) -> Option<HotspotGuardSignature> {
+    if !snapshot.hotspot_present {
+        return Some(HotspotGuardSignature {
+            present: false,
+            interfaces: Vec::new(),
+            subnets: Vec::new(),
+        });
+    }
+
+    if snapshot.hotspot_subnets.is_empty() {
+        // Adapter Up is not the same as an ICS-ready hotspot. Windows commonly
+        // raises interface notifications before the private IPv4 address exists.
+        return None;
+    }
+
+    let mut interfaces = snapshot
         .interfaces
         .iter()
-        .filter(|interface| interface.is_hotspot_side)
-        .collect()
+        .filter(|interface| interface.is_up && interface.is_hotspot_side)
+        .map(|interface| interface.alias.clone())
+        .filter(|alias| !alias.trim().is_empty())
+        .collect::<Vec<_>>();
+    interfaces.sort();
+    interfaces.dedup();
+
+    Some(HotspotGuardSignature {
+        present: true,
+        interfaces,
+        subnets: snapshot.hotspot_subnets.clone(),
+    })
 }
 
-async fn refresh_hotspot_guards(previous: &WindowsTopologySnapshot, current: &WindowsTopologySnapshot) {
+async fn confirm_guard_signature(expected: &HotspotGuardSignature) -> Result<Option<WindowsTopologySnapshot>> {
+    let mut latest = None;
+    for sample in 0..GUARD_CONFIRM_SAMPLES {
+        if sample > 0 {
+            tokio::time::sleep(GUARD_CONFIRM_DELAY).await;
+        }
+
+        let snapshot = capture_snapshot().await?;
+        if hotspot_guard_signature(&snapshot).as_ref() != Some(expected) {
+            return Ok(None);
+        }
+        latest = Some(snapshot);
+    }
+    Ok(latest)
+}
+
+async fn refresh_runtime_network_state(
+    reason: &'static str,
+    previous: &WindowsTopologySnapshot,
+    current: &WindowsTopologySnapshot,
+) -> bool {
     let manager = CoreManager::global();
     if matches!(*manager.get_running_mode(), RunningMode::NotRunning) {
         diagnostics::info(
             "windows-hotspot-guard",
             "refresh-skipped-core-stopped",
             json!({
+                "reason": reason,
                 "previous_hotspot_present": previous.hotspot_present,
                 "current_hotspot_present": current.hotspot_present,
                 "previous_hotspot_subnets": &previous.hotspot_subnets,
                 "current_hotspot_subnets": &current.hotspot_subnets,
             }),
         );
-        return;
+        return true;
     }
 
     if !Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false) {
-        diagnostics::info("windows-hotspot-guard", "refresh-skipped-tun-disabled", json!({}));
-        return;
+        diagnostics::info(
+            "windows-hotspot-guard",
+            "refresh-skipped-tun-disabled",
+            json!({"reason": reason}),
+        );
+        return true;
     }
 
     diagnostics::info(
         "windows-hotspot-guard",
         "refresh-requested",
         json!({
+            "reason": reason,
             "previous_hotspot_present": previous.hotspot_present,
             "current_hotspot_present": current.hotspot_present,
             "previous_hotspot_subnets": &previous.hotspot_subnets,
             "current_hotspot_subnets": &current.hotspot_subnets,
-            "strategy": "regenerate-authoritative-runtime-and-recompute-managed-guards",
+            "strategy": "stable-hotspot-state+managed-proxy-interface-binding",
             "physical_interface_pinned": false,
+            "proxy_socket_binding": "per-node/provider-managed-when-unset",
         }),
     );
 
     match manager.update_config_forced().await {
-        Ok(outcome) if outcome.is_valid() => diagnostics::info(
-            "windows-hotspot-guard",
-            "refresh-succeeded",
-            json!({"outcome": outcome.to_string()}),
-        ),
-        Ok(outcome) => diagnostics::warn(
-            "windows-hotspot-guard",
-            "refresh-not-applied",
-            json!({"outcome": outcome.to_string()}),
-        ),
-        Err(error) => diagnostics::error(
-            "windows-hotspot-guard",
-            "refresh-failed",
-            json!({"error": error.to_string()}),
-        ),
+        Ok(outcome) if outcome.is_valid() => {
+            diagnostics::info(
+                "windows-hotspot-guard",
+                "refresh-succeeded",
+                json!({"reason": reason, "outcome": outcome.to_string()}),
+            );
+            true
+        }
+        Ok(outcome) => {
+            diagnostics::warn(
+                "windows-hotspot-guard",
+                "refresh-not-applied",
+                json!({"reason": reason, "outcome": outcome.to_string()}),
+            );
+            false
+        }
+        Err(error) => {
+            diagnostics::error(
+                "windows-hotspot-guard",
+                "refresh-failed",
+                json!({"reason": reason, "error": error.to_string()}),
+            );
+            false
+        }
     }
 }
 
@@ -558,6 +627,10 @@ async fn monitor_loop() {
             "event_debounce_ms": EVENT_DEBOUNCE.as_millis(),
             "watchdog_interval_ms": WATCHDOG_INTERVAL.as_millis(),
             "runtime_hotspot_guard": true,
+            "hotspot_ready_requires_private_subnet": true,
+            "guard_confirm_samples": GUARD_CONFIRM_SAMPLES,
+            "guard_confirm_delay_ms": GUARD_CONFIRM_DELAY.as_millis(),
+            "managed_proxy_interface_binding": true,
             "physical_interface_pinned": false,
         }),
     );
@@ -582,6 +655,7 @@ async fn monitor_loop() {
             }
         }
     };
+    let mut last_applied_guard = hotspot_guard_signature(&previous);
 
     let mut generations = Generations::load();
     let mut last_watchdog = Instant::now();
@@ -630,9 +704,10 @@ async fn monitor_loop() {
             continue;
         }
 
-        let hotspot_changed = hotspot_state(&current) != hotspot_state(&previous)
+        let current_guard = hotspot_guard_signature(&current);
+        let hotspot_changed = current.hotspot_present != previous.hotspot_present
             || current.hotspot_subnets != previous.hotspot_subnets
-            || current.hotspot_present != previous.hotspot_present;
+            || current_guard != hotspot_guard_signature(&previous);
         let default_routes_changed = current.default_routes != previous.default_routes;
         let physical_upstream_changed = current.physical_upstream != previous.physical_upstream;
 
@@ -655,13 +730,66 @@ async fn monitor_loop() {
                 "current_hotspot_subnets": &current.hotspot_subnets,
                 "previous_physical_upstream": &previous.physical_upstream,
                 "current_physical_upstream": &current.physical_upstream,
+                "hotspot_guard_ready": current_guard.is_some(),
                 "snapshot": &current,
             }),
         );
 
-        if hotspot_changed {
-            refresh_hotspot_guards(&previous, &current).await;
+        if current.hotspot_present && current_guard.is_none() {
+            diagnostics::info(
+                "windows-hotspot-guard",
+                "refresh-deferred-hotspot-starting",
+                json!({
+                    "reason": "hotspot-adapter-up-without-private-subnet",
+                    "current_hotspot_subnets": &current.hotspot_subnets,
+                    "strategy": "wait-for-ics-private-address-before-any-topology-reload",
+                }),
+            );
+            previous = current;
+            continue;
         }
+
+        if let Some(signature) = current_guard.clone()
+            && last_applied_guard.as_ref() != Some(&signature)
+        {
+            match confirm_guard_signature(&signature).await {
+                Ok(Some(confirmed)) => {
+                    diagnostics::info(
+                        "windows-hotspot-guard",
+                        "guard-state-confirmed",
+                        json!({
+                            "signature": &signature,
+                            "samples": GUARD_CONFIRM_SAMPLES,
+                        }),
+                    );
+                    if refresh_runtime_network_state("hotspot-guard-state-changed", &previous, &confirmed).await {
+                        last_applied_guard = Some(signature);
+                    }
+                }
+                Ok(None) => {
+                    diagnostics::info(
+                        "windows-hotspot-guard",
+                        "refresh-deferred-topology-still-settling",
+                        json!({
+                            "expected_signature": &signature,
+                            "samples": GUARD_CONFIRM_SAMPLES,
+                        }),
+                    );
+                }
+                Err(error) => {
+                    diagnostics::warn(
+                        "windows-hotspot-guard",
+                        "guard-confirmation-failed",
+                        json!({"error": error.to_string()}),
+                    );
+                }
+            }
+        } else if physical_upstream_changed {
+            // Proxy nodes/providers are managed against the stable physical NIC. A real
+            // upstream change must regenerate Runtime so those managed bindings follow it.
+            refresh_runtime_network_state("physical-upstream-changed", &previous, &current).await;
+        }
+
         previous = current;
     }
 }
@@ -677,7 +805,10 @@ pub fn ensure_monitor_running() {
 
 #[cfg(test)]
 mod tests {
-    use super::{AddressRow, InterfaceRow, is_hotspot_side};
+    use super::{
+        AddressRow, HotspotGuardSignature, InterfaceRow, InterfaceSnapshot, WindowsTopologySnapshot,
+        hotspot_guard_signature, is_hotspot_side,
+    };
     use std::net::Ipv4Addr;
 
     fn interface(index: u32, alias: &str, description: &str, is_up: bool) -> InterfaceRow {
@@ -711,9 +842,32 @@ mod tests {
         (present, subnets.into_iter().collect())
     }
 
+    fn snapshot(hotspot_present: bool, hotspot_subnets: Vec<&str>, interface_up: bool) -> WindowsTopologySnapshot {
+        WindowsTopologySnapshot {
+            interfaces: vec![InterfaceSnapshot {
+                index: 27,
+                alias: "Local Area Connection* 10".into(),
+                description: "Microsoft Wi-Fi Direct Virtual Adapter #2".into(),
+                is_up: interface_up,
+                is_hotspot_side: true,
+                is_virtual_or_tunnel: true,
+                ipv4: Vec::new(),
+            }],
+            default_routes: Vec::new(),
+            hotspot_present,
+            hotspot_subnets: hotspot_subnets.into_iter().map(str::to_string).collect(),
+            physical_upstream: None,
+        }
+    }
+
     #[test]
     fn recognizes_windows_hotspot_base_adapter() {
-        let adapter = interface(27, "本地连接* 10", "Microsoft Wi-Fi Direct Virtual Adapter #2", true);
+        let adapter = interface(
+            27,
+            "Local Area Connection* 10",
+            "Microsoft Wi-Fi Direct Virtual Adapter #2",
+            true,
+        );
         assert!(is_hotspot_side(&adapter));
     }
 
@@ -721,7 +875,7 @@ mod tests {
     fn ignores_wifi_direct_filter_components() {
         let filter = interface(
             33,
-            "本地连接* 10-WFP Native MAC Layer LightWeight Filter-0000",
+            "Local Area Connection* 10-WFP Native MAC Layer LightWeight Filter-0000",
             "Microsoft Wi-Fi Direct Virtual Adapter #2-WFP Native MAC Layer LightWeight Filter-0000",
             true,
         );
@@ -737,8 +891,18 @@ mod tests {
     #[test]
     fn hotspot_subnets_do_not_short_circuit_on_first_active_adapter() {
         let interfaces = [
-            interface(7, "本地连接* 9", "Microsoft Wi-Fi Direct Virtual Adapter", true),
-            interface(27, "本地连接* 10", "Microsoft Wi-Fi Direct Virtual Adapter #2", true),
+            interface(
+                7,
+                "Local Area Connection* 9",
+                "Microsoft Wi-Fi Direct Virtual Adapter",
+                true,
+            ),
+            interface(
+                27,
+                "Local Area Connection* 10",
+                "Microsoft Wi-Fi Direct Virtual Adapter #2",
+                true,
+            ),
         ];
         let addresses = [AddressRow {
             interface_index: 27,
@@ -748,5 +912,34 @@ mod tests {
         let (present, subnets) = capture_hotspot_test_state(&interfaces, &addresses);
         assert!(present);
         assert_eq!(subnets, vec!["172.22.44.0/24"]);
+    }
+
+    #[test]
+    fn hotspot_guard_waits_for_ics_private_address() {
+        assert_eq!(hotspot_guard_signature(&snapshot(true, vec![], true)), None);
+    }
+
+    #[test]
+    fn hotspot_guard_ready_state_contains_runtime_interface_and_subnet() {
+        assert_eq!(
+            hotspot_guard_signature(&snapshot(true, vec!["172.22.44.0/24"], true,)),
+            Some(HotspotGuardSignature {
+                present: true,
+                interfaces: vec!["Local Area Connection* 10".into()],
+                subnets: vec!["172.22.44.0/24".into()],
+            })
+        );
+    }
+
+    #[test]
+    fn hotspot_guard_off_state_is_actionable_for_cleanup() {
+        assert_eq!(
+            hotspot_guard_signature(&snapshot(false, vec![], false)),
+            Some(HotspotGuardSignature {
+                present: false,
+                interfaces: Vec::new(),
+                subnets: Vec::new(),
+            })
+        );
     }
 }

@@ -31,10 +31,11 @@ const forbidText = (key, text, label) => {
     failures.push(`${label}: still contains ${text}`)
 }
 
+// Core lifecycle and authoritative Runtime regeneration.
 requireText(
   'manager',
   'core is stopped; staged configuration without starting it',
-  'background config updates do not silently start a stopped proxy core',
+  'background config update never starts a stopped core',
 )
 requireText(
   'manager',
@@ -44,43 +45,35 @@ requireText(
 requireText(
   'manager',
   'prepare_windows_tun_runtime_for_start',
-  'Windows has a dedicated pre-start TUN safety path',
+  'Windows has a pre-start TUN safety path',
 )
 requireText(
   'manager',
   'source_has_interface || app_has_interface',
-  'explicit user interface selection is preserved',
+  'explicit top-level user interface selection is preserved',
 )
 requireText(
   'manager',
   'tokio::task::spawn_blocking(detect_stable_upstream)',
-  'native Windows route inspection does not block the async runtime',
+  'native route inspection stays off the async executor',
 )
 requireText(
   'manager',
   'dynamic-upstream-enabled',
-  'managed Windows TUN records that runtime outbound selection remains dynamic',
+  'dynamic upstream behavior remains observable',
 )
 requireText(
   'manager',
   'top_level_interface_pinned',
-  'diagnostics make stale-interface pinning directly observable',
+  'diagnostics still expose accidental top-level pinning',
 )
 requireText(
   'lifecycle',
   'self.prepare_windows_tun_runtime_for_start().await?;',
-  'stable upstream validation happens before core startup',
+  'managed route and proxy bindings are installed before core startup',
 )
-requireText(
-  'windowsNetwork',
-  'const STABLE_SAMPLES: usize = 6;',
-  'route selection requires a quiet stability window',
-)
-requireText(
-  'windowsNetwork',
-  'const MAX_SAMPLES: usize = 24;',
-  'route selection has a bounded retry window',
-)
+
+// Native Windows route selection and TUN guards.
 for (const api of [
   'GetIpForwardTable2',
   'GetIfTable2',
@@ -95,19 +88,34 @@ for (const api of [
   )
 }
 requireText(
-  'manifest',
-  '"Win32_NetworkManagement_Ndis"',
-  'native adapter status types are enabled without shelling out',
+  'windowsNetwork',
+  'const STABLE_SAMPLES: usize = 6;',
+  'physical upstream selection requires stable samples',
 )
 requireText(
   'windowsNetwork',
-  'is_hotspot_side',
-  'Windows hotspot private-side interfaces are identified',
+  'const MAX_SAMPLES: usize = 24;',
+  'physical upstream stability check is bounded',
+)
+requireText(
+  'windowsNetwork',
+  'skip_as_source: row.SkipAsSource',
+  'address inventory retains SkipAsSource state',
+)
+requireText(
+  'windowsNetwork',
+  '!address.skip_as_source',
+  'physical outbound source rejects SkipAsSource addresses',
+)
+requireText(
+  'windowsNetwork',
+  'Do not discard them merely because Windows marks SkipAsSource.',
+  'ICS private-side route guards retain valid private addresses',
 )
 requireText(
   'windowsNetwork',
   'is_filter_component',
-  'Wi-Fi Direct filter components are not treated as real hotspot interfaces',
+  'Wi-Fi Direct filter components are separated from the base adapter',
 )
 for (const marker of [
   'wfp native mac layer',
@@ -118,85 +126,39 @@ for (const marker of [
   requireText(
     'windowsNetwork',
     marker,
-    `Windows route guard ignores derived adapter component ${marker}`,
+    `derived adapter component ${marker} is filtered`,
   )
 }
 requireText(
   'windowsNetwork',
-  'skip_as_source: row.SkipAsSource',
-  'Windows address inventory retains SkipAsSource metadata instead of discarding ICS addresses',
-)
-requireText(
-  'windowsNetwork',
-  '!address.skip_as_source',
-  'physical upstream source selection still rejects SkipAsSource addresses',
-)
-requireText(
-  'windowsNetwork',
-  'Do not discard them merely because Windows marks SkipAsSource.',
-  'hotspot route guards explicitly keep preferred private-side addresses even when SkipAsSource is set',
-)
-requireText(
-  'windowsNetwork',
-  'wi-fi direct virtual adapter',
-  'Wi-Fi Direct hotspot adapters are classified without locale-specific commands',
-)
-requireText(
-  'windowsNetwork',
   'route-exclude-address',
-  'LAN and hotspot subnets are protected from TUN auto-route',
+  'LAN/hotspot CIDRs are excluded from TUN auto-route',
 )
 requireText(
   'windowsNetwork',
   'exclude-interface',
-  'hotspot-side interfaces can be excluded from TUN routing',
+  'hotspot-side base interface can be excluded',
 )
 requireText(
   'windowsNetwork',
   'include-interface',
-  'explicit include-interface is preserved to avoid conflicting Mihomo options',
-)
-forbidText(
-  'windowsNetwork',
-  'config.insert(\n        Value::from("interface-name")',
-  'automatic Windows TUN must not pin the top-level outbound interface to the adapter seen at startup',
+  'explicit include-interface is respected',
 )
 requireText(
   'windowsNetwork',
   'Value::from("auto-detect-interface"), Value::from(true)',
-  'managed Windows TUN keeps Mihomo interface auto-detection enabled for reconnect and failover',
-)
-requireText(
-  'windowsNetwork',
-  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
-  'Rust regression explicitly covers dynamic outbound selection plus LAN/hotspot guards',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
-  'Rust regression covers ICS private addresses marked SkipAsSource',
-)
-requireText(
-  'windowsNetwork',
-  'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
-  'Rust regression rejects Wi-Fi Direct WFP/QoS derived interfaces',
+  'Mihomo physical route auto detection remains enabled',
 )
 requireText(
   'windowsNetwork',
   'route_exclude_addresses.join(",")',
-  'stability signature includes hotspot and LAN exclusions',
-)
-requireText(
-  'utils',
-  'pub mod windows_network;',
-  'Windows route guard is compiled into the app',
+  'route stability signature includes dynamic LAN/hotspot exclusions',
 )
 forbidText(
   'windowsNetwork',
-  '192.168.137.0/24\".into()\n        );',
-  'production Windows hotspot guard must not assume the common ICS subnet',
+  'config.insert(\n        Value::from("interface-name")',
+  'managed Windows TUN must not pin the top-level outbound interface',
 )
-
 for (const forbidden of [
   'powershell.exe',
   'POWERSHELL_ROUTE_QUERY',
@@ -208,96 +170,98 @@ for (const forbidden of [
   forbidText(
     'windowsNetwork',
     forbidden,
-    'Windows TUN safety must not spawn PowerShell or depend on shell cmdlets',
+    'Windows TUN safety does not depend on shell commands',
   )
 }
 
+// v2.5.4-karing.17: proactively bind Mihomo proxy sockets to the stable
+// physical NIC, while preserving user bindings.
 requireText(
-  'coreMod',
-  'pub mod outbound_diagnostics;',
-  'outbound failure diagnostics module is compiled into the core',
+  'windowsNetwork',
+  'ManagedProxyBindingStats',
+  'managed proxy binding is observable and testable',
 )
 requireText(
-  'coreManager',
-  'crate::core::outbound_diagnostics::ensure_monitor_running();',
-  'outbound diagnostics monitor starts once with CoreManager initialization',
-)
-for (const marker of [
-  'outbound-failure-summary',
-  'outbound-connection-churn',
-  'proxy-group-health-check-triggered',
-]) {
-  requireText(
-    'outboundDiagnostics',
-    marker,
-    `structured outbound diagnostic event ${marker} is present`,
-  )
-}
-requireText(
-  'outboundDiagnostics',
-  'RunningMode::Service',
-  'outbound diagnostics covers service mode logs',
+  'windowsNetwork',
+  'apply_managed_proxy_bindings',
+  'managed proxy binding is part of Windows TUN preparation',
 )
 requireText(
-  'outboundDiagnostics',
-  'service_latest.log',
-  'service mode diagnostics tails the service rolling log',
+  'windowsNetwork',
+  'config.get_mut("proxies")',
+  'inline proxy nodes receive a managed interface binding',
 )
 requireText(
-  'outboundDiagnostics',
-  'RunningMode::Sidecar',
-  'outbound diagnostics covers sidecar mode logs',
+  'windowsNetwork',
+  'config.get_mut("proxy-providers")',
+  'proxy providers receive a managed interface override',
 )
 requireText(
-  'outboundDiagnostics',
-  'sidecar_latest.log',
-  'sidecar mode diagnostics tails the sidecar rolling log',
+  'windowsNetwork',
+  'Value::String("interface-name".to_owned())',
+  'managed binding uses Mihomo interface-name without top-level pinning',
 )
 requireText(
-  'outboundDiagnostics',
-  'tokio::fs::read_to_string',
-  'outbound diagnostics tails logs without blocking the async runtime',
+  'windowsNetwork',
+  'provider.get_mut(&override_key)',
+  'provider override is merged rather than replacing user configuration',
 )
 requireText(
-  'outboundDiagnostics',
-  'MAX_DIMENSION_VALUES',
-  'outbound diagnostic aggregation has a bounded cardinality',
+  'windowsNetwork',
+  'managed_proxy_sockets_bind_to_stable_physical_interface',
+  'Rust regression covers managed node/provider socket binding',
 )
 requireText(
-  'outboundDiagnostics',
-  'SAMPLE_ERROR_MAX_CHARS',
-  'outbound diagnostic error samples are length bounded',
+  'windowsNetwork',
+  'explicit_provider_binding_is_preserved',
+  'Rust regression preserves explicit provider bindings',
 )
 requireText(
-  'outboundDiagnostics',
-  '?<query-redacted>',
-  'outbound diagnostic error samples redact URL query strings',
+  'windowsNetwork',
+  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
+  'Rust regression keeps top-level route selection dynamic',
 )
 requireText(
-  'outboundDiagnostics',
-  'heuristic": true',
-  'connection churn is explicitly marked as a heuristic rather than a proven failure',
+  'windowsNetwork',
+  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
+  'Rust regression retains ICS SkipAsSource coverage',
+)
+requireText(
+  'windowsNetwork',
+  'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
+  'Rust regression rejects derived Wi-Fi Direct filter interfaces',
+)
+forbidText(
+  'windowsNetwork',
+  '211.20.18.215',
+  'production self-capture defense must not hardcode one proxy endpoint',
+)
+forbidText(
+  'windowsNetwork',
+  'xueshan168.cc',
+  'production self-capture defense must not hardcode one provider domain',
 )
 
+// Single topology watcher with an ICS-ready state machine.
 requireText(
   'coreMod',
   'pub mod windows_network_diagnostics;',
-  'Windows runtime topology diagnostics module is compiled into the core',
+  'Windows topology diagnostics module is compiled',
 )
 requireText(
   'coreManager',
   'crate::core::windows_network_diagnostics::ensure_monitor_running();',
-  'Windows runtime topology diagnostics starts once with CoreManager initialization',
+  'the topology watcher starts once',
 )
 forbidText(
   'coreMod',
   'windows_hotspot_runtime_guard',
-  'hotspot repair must reuse the existing topology watcher instead of adding a second Windows network watcher',
+  'do not introduce a second Windows hotspot watcher',
 )
 forbidText(
   'coreManager',
   'windows_hotspot_runtime_guard',
-  'CoreManager must start only one Windows topology watcher',
+  'CoreManager starts only one Windows topology watcher',
 )
 for (const api of [
   'NotifyIpInterfaceChange',
@@ -307,7 +271,7 @@ for (const api of [
   requireText(
     'windowsTopologyDiagnostics',
     api,
-    `Windows runtime topology monitor subscribes to ${api}`,
+    `runtime topology monitor subscribes to ${api}`,
   )
 }
 for (const marker of [
@@ -322,78 +286,154 @@ for (const marker of [
   'refresh-requested',
   'refresh-succeeded',
   'refresh-failed',
+  'refresh-deferred-hotspot-starting',
+  'guard-state-confirmed',
+  'refresh-deferred-topology-still-settling',
 ]) {
   requireText(
     'windowsTopologyDiagnostics',
     marker,
-    `Windows topology/hotspot runtime marker ${marker} is present`,
+    `runtime topology/state-machine marker ${marker} is present`,
   )
 }
 requireText(
   'windowsTopologyDiagnostics',
-  'is_filter_component',
-  'topology diagnostics distinguishes the real Wi-Fi Direct base adapter from filter components',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'for interface in interfaces',
-  'hotspot subnet collection iterates all active hotspot adapters instead of short-circuiting on the first one',
-)
-forbidText(
-  'windowsTopologyDiagnostics',
-  'interfaces.iter().any(|interface|',
-  'hotspot subnet collection must not use side-effectful short-circuit any()',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'manager.update_config_forced().await',
-  'hotspot topology changes regenerate authoritative Runtime and recompute managed TUN guards',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'physical_interface_pinned": false',
-  'runtime hotspot refresh explicitly preserves dynamic physical upstream selection',
-)
-forbidText(
-  'windowsTopologyDiagnostics',
-  '192.168.137.0/24',
-  'topology watcher must derive hotspot subnet from actual adapter addressing',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'hotspot_subnets_do_not_short_circuit_on_first_active_adapter',
-  'Rust regression covers the v2.5.4-karing.15 hotspot_subnets short-circuit bug',
+  'const GUARD_CONFIRM_SAMPLES: usize = 3;',
+  'hotspot Ready/Off transitions need multiple confirming snapshots',
 )
 requireText(
   'windowsTopologyDiagnostics',
   'WATCHDOG_INTERVAL',
-  'runtime topology diagnostics has a bounded low-frequency notification fallback',
+  'topology watcher retains bounded watchdog sampling',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'is_filter_component',
+  'topology watcher filters derived Wi-Fi Direct components',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot-adapter-up-without-private-subnet',
+  'adapter Up without an ICS subnet is explicitly Starting, not Ready',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'wait-for-ics-private-address-before-any-topology-reload',
+  'half-initialized hotspot state suppresses all topology-driven reloads',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'manager.update_config_forced().await',
+  'confirmed topology regenerates authoritative Runtime before apply',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  '"physical-upstream-changed"',
+  'managed proxy binding follows real physical upstream changes',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'physical_interface_pinned": false',
+  'runtime diagnostics make top-level pinning state explicit',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot_guard_waits_for_ics_private_address',
+  'Rust regression covers the Off -> Starting -> Ready boundary',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot_guard_off_state_is_actionable_for_cleanup',
+  'Rust regression covers stable hotspot shutdown cleanup',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot_subnets_do_not_short_circuit_on_first_active_adapter',
+  'Rust regression retains the .15 hotspot subnet fix',
+)
+forbidText(
+  'windowsTopologyDiagnostics',
+  'interfaces.iter().any(|interface|',
+  'hotspot subnet collection must not use side-effectful any()',
+)
+forbidText(
+  'windowsTopologyDiagnostics',
+  '192.168.137.0/24',
+  'runtime topology code must derive ICS subnet from Windows',
 )
 requireText(
   'windowsTopologyDiagnostics',
   'tokio::task::spawn_blocking(capture_topology)',
-  'runtime topology snapshots do not block the async runtime',
+  'Win32 topology snapshots do not block the async executor',
+)
+
+// Existing outbound diagnostics remain available for regression evidence.
+requireText(
+  'coreMod',
+  'pub mod outbound_diagnostics;',
+  'outbound diagnostics module is compiled',
+)
+requireText(
+  'coreManager',
+  'crate::core::outbound_diagnostics::ensure_monitor_running();',
+  'outbound diagnostics starts once',
+)
+for (const marker of [
+  'outbound-failure-summary',
+  'outbound-connection-churn',
+  'proxy-group-health-check-triggered',
+]) {
+  requireText(
+    'outboundDiagnostics',
+    marker,
+    `structured outbound event ${marker} is retained`,
+  )
+}
+requireText(
+  'outboundDiagnostics',
+  'service_latest.log',
+  'service-mode failures remain observable',
+)
+requireText(
+  'outboundDiagnostics',
+  'sidecar_latest.log',
+  'sidecar-mode failures remain observable',
+)
+requireText(
+  'outboundDiagnostics',
+  '?<query-redacted>',
+  'diagnostic URL queries remain redacted',
+)
+requireText(
+  'outboundDiagnostics',
+  'heuristic": true',
+  'connection churn remains explicitly heuristic',
+)
+
+requireText(
+  'utils',
+  'pub mod windows_network;',
+  'Windows managed routing module is compiled',
+)
+requireText(
+  'manifest',
+  '"Win32_NetworkManagement_Ndis"',
+  'native adapter status types are enabled',
 )
 
 if (failures.length > 0) {
-  console.error('Windows TUN and outbound diagnostics regression failed:')
+  console.error('Windows TUN/self-capture regression failed:')
   for (const failure of failures) console.error(`- ${failure}`)
   process.exit(1)
 }
 
-console.log('Windows TUN and outbound diagnostics regression passed.')
-console.log('[通过] 启动阶段不再执行 PowerShell / ExecutionPolicy Bypass')
-console.log('[通过] 默认路由通过 Win32 IP Helper API 在进程内读取')
-console.log('[通过] Wi-Fi Direct/移动热点私网接口与 LAN CIDR 受 TUN 路由保护')
+console.log('Windows TUN/self-capture regression passed.')
+console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不再 reload')
+console.log('[通过] Starting 期间任何 topology-driven reload 都被抑制')
+console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
 console.log(
-  '[通过] TUN 不再钉死启动时物理网卡，断网恢复/切网继续由 Mihomo 动态跟随出口',
+  '[通过] 未显式绑定的 proxy/provider 出站 socket 动态绑定稳定物理 NIC',
 )
-console.log(
-  '[通过] Service/Sidecar 出站失败、健康检查与短时连接抖动进入有界结构化诊断',
-)
-console.log(
-  '[通过] 出站错误样本限制长度并移除 URL query，连接抖动明确标记为 heuristic',
-)
-console.log(
-  '[通过] 单一 Windows topology watcher 同时记录并动态修复移动热点 guard，且热点 CIDR/接口均来自运行期拓扑',
-)
+console.log('[通过] 用户显式 node/provider/interface 配置保持优先')
+console.log('[通过] 顶层 interface-name 仍不固定，物理切网由运行期稳定探测跟随')
+console.log('[通过] 热点 CIDR、接口名、代理 endpoint 均不写死')
