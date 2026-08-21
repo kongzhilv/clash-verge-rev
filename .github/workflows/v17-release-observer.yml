@@ -1,0 +1,65 @@
+name: v17 release observer
+
+on:
+  workflow_run:
+    workflows: ['Karing 桌面版审查与发行']
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  audit:
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'feature/karing-style-diversion'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Audit release run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          TAG: v2.5.4-karing.17
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$CONCLUSION" != success ]; then
+            jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100")
+            failed=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | "- \(.name) (job \(.id)): \(.conclusion)"] | join("\n")' <<<"$jobs")
+            gh pr comment 9 --repo "$GITHUB_REPOSITORY" --body "❌ **v2.5.4-karing.17 release run failed**\n\n- run: ${RUN_ID}\n- commit: \`${RUN_SHA}\`\n\n${failed}"
+            exit 1
+          fi
+
+          release=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+          target=$(jq -r '.target_commitish' <<<"$release")
+          draft=$(jq -r '.draft' <<<"$release")
+          prerelease=$(jq -r '.prerelease' <<<"$release")
+          asset_count=$(jq '.assets | length' <<<"$release")
+          release_id=$(jq -r '.id' <<<"$release")
+          latest_id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.id')
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')
+
+          test "$target" = "$RUN_SHA"
+          test "$tag_sha" = "$RUN_SHA"
+          test "$draft" = false
+          test "$prerelease" = false
+          test "$asset_count" -eq 14
+          test "$release_id" = "$latest_id"
+          jq -e '[.assets[].name] | index("SHA256SUMS.txt") != null and index("BUILD_INFO.txt") != null' <<<"$release" >/dev/null
+
+          rm -rf verify
+          mkdir verify
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p SHA256SUMS.txt -p BUILD_INFO.txt -D verify
+          checksum_count=$(grep -Ec '^[0-9a-fA-F]{64}  .+' verify/SHA256SUMS.txt)
+          test "$checksum_count" -eq 12
+          grep -Fq "$RUN_SHA" verify/BUILD_INFO.txt
+          while IFS= read -r file; do
+            jq -e --arg file "$file" '.assets | any(.name == $file)' <<<"$release" >/dev/null
+          done < <(awk '{sub(/^\*/, "", $2); print $2}' verify/SHA256SUMS.txt)
+
+          gh pr comment 9 --repo "$GITHUB_REPOSITORY" --body "✅ **v2.5.4-karing.17 fully released and audited**\n\n- release run: ${RUN_ID} (success)\n- target/tag commit: \`${RUN_SHA}\`\n- Latest: yes\n- draft/prerelease: false/false\n- public assets: 14\n- installer checksum entries: 12\n- SHA256SUMS + BUILD_INFO: verified"
