@@ -1,15 +1,16 @@
 name: v17 maintenance helper
 
 on:
-  push:
-    paths:
-      - .github/workflows/v17-maintenance-helper.yml
+  pull_request:
+    branches:
+      - feature/karing-style-diversion
 
 permissions:
   contents: write
 
 jobs:
   maintain-v17:
+    if: github.event.pull_request.head.ref == 'fix/windows-hotspot-self-capture-v17'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -26,7 +27,7 @@ jobs:
           text = path.read_text(encoding='utf-8')
 
           old_gate = "          check_not_contains src-tauri/src/utils/windows_network.rs 'Value::from(\"interface-name\")' 'Windows TUN 自动托管路径不再写死顶层物理出口接口'"
-          new_gate = "          check_not_contains src-tauri/src/utils/windows_network.rs 'config.insert(' 'Windows TUN 自动托管路径不直接写入顶层物理出口接口'\n          check_contains src-tauri/src/utils/windows_network.rs 'apply_managed_proxy_bindings' '代理节点与 provider 使用受管物理 NIC 绑定避免 TUN 自捕获'\n          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'refresh-deferred-hotspot-starting' '热点 Adapter Up 但 ICS 私网未就绪时延迟重载'\n          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'guard-state-confirmed' '热点 Ready/Off 状态需稳定确认后才刷新 Runtime'"
+          new_gate = "          check_not_contains src-tauri/src/utils/windows_network.rs 'config.insert(\n        Value::from(\"interface-name\")' 'Windows TUN 自动托管路径不直接写入顶层物理出口接口'\n          check_contains src-tauri/src/utils/windows_network.rs 'apply_managed_proxy_bindings' '代理节点与 provider 使用受管物理 NIC 绑定避免 TUN 自捕获'\n          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'refresh-deferred-hotspot-starting' '热点 Adapter Up 但 ICS 私网未就绪时延迟重载'\n          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'guard-state-confirmed' '热点 Ready/Off 状态需稳定确认后才刷新 Runtime'"
           if old_gate not in text:
               raise SystemExit('expected legacy top-level interface gate not found')
           text = text.replace(old_gate, new_gate, 1)
