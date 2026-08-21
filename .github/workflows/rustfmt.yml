@@ -8,7 +8,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   HUSKY: 0
@@ -45,6 +45,8 @@ jobs:
   v17-audited-writeback:
     if: github.event.pull_request.head.ref == 'fix/windows-hotspot-self-capture-v17'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
