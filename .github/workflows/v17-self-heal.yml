@@ -1,0 +1,76 @@
+name: v17 Windows self-heal
+
+on:
+  push:
+    branches:
+      - fix/windows-hotspot-self-capture-v17
+    paths:
+      - .github/workflows/v17-self-heal.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/windows-hotspot-self-capture-v17
+          fetch-depth: 0
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
+      - name: Apply exact Windows Clippy repair
+        shell: pwsh
+        run: |
+          $path = 'src-tauri/src/utils/windows_network.rs'
+          $text = [System.IO.File]::ReadAllText($path)
+          $openCount = ([regex]::Matches($text, [regex]::Escape('r#"'))).Count
+          $closeCount = ([regex]::Matches($text, [regex]::Escape('"#,'))).Count
+          if ($openCount -ne 2 -or $closeCount -ne 2) {
+            throw "Expected exactly two needless raw-string hashes; found opens=$openCount closes=$closeCount"
+          }
+          $text = $text.Replace('r#"', 'r"').Replace('"#,', '",')
+          [System.IO.File]::WriteAllText($path, $text, [System.Text.UTF8Encoding]::new($false))
+
+      - name: Rustfmt touched Rust files
+        shell: pwsh
+        run: |
+          rustfmt --edition 2021 src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/utils/windows_network.rs
+          if (Select-String -Path src-tauri/src/utils/windows_network.rs -SimpleMatch 'r#"' -Quiet) {
+            throw 'needless raw-string hashes remain'
+          }
+
+      - name: Verify Windows Clippy
+        run: cargo clippy-all
+
+      - name: Verify Windows TUN safety gate
+        run: node scripts/check-windows-tun-safety.mjs
+
+      - name: Review final patch shape
+        shell: pwsh
+        run: |
+          git diff --check
+          $changed = @(git diff --name-only)
+          $allowed = @(
+            'src-tauri/src/core/windows_network_diagnostics.rs',
+            'src-tauri/src/utils/windows_network.rs'
+          )
+          $unexpected = @($changed | Where-Object { $_ -notin $allowed })
+          if ($unexpected.Count -gt 0) {
+            throw "Unexpected formatter changes: $($unexpected -join ', ')"
+          }
+          git diff --stat
+
+      - name: Commit verified repair and remove bootstrap workflow
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/utils/windows_network.rs
+          git rm .github/workflows/v17-self-heal.yml
+          git commit -m 'fix(windows): apply runner-verified v17 formatting and clippy repair'
+          git push origin HEAD:fix/windows-hotspot-self-capture-v17
