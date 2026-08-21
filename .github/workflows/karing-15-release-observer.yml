@@ -1,0 +1,156 @@
+name: Karing .15 Release Observer
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/karing-15-release-observer.yml'
+  workflow_run:
+    workflows:
+      - Karing 桌面版审查与发行
+    types:
+      - requested
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: karing-15-release-observer
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: dee74da9d91e58ac927b6290ada086b05195bed2
+  RELEASE_TAG: v2.5.4-karing.15
+  RELEASE_BRANCH: feature/karing-style-diversion
+  MAIN_WORKFLOW: karing-diagnostics-once.yml
+  PR_NUMBER: '7'
+  STATUS_MARKER: '<!-- karing-15-release-observer -->'
+
+jobs:
+  report:
+    if: ${{ github.event_name == 'push' || (github.event.workflow_run.head_branch == 'feature/karing-style-diversion' && github.event.workflow_run.head_sha == 'dee74da9d91e58ac927b6290ada086b05195bed2') }}
+    runs-on: ubuntu-latest
+    outputs:
+      verified: ${{ steps.inspect.outputs.verified }}
+      completed: ${{ steps.inspect.outputs.completed }}
+      conclusion: ${{ steps.inspect.outputs.conclusion }}
+    steps:
+      - name: Resolve and inspect the pinned release run
+        id: inspect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = 'workflow_run' ]; then
+            run_id='${{ github.event.workflow_run.id }}'
+          else
+            run_id=''
+            for attempt in $(seq 1 36); do
+              run_id=$(gh api --method GET \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${MAIN_WORKFLOW}/runs" \
+                -f branch="${RELEASE_BRANCH}" -f per_page=30 \
+                --jq ".workflow_runs[] | select(.head_sha == \"${SOURCE_SHA}\") | .id" | head -n1 || true)
+              if [ -n "$run_id" ]; then
+                break
+              fi
+              sleep 10
+            done
+          fi
+
+          if [ -z "$run_id" ]; then
+            status='not-found'
+            conclusion='pending'
+            run_url="https://github.com/${GITHUB_REPOSITORY}/actions/workflows/${MAIN_WORKFLOW}"
+            completed=false
+            verified=false
+            failed_jobs=''
+            release_state='not-checked'
+          else
+            run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")
+            status=$(jq -r '.status' <<<"$run_json")
+            conclusion=$(jq -r '.conclusion // "pending"' <<<"$run_json")
+            run_url=$(jq -r '.html_url' <<<"$run_json")
+            if [ "$status" = 'completed' ]; then completed=true; else completed=false; fi
+            failed_jobs=''
+            release_state='not-checked'
+            verified=false
+
+            if [ "$completed" = true ]; then
+              jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")
+              failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
+
+              if [ "$conclusion" = 'success' ] && [ -z "$failed_jobs" ]; then
+                if release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" 2>/dev/null); then
+                  asset_count=$(jq '.assets | length' <<<"$release_json")
+                  target=$(jq -r '.target_commitish' <<<"$release_json")
+                  draft=$(jq -r '.draft' <<<"$release_json")
+                  prerelease=$(jq -r '.prerelease' <<<"$release_json")
+                  latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+                  tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')
+                  if [ "$asset_count" -eq 14 ] \
+                    && [ "$target" = "$SOURCE_SHA" ] \
+                    && [ "$tag_sha" = "$SOURCE_SHA" ] \
+                    && [ "$draft" = false ] \
+                    && [ "$prerelease" = false ] \
+                    && [ "$latest_tag" = "$RELEASE_TAG" ]; then
+                    release_state="verified: 14 assets, target/tag=${SOURCE_SHA}, latest=true, draft=false, prerelease=false"
+                    verified=true
+                  else
+                    release_state="mismatch: assets=${asset_count}, target=${target}, tag_sha=${tag_sha}, latest=${latest_tag}, draft=${draft}, prerelease=${prerelease}"
+                  fi
+                else
+                  release_state='missing'
+                fi
+              fi
+            fi
+          fi
+
+          echo "completed=$completed" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$conclusion" >> "$GITHUB_OUTPUT"
+          echo "verified=$verified" >> "$GITHUB_OUTPUT"
+
+          body="${STATUS_MARKER}
+          ## Karing .15 release observer
+
+          - source: \`${SOURCE_SHA}\`
+          - release tag: \`${RELEASE_TAG}\`
+          - run: \`${run_id:-not-found}\`
+          - status: \`${status}\`
+          - conclusion: \`${conclusion}\`
+          - failed jobs: \`${failed_jobs:-none}\`
+          - release verification: \`${release_state}\`
+          - url: ${run_url}"
+
+          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"${STATUS_MARKER}\")) | .id" | tail -n1 || true)
+          if [ -n "$comment_id" ]; then
+            jq -n --arg body "$body" '{body:$body}' | \
+              gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input - >/dev/null
+          else
+            jq -n --arg body "$body" '{body:$body}' | \
+              gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input - >/dev/null
+          fi
+
+      - name: Remove one-shot observer after verified release
+        if: ${{ steps.inspect.outputs.completed == 'true' && steps.inspect.outputs.conclusion == 'success' && steps.inspect.outputs.verified == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git checkout dev
+          rm -f .github/workflows/karing-15-release-observer.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/karing-15-release-observer.yml
+          git commit -m 'chore: remove completed karing .15 observer'
+          git push origin dev
