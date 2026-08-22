@@ -223,8 +223,9 @@ requireText(
 )
 
 // v2.5.4-karing.18: Windows strict-route is a Runtime-only compatibility
-// lease while a real hotspot private-side interface is active. The saved Clash
-// configuration remains authoritative and is regenerated when the hotspot exits.
+// lease while a real hotspot private-side interface is active and ICS-ready.
+// The saved Clash configuration remains authoritative and is regenerated when
+// the hotspot exits.
 requireText(
   'windowsNetwork',
   'apply_hotspot_strict_route_compat',
@@ -242,8 +243,13 @@ requireText(
 )
 requireText(
   'windowsNetwork',
-  'route.excluded_interfaces.is_empty()',
-  'strict-route relaxation only activates when a real managed hotspot interface exists',
+  'if !route.hotspot_ready',
+  'strict-route relaxation waits for a real ICS private subnet, not adapter Up alone',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_ready = true;',
+  'native route guard records the ICS-ready boundary from a real private CIDR',
 )
 requireText(
   'windowsNetwork',
@@ -254,6 +260,11 @@ requireText(
   'windowsNetwork',
   'hotspot_runtime_preserves_an_existing_strict_route_false',
   'Rust regression preserves an already-disabled strict-route setting',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_adapter_without_private_address_is_not_ready',
+  'Rust regression prevents strict-route compatibility during hotspot Starting state',
 )
 requireText(
   'windowsNetwork',
@@ -473,7 +484,9 @@ console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Ru
 console.log(
   '[通过] 未显式绑定的 proxy/provider 出站 socket 动态绑定稳定物理 NIC',
 )
-console.log('[通过] 热点 Ready 时仅在 Runtime 临时关闭 strict-route，保存配置不变并可自动恢复')
+console.log(
+  '[通过] 热点 Ready 时仅在 Runtime 临时关闭 strict-route，保存配置不变并可自动恢复',
+)
 console.log('[通过] 用户显式 node/provider/interface 配置保持优先')
 console.log('[通过] 顶层 interface-name 仍不固定，物理切网由运行期稳定探测跟随')
 console.log('[通过] 热点 CIDR、接口名、代理 endpoint 均不写死')
