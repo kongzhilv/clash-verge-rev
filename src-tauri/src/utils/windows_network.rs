@@ -543,6 +543,25 @@ fn apply_managed_proxy_bindings(config: &mut Mapping, interface_alias: &str) -> 
     stats
 }
 
+fn apply_hotspot_strict_route_compat(tun: &mut Mapping, route: &WindowsUpstreamRoute) -> bool {
+    if route.excluded_interfaces.is_empty() {
+        return false;
+    }
+
+    let key = Value::from("strict-route");
+    if tun.get(&key).and_then(Value::as_bool) != Some(true) {
+        return false;
+    }
+
+    // Windows Mobile Hotspot/ICS plus strict-route has an upstream self-capture
+    // failure class where Mihomo's own outbound sockets can re-enter the TUN and
+    // be rejected as loopback. This is a Runtime-only compatibility lease: the
+    // authoritative saved Clash config is not mutated, and the topology watcher
+    // regenerates it automatically when the hotspot disappears.
+    tun.insert(key, Value::from(false));
+    true
+}
+
 pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute) -> ManagedProxyBindingStats {
     if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
         // Keep top-level outbound selection dynamic. The managed per-proxy binding below
@@ -556,6 +575,8 @@ pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute
         if !has_configured_values(tun.get("include-interface")) {
             merge_string_sequence(tun, "exclude-interface", &route.excluded_interfaces);
         }
+
+        apply_hotspot_strict_route_compat(tun, route);
     }
 
     // Mihomo supports interface-name on each proxy and provider override. Binding only
@@ -624,6 +645,30 @@ mod tests {
         let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
         assert!(routes.iter().any(|value| value.as_str() == Some("192.168.1.0/24")));
         assert!(routes.iter().any(|value| value.as_str() == Some("172.22.44.0/24")));
+    }
+
+    #[test]
+    fn hotspot_runtime_relaxes_strict_route_only_while_hotspot_is_managed() {
+        let mut hotspot_config = mapping("{tun: {enable: true, auto-route: true, strict-route: true}}");
+        apply_managed_upstream(&mut hotspot_config, &route());
+        let hotspot_tun = hotspot_config.get("tun").and_then(Value::as_mapping).unwrap();
+        assert_eq!(hotspot_tun.get("strict-route").and_then(Value::as_bool), Some(false));
+
+        let mut no_hotspot = route();
+        no_hotspot.excluded_interfaces.clear();
+        no_hotspot.route_exclude_addresses = vec!["192.168.1.0/24".into()];
+        let mut normal_config = mapping("{tun: {enable: true, auto-route: true, strict-route: true}}");
+        apply_managed_upstream(&mut normal_config, &no_hotspot);
+        let normal_tun = normal_config.get("tun").and_then(Value::as_mapping).unwrap();
+        assert_eq!(normal_tun.get("strict-route").and_then(Value::as_bool), Some(true));
+    }
+
+    #[test]
+    fn hotspot_runtime_preserves_an_existing_strict_route_false() {
+        let mut config = mapping("{tun: {enable: true, auto-route: true, strict-route: false}}");
+        apply_managed_upstream(&mut config, &route());
+        let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
+        assert_eq!(tun.get("strict-route").and_then(Value::as_bool), Some(false));
     }
 
     #[test]
