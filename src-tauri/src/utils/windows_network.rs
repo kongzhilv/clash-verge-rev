@@ -52,6 +52,7 @@ pub struct WindowsUpstreamRoute {
     pub effective_metric: u32,
     pub excluded_interfaces: Vec<String>,
     pub route_exclude_addresses: Vec<String>,
+    pub hotspot_ready: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -66,12 +67,13 @@ pub struct ManagedProxyBindingStats {
 impl WindowsUpstreamRoute {
     fn signature(&self) -> String {
         format!(
-            "{}|{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}|{}",
             self.interface_index,
             self.source_address,
             self.gateway,
             self.excluded_interfaces.join(","),
-            self.route_exclude_addresses.join(",")
+            self.route_exclude_addresses.join(","),
+            self.hotspot_ready
         )
     }
 }
@@ -263,9 +265,10 @@ fn managed_route_guards(
     interfaces: &BTreeMap<u32, WindowsInterface>,
     addresses: &[WindowsIpv4Address],
     upstream_address: &WindowsIpv4Address,
-) -> (Vec<String>, Vec<String>) {
+) -> (Vec<String>, Vec<String>, bool) {
     let mut excluded_interfaces = BTreeSet::new();
     let mut excluded_cidrs = BTreeSet::new();
+    let mut hotspot_ready = false;
 
     if let Some(cidr) = ipv4_cidr(upstream_address.address, upstream_address.prefix_length)
         && upstream_address.prefix_length >= 8
@@ -292,6 +295,7 @@ fn managed_route_guards(
                 continue;
             }
             if let Some(cidr) = ipv4_cidr(address.address, address.prefix_length) {
+                hotspot_ready = true;
                 excluded_cidrs.insert(cidr);
             }
         }
@@ -300,6 +304,7 @@ fn managed_route_guards(
     (
         excluded_interfaces.into_iter().collect(),
         excluded_cidrs.into_iter().collect(),
+        hotspot_ready,
     )
 }
 
@@ -336,7 +341,8 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
         };
 
         let effective_metric = route.Metric.saturating_add(interface_metric);
-        let (excluded_interfaces, route_exclude_addresses) = managed_route_guards(&interfaces, &addresses, source);
+        let (excluded_interfaces, route_exclude_addresses, hotspot_ready) =
+            managed_route_guards(&interfaces, &addresses, source);
 
         candidates.push(WindowsUpstreamRoute {
             interface_index: route.InterfaceIndex,
@@ -349,6 +355,7 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
             effective_metric,
             excluded_interfaces,
             route_exclude_addresses,
+            hotspot_ready,
         });
     }
 
@@ -544,7 +551,7 @@ fn apply_managed_proxy_bindings(config: &mut Mapping, interface_alias: &str) -> 
 }
 
 fn apply_hotspot_strict_route_compat(tun: &mut Mapping, route: &WindowsUpstreamRoute) -> bool {
-    if route.excluded_interfaces.is_empty() {
+    if !route.hotspot_ready {
         return false;
     }
 
@@ -611,6 +618,7 @@ mod tests {
             effective_metric: 25,
             excluded_interfaces: vec!["Local Area Connection* 12".into()],
             route_exclude_addresses: vec!["192.168.1.0/24".into(), "172.22.44.0/24".into()],
+            hotspot_ready: true,
         }
     }
 
@@ -657,6 +665,7 @@ mod tests {
         let mut no_hotspot = route();
         no_hotspot.excluded_interfaces.clear();
         no_hotspot.route_exclude_addresses = vec!["192.168.1.0/24".into()];
+        no_hotspot.hotspot_ready = false;
         let mut normal_config = mapping("{tun: {enable: true, auto-route: true, strict-route: true}}");
         apply_managed_upstream(&mut normal_config, &no_hotspot);
         let normal_tun = normal_config.get("tun").and_then(Value::as_mapping).unwrap();
@@ -827,11 +836,47 @@ proxy-providers:
                 },
             ),
         ]);
-        let (excluded_interfaces, excluded_routes) =
+        let (excluded_interfaces, excluded_routes, hotspot_ready) =
             managed_route_guards(&interfaces, &[upstream.clone(), hotspot], &upstream);
         assert_eq!(excluded_interfaces, vec!["Local Area Connection* 10"]);
         assert!(excluded_routes.contains(&"192.168.1.0/24".to_string()));
         assert!(excluded_routes.contains(&"172.31.45.0/24".to_string()));
+        assert!(hotspot_ready);
+    }
+
+    #[test]
+    fn hotspot_adapter_without_private_address_is_not_ready() {
+        let upstream = WindowsIpv4Address {
+            interface_index: 28,
+            address: Ipv4Addr::new(192, 168, 1, 13),
+            prefix_length: 24,
+            skip_as_source: false,
+        };
+        let interfaces = BTreeMap::from([
+            (
+                27,
+                WindowsInterface {
+                    index: 27,
+                    alias: "Local Area Connection* 10".into(),
+                    description: "Microsoft Wi-Fi Direct Virtual Adapter #2".into(),
+                    is_up: true,
+                },
+            ),
+            (
+                28,
+                WindowsInterface {
+                    index: 28,
+                    alias: "Ethernet".into(),
+                    description: "Physical Ethernet".into(),
+                    is_up: true,
+                },
+            ),
+        ]);
+        let (excluded_interfaces, excluded_routes, hotspot_ready) =
+            managed_route_guards(&interfaces, std::slice::from_ref(&upstream), &upstream);
+        assert_eq!(excluded_interfaces, vec!["Local Area Connection* 10"]);
+        assert_eq!(excluded_routes, vec!["192.168.1.0/24"]);
+        assert!(!hotspot_ready);
     }
 
     #[test]
