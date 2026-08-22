@@ -1,4 +1,4 @@
-name: Karing .16 发行核验
+name: Karing .18 发行核验
 
 on:
   push:
@@ -19,14 +19,14 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.16 正式发行
+    name: 核验 v2.5.4-karing.18 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '8'
-      STATUS_MARKER: '<!-- karing-v254-karing16-release-audit -->'
+      PR_NUMBER: '10'
+      STATUS_MARKER: '<!-- karing-v254-karing18-release-audit -->'
     steps:
       - name: 检出发行分支
         uses: actions/checkout@v7
@@ -38,9 +38,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          # 观察器自身是紧跟发行源提交之后的只读审计提交，因此父提交
+          # 才是必须与 Release tag / target_commitish 完全一致的发行源。
           source_sha=$(git rev-parse HEAD^)
-          release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.16'
+          release_tag=$(git show "${source_sha}:.release/karing-release-tag.txt" | tr -d '\r\n')
+          test "$release_tag" = 'v2.5.4-karing.18'
 
           post_failure() {
             local reason="$1"
