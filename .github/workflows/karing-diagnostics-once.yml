@@ -622,20 +622,21 @@ jobs:
           EOF
 
           cat > release-assets/release-notes.md <<'EOF'
-          # Clash Verge Rev Karing v${{ needs.review.outputs.version }}
+          # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
 
-          本轮在 Windows TUN 网络安全基础上新增结构化网络诊断时间线，并继续保留连接详情成熟化改造：
+          本轮继续收敛 Windows TUN + 移动热点（ICS）场景下的核心自身出站回灌问题：
 
-          - 新增独立、轮转的 `diagnostic.latest.log` 结构化事件时间线，带会话 ID、单调序号、版本/平台信息，并对 password/token/UUID/订阅等敏感字段递归脱敏。
-          - 在配置生成前记录保存的 TUN/系统代理/DNS 开关与 Clash 网络关键字段，生成后记录 Runtime 的 IPv6、TUN、DNS 摘要，可直接识别“UI 已关闭 IPv6 但 Runtime 被重新开启”等覆盖问题。
-          - Windows TUN 记录物理出口检测、网卡索引/网关/metric、排除接口与网段、动态出口策略写入后的 Runtime；系统代理记录 apply/reset 前后的实际 OS 读回状态。
-          - 修复 Windows TUN 现有严格 Clippy 门禁问题，并保持生产代码 `-D warnings`。
-          - 保留 Windows TUN 启动/热重载前的真实 IPv4 默认路由稳定检查和热点/LAN 路由保护，但不再固定顶层出口；Mihomo `auto-detect-interface` 保持开启，可在断网恢复或以太网/WLAN 切换后自动跟随新出口。
-          - 连接详情继续采用 adaptive list-detail：宽屏双栏，普通窗口详情在连接工作区内单栏接管，并提供明确返回导航。
-          - Windows TUN/热点安全、程序归因、UI 成熟度与诊断日志均纳入发行门禁。
-          - Mihomo 控制 API 在 Core 启动后采用短窗口有界 readiness 重试，修复 named-pipe 已建立但 `/configs` 尚不可稳定解码时的首次 mode readback 竞态；仅记录控制面重试/恢复，不重复采集逐连接流量日志。
-          - 修复 Windows TUN 运行中断网再联网/以太网与 WLAN 切换后的出站失效：不再把顶层 `interface-name` 钉死到启动时网卡，保持 Mihomo 动态出口监视能力。
-          - Release tag 改为 `.release/karing-release-tag.txt` 显式 staging，正式流水线不再硬编码历史标签。
+          - 保留 `.17` 已落地的单一 Windows IP Helper topology watcher、热点 Starting -> Ready 稳态确认、动态 `exclude-interface` / `route-exclude-address`，以及未显式绑定 proxy/provider 的物理 NIC 绑定。
+          - 新增原生 `hotspot_ready` 状态：Wi-Fi Direct adapter 仅 Up、尚未获得 Preferred 私网 IPv4/CIDR 时仍视为 Starting，不触发本轮兼容降级；只有真实 ICS 私网地址出现后才进入 Ready。
+          - 针对 Mihomo / sing-tun 当前 Windows `strict-route=true` 自捕获故障类：仅在热点已 ICS-ready 且保存配置要求 `strict-route=true` 时，在生成的 Runtime 副本临时将其设为 `false`；用户保存的 Clash 配置不修改。
+          - 热点关闭后由现有 topology watcher 从权威保存配置重新生成 Runtime，`strict-route` 自动恢复为用户原值；原本就是 `strict-route=false` 的配置保持不变。
+          - 顶层 `interface-name` 仍不固定，`auto-detect-interface=true` 继续用于断网恢复及以太网/WLAN 切换；热点 CIDR、接口名、机场域名和节点 endpoint 均不硬编码。
+          - 新增 Rust 边界回归与 `check-windows-tun-safety.mjs` 发行门禁，覆盖 Ready/Starting、恢复、用户显式绑定、ICS `SkipAsSource`、Wi-Fi Direct filter component 和硬编码回归。
+          - 诊断链继续聚合 DIRECT、DNS、proxy transport 与 `reject loopback connection` 证据，便于实机复测后继续判断是否仍存在 Mihomo 上游 self-process bypass 缺陷。
+
+          重要兼容性说明：Windows `strict-route` 可增强普通多宿主 DNS 解析场景的防泄漏能力。本版为了避免已复现的热点自捕获/整机断网，只在 Mobile Hotspot/ICS Ready 窗口临时关闭该 Runtime 开关；热点关闭即恢复。若上游 Mihomo / sing-tun 后续提供可靠 self-process bypass，应优先移除此兼容降级。
+
+          上游参考：MetaCubeX/mihomo #3122、#2618；SagerNet/sing-box #4415。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
 
@@ -693,7 +694,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Control Readiness + Mode Consistency" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Hotspot TUN Self-Capture Mitigation" \
             --notes-file release-assets/release-notes.md \
             --latest
 

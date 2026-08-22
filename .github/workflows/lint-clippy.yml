@@ -78,6 +78,11 @@ jobs:
         working-directory: ./src-tauri
         run: cargo clippy-all
 
+      - name: Run Windows network unit tests
+        if: matrix.os == 'windows-latest'
+        working-directory: ./src-tauri
+        run: cargo test --all-targets --features clippy windows_network -- --nocapture
+
       - name: Run Logging Check
         working-directory: ./src-tauri
         shell: bash

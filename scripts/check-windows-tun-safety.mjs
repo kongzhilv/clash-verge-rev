@@ -221,6 +221,51 @@ requireText(
   'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
   'Rust regression keeps top-level route selection dynamic',
 )
+
+// v2.5.4-karing.18: Windows strict-route is a Runtime-only compatibility
+// lease while a real hotspot private-side interface is active and ICS-ready.
+// The saved Clash configuration remains authoritative and is regenerated when
+// the hotspot exits.
+requireText(
+  'windowsNetwork',
+  'apply_hotspot_strict_route_compat',
+  'Windows hotspot strict-route compatibility lease is implemented',
+)
+requireText(
+  'windowsNetwork',
+  'Windows Mobile Hotspot/ICS plus strict-route has an upstream self-capture',
+  'compatibility lease documents the upstream failure class it mitigates',
+)
+requireText(
+  'windowsNetwork',
+  'tun.insert(key, Value::from(false));',
+  'hotspot Runtime can relax strict-route without changing saved config',
+)
+requireText(
+  'windowsNetwork',
+  'if !route.hotspot_ready',
+  'strict-route relaxation waits for a real ICS private subnet, not adapter Up alone',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_ready = true;',
+  'native route guard records the ICS-ready boundary from a real private CIDR',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_runtime_relaxes_strict_route_only_while_hotspot_is_managed',
+  'Rust regression covers hotspot-only strict-route relaxation and restoration boundary',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_runtime_preserves_an_existing_strict_route_false',
+  'Rust regression preserves an already-disabled strict-route setting',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_adapter_without_private_address_is_not_ready',
+  'Rust regression prevents strict-route compatibility during hotspot Starting state',
+)
 requireText(
   'windowsNetwork',
   'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
@@ -240,6 +285,11 @@ forbidText(
   'windowsNetwork',
   'xueshan168.cc',
   'production self-capture defense must not hardcode one provider domain',
+)
+forbidText(
+  'windowsNetwork',
+  '192.168.137.0/24',
+  'production hotspot compatibility must not hardcode the common ICS subnet',
 )
 
 // Single topology watcher with an ICS-ready state machine.
@@ -433,6 +483,9 @@ console.log('[通过] Starting 期间任何 topology-driven reload 都被抑制'
 console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
 console.log(
   '[通过] 未显式绑定的 proxy/provider 出站 socket 动态绑定稳定物理 NIC',
+)
+console.log(
+  '[通过] 热点 Ready 时仅在 Runtime 临时关闭 strict-route，保存配置不变并可自动恢复',
 )
 console.log('[通过] 用户显式 node/provider/interface 配置保持优先')
 console.log('[通过] 顶层 interface-name 仍不固定，物理切网由运行期稳定探测跟随')
