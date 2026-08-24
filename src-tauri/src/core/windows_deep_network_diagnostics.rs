@@ -26,8 +26,6 @@ use windows::Win32::{
 use crate::{core::diagnostics, process::AsyncHandler};
 
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(5);
-const MAX_ROUTES: usize = 128;
-const MAX_INTERFACES: usize = 64;
 static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -154,14 +152,11 @@ fn capture_snapshot() -> Result<DeepNetworkSnapshot> {
         .map(|row| (row.InterfaceIndex, utf16z(&row.Alias)))
         .collect::<BTreeMap<_, _>>();
 
+    // Keep every Windows interface, including down/virtual/filter interfaces. In a
+    // failure report those rows are often the evidence that explains a route/WFP
+    // transition, so the deep diagnostic must not silently filter them out.
     let mut interface_snapshots = interfaces
         .iter()
-        .filter(|row| {
-            row.OperStatus == IfOperStatusUp
-                || utf16z(&row.Alias).to_lowercase().contains("mihomo")
-                || utf16z(&row.Description).to_lowercase().contains("wi-fi direct")
-                || utf16z(&row.Description).to_lowercase().contains("wifi direct")
-        })
         .map(|row| {
             let ip_state = interface_ip_state(row.InterfaceIndex);
             let mut ipv4 = addresses
@@ -199,8 +194,9 @@ fn capture_snapshot() -> Result<DeepNetworkSnapshot> {
         })
         .collect::<Vec<_>>();
     interface_snapshots.sort_by_key(|row| row.index);
-    interface_snapshots.truncate(MAX_INTERFACES);
 
+    // Keep the complete IPv4 route table. Volume is controlled by only emitting a
+    // snapshot when the state changes, never by truncating the evidence itself.
     let mut route_snapshots = routes
         .iter()
         .filter_map(|row| {
@@ -233,7 +229,6 @@ fn capture_snapshot() -> Result<DeepNetworkSnapshot> {
                 right.interface_index,
             ))
     });
-    route_snapshots.truncate(MAX_ROUTES);
 
     Ok(DeepNetworkSnapshot {
         interfaces: interface_snapshots,
@@ -254,15 +249,17 @@ async fn monitor_loop() {
         json!({
             "sample_interval_ms": SAMPLE_INTERVAL.as_millis(),
             "captures": [
-                "interface-guid",
+                "all-interface-guid-and-state",
                 "forwarding-enabled",
                 "weak-host-send",
                 "weak-host-receive",
                 "disable-default-routes",
                 "interface-metric",
                 "skip-as-source",
-                "full-ipv4-route-table"
+                "complete-ipv4-route-table"
             ],
+            "snapshot_truncation": false,
+            "emit_policy": "state-change-only",
             "native_api_only": true,
         }),
     );
