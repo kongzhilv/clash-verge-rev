@@ -88,10 +88,20 @@ for (const marker of [
   'deep-monitor-started',
   'deep-baseline',
   'deep-changed',
-  'full-ipv4-route-table',
+  'all-interface-guid-and-state',
+  'complete-ipv4-route-table',
+  'snapshot_truncation',
+  'state-change-only',
   'native_api_only',
 ]) {
   requireText('deep', marker, `deep Windows diagnostic ${marker}`)
+}
+for (const forbidden of ['MAX_ROUTES', 'MAX_INTERFACES', '.truncate(']) {
+  forbidText(
+    'deep',
+    forbidden,
+    'deep Windows diagnostics must preserve complete interface and route evidence',
+  )
 }
 
 requireText(
@@ -165,6 +175,4 @@ console.log('[通过] active lease 每轮读回角色，漂移先恢复再重建
 console.log('[通过] snapshot 只在两个 COM 目标都解析成功后落盘')
 console.log('[通过] 无关 PRIVATE ICS 被 fail-closed 保护，不会被租约覆盖')
 console.log('[通过] 退出先恢复 ICS，再销毁 TUN，并抑制 monitor 重新套 lease')
-console.log(
-  '[通过] 深度日志覆盖 GUID、Forwarding、WeakHost、SkipAsSource 与完整 IPv4 路由',
-)
+console.log('[通过] 深度日志保留全部接口和完整 IPv4 路由，不截断证据')
