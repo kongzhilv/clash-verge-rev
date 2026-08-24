@@ -1,0 +1,74 @@
+name: v19 release metadata helper
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  patch:
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.issue.number == 11 &&
+      github.event.comment.body == 'v19-release-metadata-apply-6f3a2d'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout v19 branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/windows-hotspot-managed-interface-v19
+          fetch-depth: 0
+
+      - name: Patch release workflow metadata and gates
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  "check_contains src-tauri/src/utils/windows_network.rs 'Value::from(\"auto-detect-interface\"), Value::from(true)' 'Windows TUN 保持 Mihomo 动态出口检测以恢复断网/切网'",
+                  "check_contains src-tauri/src/utils/windows_managed_interface.rs 'config.insert(interface_key, Value::from(alias));' 'Windows TUN Runtime 将全部 Mihomo outbound 绑定稳定物理出口'\n          check_contains src-tauri/src/utils/windows_managed_interface.rs 'tun.insert(Value::from(\"auto-detect-interface\"), Value::from(false));' 'managed lease 下由应用 topology watcher 独占物理出口选择'",
+              ),
+              (
+                  "check_not_contains src-tauri/src/utils/windows_network.rs 'Value::from(\"interface-name\")' 'Windows TUN 自动托管路径不再写死顶层物理出口接口'",
+                  "check_not_contains src-tauri/src/utils/windows_network.rs 'config.insert(\\n        Value::from(\"interface-name\")' 'route guard 模块不直接拥有顶层物理出口 lease'\n          check_contains src-tauri/src/utils/windows_managed_interface.rs 'windows_network_explicit_user_interface_is_never_overwritten' '用户显式顶层 interface-name 永远优先于 managed lease'",
+              ),
+              (
+                  "check_contains src-tauri/src/core/manager/config.rs 'dynamic-upstream-enabled' 'Windows TUN 记录动态出口恢复策略'",
+                  "check_contains src-tauri/src/core/manager/config.rs 'managed-physical-interface-lease-applied' 'Windows TUN 记录 Runtime-managed 全出站物理接口 lease'\n          check_contains src-tauri/src/core/manager/config.rs 'all-mihomo-outbound' 'Windows TUN 日志记录 managed lease 覆盖全部 Mihomo outbound'\n          check_contains src-tauri/src/core/manager/config.rs 'regenerate-runtime-on-physical-upstream-change' '物理上游切换通过 topology watcher 重生成 Runtime 迁移 lease'",
+              ),
+              (
+                  "          本轮继续收敛 Windows TUN + 移动热点（ICS）场景下的核心自身出站回灌问题：\n\n          - 保留 `.17` 已落地的单一 Windows IP Helper topology watcher、热点 Starting -> Ready 稳态确认、动态 `exclude-interface` / `route-exclude-address`，以及未显式绑定 proxy/provider 的物理 NIC 绑定。\n          - 新增原生 `hotspot_ready` 状态：Wi-Fi Direct adapter 仅 Up、尚未获得 Preferred 私网 IPv4/CIDR 时仍视为 Starting，不触发本轮兼容降级；只有真实 ICS 私网地址出现后才进入 Ready。\n          - 针对 Mihomo / sing-tun 当前 Windows `strict-route=true` 自捕获故障类：仅在热点已 ICS-ready 且保存配置要求 `strict-route=true` 时，在生成的 Runtime 副本临时将其设为 `false`；用户保存的 Clash 配置不修改。\n          - 热点关闭后由现有 topology watcher 从权威保存配置重新生成 Runtime，`strict-route` 自动恢复为用户原值；原本就是 `strict-route=false` 的配置保持不变。\n          - 顶层 `interface-name` 仍不固定，`auto-detect-interface=true` 继续用于断网恢复及以太网/WLAN 切换；热点 CIDR、接口名、机场域名和节点 endpoint 均不硬编码。\n          - 新增 Rust 边界回归与 `check-windows-tun-safety.mjs` 发行门禁，覆盖 Ready/Starting、恢复、用户显式绑定、ICS `SkipAsSource`、Wi-Fi Direct filter component 和硬编码回归。\n          - 诊断链继续聚合 DIRECT、DNS、proxy transport 与 `reject loopback connection` 证据，便于实机复测后继续判断是否仍存在 Mihomo 上游 self-process bypass 缺陷。",
+                  "          本轮针对 **Wi-Fi 作为真实上游 + Windows Mobile Hotspot/Wi-Fi Direct 作为 ICS 下游** 的共存场景，按成熟 TUN 实现的 default-interface / bind-interface 模型收敛核心自身出站回灌：\n\n          - Windows IP Helper 仍以 6 次稳定采样选择真实物理默认出口；Wi-Fi Direct/ICS 只作为热点下游处理，不会被误选为上游。\n          - 当用户没有显式顶层 `interface-name` 时，在生成的 Runtime 副本设置 `interface-name=<当前稳定物理 NIC>`，让 DIRECT、DNS、provider health-check、proxy 等 **全部 Mihomo outbound** 使用同一真实物理出口。\n          - managed lease 生效时将 `tun.auto-detect-interface=false`，避免 Mihomo 自己的自动选择与应用层 topology watcher 在 Wi-Fi + 热点变化窗口形成两个相互竞争的 selector；真实物理出口变化时由现有单一 watcher 重新生成 Runtime 并迁移 lease。\n          - 用户显式顶层 `interface-name` 永远优先；proxy/provider 自己的显式接口绑定也继续保留，`.17` 的 per-node/provider managed binding 作为 defense-in-depth。\n          - 保留 `.18` 的热点 Starting -> Ready 稳态、动态 `exclude-interface` / `route-exclude-address`、ICS-ready `strict-route` Runtime-only 兼容降级；热点关闭后仍从权威保存配置自动恢复。\n          - 热点 CIDR、热点接口、物理 Wi-Fi/以太网名称、机场域名和节点 endpoint 均不硬编码。\n          - 诊断新增 `managed-physical-interface-lease-applied`，并记录 alias/index/source/gateway、热点 Ready、前后物理上游、lease scope、Mihomo auto-detect 最终值和 failover reason；原有 outbound 聚合继续记录 `verge-mihomo.exe` 的 DIRECT/DNS/proxy transport 失败，实机日志可直接关联 lease 是否真正生效。",
+              ),
+              (
+                  "--title \"Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Hotspot TUN Self-Capture Mitigation\"",
+                  "--title \"Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Wi-Fi + Hotspot TUN Outbound Lease\"",
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, got {count}: {old[:100]}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Commit exact release workflow patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff -- .github/workflows/karing-diagnostics-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/karing-diagnostics-once.yml
+          git commit -m 'ci: publish v19 managed interface lease release metadata'
+          git push origin HEAD:fix/windows-hotspot-managed-interface-v19
