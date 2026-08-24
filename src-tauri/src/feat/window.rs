@@ -75,6 +75,44 @@ pub async fn clean_async() -> bool {
             RunningMode::NotRunning
         );
 
+        // The leased ICS PUBLIC side is the Mihomo TUN adapter. Restore Windows ICS
+        // before asking Mihomo to destroy that adapter, otherwise the original PUBLIC
+        // role may no longer be recoverable during shutdown/restart.
+        #[cfg(target_os = "windows")]
+        let ics_restore_success = match timeout(
+            Duration::from_secs(3),
+            crate::core::windows_hotspot_ics::restore_now("shutdown"),
+        )
+        .await
+        {
+            Ok(Ok(restored)) => {
+                diagnostics::info(
+                    "shutdown",
+                    "windows-ics-restore-completed",
+                    serde_json::json!({"restored": restored}),
+                );
+                true
+            }
+            Ok(Err(error)) => {
+                diagnostics::error(
+                    "shutdown",
+                    "windows-ics-restore-failed",
+                    serde_json::json!({"error": error.to_string()}),
+                );
+                false
+            }
+            Err(_) => {
+                diagnostics::error(
+                    "shutdown",
+                    "windows-ics-restore-timeout",
+                    serde_json::json!({"timeout_ms": 3000}),
+                );
+                false
+            }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let ics_restore_success = true;
+
         if tun_enabled && core_running {
             let disable_tun = serde_json::json!({ "tun": { "enable": false } });
 
@@ -116,7 +154,7 @@ pub async fn clean_async() -> bool {
         let stop_timeout = Duration::from_secs(3);
 
         logging!(info, Type::System, "stop core");
-        match timeout(stop_timeout, CoreManager::global().stop_core()).await {
+        let core_stop_success = match timeout(stop_timeout, CoreManager::global().stop_core()).await {
             Ok(_) => {
                 logging!(info, Type::Window, "core已停止");
                 true
@@ -129,7 +167,9 @@ pub async fn clean_async() -> bool {
                 );
                 false
             }
-        }
+        };
+
+        ics_restore_success && core_stop_success
     });
 
     // DNS恢复（仅macOS）
