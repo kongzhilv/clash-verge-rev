@@ -27,14 +27,13 @@ jobs:
           ref: fix/windows-hotspot-managed-interface-v19
           fetch-depth: 0
 
-      - name: Patch release workflow metadata and gates
+      - name: Patch release workflow and restore cumulative safety gates
         shell: python
         run: |
           from pathlib import Path
 
-          path = Path('.github/workflows/karing-diagnostics-once.yml')
-          text = path.read_text(encoding='utf-8')
-
+          workflow = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = workflow.read_text(encoding='utf-8')
           replacements = [
               (
                   "check_contains src-tauri/src/utils/windows_network.rs 'Value::from(\"auto-detect-interface\"), Value::from(true)' 'Windows TUN 保持 Mihomo 动态出口检测以恢复断网/切网'",
@@ -57,23 +56,60 @@ jobs:
                   "--title \"Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Wi-Fi + Hotspot TUN Outbound Lease\"",
               ),
           ]
-
           for old, new in replacements:
+              if new in text:
+                  continue
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f'expected exactly one match, got {count}: {old[:100]}')
+                  raise SystemExit(f'expected exactly one workflow match, got {count}: {old[:100]}')
               text = text.replace(old, new, 1)
+          workflow.write_text(text, encoding='utf-8')
 
-          path.write_text(text, encoding='utf-8')
+          gate = Path('scripts/check-windows-tun-safety.mjs')
+          gate_text = gate.read_text(encoding='utf-8')
+          inserts = [
+              (
+                  "  'Rust regression preserves explicit provider bindings',\n)\n",
+                  "requireText(\n  'windowsNetwork',\n  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',\n  'Rust regression keeps route-guard layer free of an accidental global interface lease',\n)\n",
+              ),
+              (
+                  "  'Rust regression prevents strict-route compatibility during hotspot Starting state',\n)\n",
+                  "requireText(\n  'windowsNetwork',\n  'hotspot_runtime_preserves_an_existing_strict_route_false',\n  'Rust regression preserves an already-disabled strict-route setting',\n)\nrequireText(\n  'windowsNetwork',\n  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',\n  'Rust regression retains ICS SkipAsSource coverage',\n)\nrequireText(\n  'windowsNetwork',\n  'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',\n  'Rust regression rejects derived Wi-Fi Direct filter interfaces',\n)\n",
+              ),
+              (
+                  "  'hotspot Ready/Off transitions need multiple confirming snapshots',\n)\n",
+                  "requireText(\n  'windowsTopologyDiagnostics',\n  'WATCHDOG_INTERVAL',\n  'topology watcher retains bounded watchdog sampling',\n)\nrequireText(\n  'windowsTopologyDiagnostics',\n  'is_filter_component',\n  'topology watcher filters derived Wi-Fi Direct components',\n)\n",
+              ),
+              (
+                  "  'topology refresh logs current physical upstream',\n)\n",
+                  "requireText(\n  'windowsTopologyDiagnostics',\n  'hotspot_guard_waits_for_ics_private_address',\n  'Rust regression covers the Off -> Starting -> Ready boundary',\n)\nrequireText(\n  'windowsTopologyDiagnostics',\n  'hotspot_guard_off_state_is_actionable_for_cleanup',\n  'Rust regression covers stable hotspot shutdown cleanup',\n)\nrequireText(\n  'windowsTopologyDiagnostics',\n  'hotspot_subnets_do_not_short_circuit_on_first_active_adapter',\n  'Rust regression retains the hotspot subnet collection fix',\n)\n",
+              ),
+              (
+                  "requireText(\n  'manifest',\n  '\"Win32_NetworkManagement_Ndis\"',\n  'native adapter status types are enabled',\n)\n",
+                  "requireText(\n  'utils',\n  'pub mod windows_network;',\n  'Windows managed routing module is compiled',\n)\n",
+              ),
+          ]
+          for marker, addition in inserts:
+              if addition in gate_text:
+                  continue
+              count = gate_text.count(marker)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one gate marker, got {count}: {marker[:100]}')
+              gate_text = gate_text.replace(marker, marker + addition, 1)
+          gate.write_text(gate_text, encoding='utf-8')
 
-      - name: Commit exact release workflow patch
+      - name: Commit exact v19 release patch
         shell: bash
         run: |
           set -euo pipefail
           git diff --check
-          git diff -- .github/workflows/karing-diagnostics-once.yml
+          git diff -- .github/workflows/karing-diagnostics-once.yml scripts/check-windows-tun-safety.mjs
+          if git diff --quiet; then
+            echo 'v19 metadata/gates already applied'
+            exit 0
+          fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/karing-diagnostics-once.yml
-          git commit -m 'ci: publish v19 managed interface lease release metadata'
+          git add .github/workflows/karing-diagnostics-once.yml scripts/check-windows-tun-safety.mjs
+          git commit -m 'ci: finalize v19 release metadata and cumulative safety gates'
           git push origin HEAD:fix/windows-hotspot-managed-interface-v19
