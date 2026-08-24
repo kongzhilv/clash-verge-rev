@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[test]
-    fn managed_lease_binds_all_outbound_to_stable_physical_nic() {
+    fn windows_network_managed_lease_binds_all_outbound_to_stable_physical_nic() {
         let mut config = mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
         let lease = apply_managed_physical_interface_lease(&mut config, "WLAN");
 
@@ -93,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_user_interface_is_never_overwritten() {
+    fn windows_network_explicit_user_interface_is_never_overwritten() {
         let mut config = mapping(
             "{interface-name: Ethernet, tun: {enable: true, auto-route: true, auto-detect-interface: true}}",
         );
@@ -113,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_detected_alias_does_not_create_a_broken_lease() {
+    fn windows_network_empty_detected_alias_does_not_create_a_broken_lease() {
         let mut config = mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
         let lease = apply_managed_physical_interface_lease(&mut config, "   ");
 
