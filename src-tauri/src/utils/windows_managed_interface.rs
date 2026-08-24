@@ -47,14 +47,15 @@ pub fn apply_managed_physical_interface_lease(
 
     config.insert(interface_key, Value::from(alias));
 
-    let mut auto_detect_interface = None;
-    if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
+    let auto_detect_interface = if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
         // The application-level topology watcher now owns upstream selection. Keeping
         // Mihomo auto-detect enabled at the same time creates two independent selectors
         // during Wi-Fi + Wi-Fi Direct/ICS transitions and can re-open a routing loop.
         tun.insert(Value::from("auto-detect-interface"), Value::from(false));
-        auto_detect_interface = Some(false);
-    }
+        Some(false)
+    } else {
+        None
+    };
 
     ManagedPhysicalInterfaceLease {
         applied: true,
