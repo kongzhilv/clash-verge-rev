@@ -143,6 +143,8 @@ impl CoreManager {
         crate::core::outbound_diagnostics::ensure_monitor_running();
         #[cfg(target_os = "windows")]
         crate::core::windows_network_diagnostics::ensure_monitor_running();
+        #[cfg(target_os = "windows")]
+        crate::core::windows_deep_network_diagnostics::ensure_monitor_running();
         logging!(
             info,
             Type::Core,
