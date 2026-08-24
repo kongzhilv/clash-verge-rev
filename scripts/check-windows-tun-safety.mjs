@@ -484,10 +484,18 @@ console.log('Windows TUN/self-capture regression passed.')
 console.log('[通过] Wi-Fi 上游与 Wi-Fi Direct/ICS 热点下游保持角色分离')
 console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不 reload')
 console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
-console.log('[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound')
-console.log('[通过] Mihomo auto-detect-interface 在 managed lease 下关闭，避免双 selector 竞争')
-console.log('[通过] 物理上游变化由单一 IP Helper watcher 触发 Runtime 重生成与 lease 迁移')
+console.log(
+  '[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound',
+)
+console.log(
+  '[通过] Mihomo auto-detect-interface 在 managed lease 下关闭，避免双 selector 竞争',
+)
+console.log(
+  '[通过] 物理上游变化由单一 IP Helper watcher 触发 Runtime 重生成与 lease 迁移',
+)
 console.log('[通过] proxy/provider interface-name 继续作为 defense-in-depth')
-console.log('[通过] 热点 Ready 时 strict-route 仅在 Runtime 临时降级并可自动恢复')
+console.log(
+  '[通过] 热点 Ready 时 strict-route 仅在 Runtime 临时降级并可自动恢复',
+)
 console.log('[通过] 用户显式 node/provider/top-level interface 配置保持优先')
 console.log('[通过] 热点 CIDR、热点接口、物理 NIC、代理 endpoint 均不写死')
