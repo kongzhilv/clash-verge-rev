@@ -94,9 +94,8 @@ mod tests {
 
     #[test]
     fn windows_network_explicit_user_interface_is_never_overwritten() {
-        let mut config = mapping(
-            "{interface-name: Ethernet, tun: {enable: true, auto-route: true, auto-detect-interface: true}}",
-        );
+        let mut config =
+            mapping("{interface-name: Ethernet, tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
         let lease = apply_managed_physical_interface_lease(&mut config, "WLAN");
 
         assert!(!lease.applied);
