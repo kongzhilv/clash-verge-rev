@@ -203,6 +203,11 @@ requireText(
 )
 requireText(
   'windowsNetwork',
+  'Value::String("interface-name".to_owned())',
+  'managed node/provider binding still uses Mihomo interface-name',
+)
+requireText(
+  'windowsNetwork',
   'provider.get_mut(&override_key)',
   'provider override is merged rather than replacing user configuration',
 )
@@ -216,6 +221,11 @@ requireText(
   'explicit_provider_binding_is_preserved',
   'Rust regression preserves explicit provider bindings',
 )
+requireText(
+  'windowsNetwork',
+  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
+  'Rust regression keeps the route-guard layer dynamic and LAN/hotspot-safe',
+)
 
 // v2.5.4-karing.18: strict-route compatibility stays Runtime-only and ICS-ready.
 requireText(
@@ -225,8 +235,23 @@ requireText(
 )
 requireText(
   'windowsNetwork',
+  'Windows Mobile Hotspot/ICS plus strict-route has an upstream self-capture',
+  'compatibility lease documents the upstream failure class it mitigates',
+)
+requireText(
+  'windowsNetwork',
+  'tun.insert(key, Value::from(false));',
+  'hotspot Runtime can relax strict-route without changing saved config',
+)
+requireText(
+  'windowsNetwork',
   'if !route.hotspot_ready',
   'strict-route relaxation waits for a real ICS private subnet',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_ready = true;',
+  'native route guard records the ICS-ready boundary from a real private CIDR',
 )
 requireText(
   'windowsNetwork',
@@ -235,8 +260,23 @@ requireText(
 )
 requireText(
   'windowsNetwork',
+  'hotspot_runtime_preserves_an_existing_strict_route_false',
+  'Rust regression preserves an already-disabled strict-route setting',
+)
+requireText(
+  'windowsNetwork',
   'hotspot_adapter_without_private_address_is_not_ready',
   'Rust regression prevents strict-route compatibility during hotspot Starting state',
+)
+requireText(
+  'windowsNetwork',
+  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
+  'Rust regression retains ICS SkipAsSource coverage',
+)
+requireText(
+  'windowsNetwork',
+  'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
+  'Rust regression rejects derived Wi-Fi Direct filter interfaces',
 )
 forbidText(
   'windowsNetwork',
@@ -376,6 +416,16 @@ requireText(
 )
 requireText(
   'windowsTopologyDiagnostics',
+  'WATCHDOG_INTERVAL',
+  'topology watcher retains bounded watchdog sampling',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'is_filter_component',
+  'topology watcher filters derived Wi-Fi Direct components',
+)
+requireText(
+  'windowsTopologyDiagnostics',
   'hotspot-adapter-up-without-private-subnet',
   'adapter Up without an ICS subnet is explicitly Starting, not Ready',
 )
@@ -408,6 +458,21 @@ requireText(
   'windowsTopologyDiagnostics',
   'current_physical_upstream',
   'topology refresh logs current physical upstream',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot_guard_waits_for_ics_private_address',
+  'Rust regression covers the Off -> Starting -> Ready boundary',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot_guard_off_state_is_actionable_for_cleanup',
+  'Rust regression covers stable hotspot shutdown cleanup',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'hotspot_subnets_do_not_short_circuit_on_first_active_adapter',
+  'Rust regression retains the hotspot subnet collection fix',
 )
 forbidText(
   'windowsTopologyDiagnostics',
@@ -469,6 +534,11 @@ requireText(
 )
 
 requireText(
+  'utils',
+  'pub mod windows_network;',
+  'Windows managed routing module is compiled',
+)
+requireText(
   'manifest',
   '"Win32_NetworkManagement_Ndis"',
   'native adapter status types are enabled',
@@ -483,6 +553,7 @@ if (failures.length > 0) {
 console.log('Windows TUN/self-capture regression passed.')
 console.log('[通过] Wi-Fi 上游与 Wi-Fi Direct/ICS 热点下游保持角色分离')
 console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不 reload')
+console.log('[通过] Starting 期间任何 topology-driven reload 都被抑制')
 console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
 console.log(
   '[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound',
