@@ -25,19 +25,12 @@ use windows::{
             },
         },
         Networking::WinSock::{AF_INET, IpDadStatePreferred, SOCKADDR_INET},
-        System::Com::{
-            CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
-        },
+        System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize},
     },
     core::GUID,
 };
 
-use crate::{
-    config::Config,
-    core::diagnostics,
-    process::AsyncHandler,
-    utils::dirs,
-};
+use crate::{config::Config, core::diagnostics, process::AsyncHandler, utils::dirs};
 
 const LOOP_INTERVAL: Duration = Duration::from_secs(2);
 const STABLE_SAMPLES: u8 = 3;
@@ -137,10 +130,7 @@ fn load_addresses() -> Result<Vec<MIB_UNICASTIPADDRESS_ROW>> {
     let mut table: *mut MIB_UNICASTIPADDRESS_TABLE = null_mut();
     let status = unsafe { GetUnicastIpAddressTable(AF_INET, &mut table) };
     if status.0 != 0 || table.is_null() {
-        bail!(
-            "GetUnicastIpAddressTable failed with Windows error {}",
-            status.0
-        );
+        bail!("GetUnicastIpAddressTable failed with Windows error {}", status.0);
     }
     let rows = unsafe {
         let table_ref = &*table;
@@ -253,10 +243,7 @@ fn target_pair() -> Result<Option<TargetPair>> {
 
     Ok(Some(TargetPair {
         tun: tun_candidates.into_iter().next().expect("one TUN candidate"),
-        hotspot: hotspot_candidates
-            .into_iter()
-            .next()
-            .expect("one hotspot candidate"),
+        hotspot: hotspot_candidates.into_iter().next().expect("one hotspot candidate"),
     }))
 }
 
@@ -302,17 +289,14 @@ fn remove_snapshot(path: &Path) -> Result<()> {
     }
 }
 
-fn enumerate_connections(
-    connection_manager: &INetConnectionManager,
-) -> Result<Vec<INetConnection>> {
+fn enumerate_connections(connection_manager: &INetConnectionManager) -> Result<Vec<INetConnection>> {
     let enumerator = unsafe { connection_manager.EnumConnections(NCME_DEFAULT) }
         .context("INetConnectionManager::EnumConnections failed")?;
     let mut result = Vec::new();
     loop {
         let mut slot: [Option<INetConnection>; 1] = [None];
         let mut fetched = 0u32;
-        unsafe { enumerator.Next(&mut slot, &mut fetched) }
-            .context("IEnumNetConnection::Next failed")?;
+        unsafe { enumerator.Next(&mut slot, &mut fetched) }.context("IEnumNetConnection::Next failed")?;
         if fetched == 0 {
             break;
         }
@@ -323,12 +307,8 @@ fn enumerate_connections(
     Ok(result)
 }
 
-fn connection_log(
-    manager: &INetSharingManager,
-    connection: &INetConnection,
-) -> Result<SharingStateLog> {
-    let props = unsafe { manager.get_NetConnectionProps(connection) }
-        .context("get_NetConnectionProps failed")?;
+fn connection_log(manager: &INetSharingManager, connection: &INetConnection) -> Result<SharingStateLog> {
+    let props = unsafe { manager.get_NetConnectionProps(connection) }.context("get_NetConnectionProps failed")?;
     let guid = unsafe { props.Guid() }.context("INetConnectionProps::Guid failed")?;
     let name = unsafe { props.Name() }.context("INetConnectionProps::Name failed")?;
     let device_name = unsafe { props.DeviceName() }.context("INetConnectionProps::DeviceName failed")?;
@@ -383,38 +363,24 @@ fn find_connection<'a>(
     Err(anyhow!("network connection GUID {} was not found", guid_string(guid)))
 }
 
-fn current_shared_roles(
-    manager: &INetSharingManager,
-    connections: &[INetConnection],
-) -> Result<Vec<SavedRole>> {
+fn current_shared_roles(manager: &INetSharingManager, connections: &[INetConnection]) -> Result<Vec<SavedRole>> {
     let mut roles = Vec::new();
     for connection in connections {
         let state = connection_log(manager, connection)?;
         if let Some(role) = state.sharing_role {
-            roles.push(SavedRole {
-                guid: state.guid,
-                role,
-            });
+            roles.push(SavedRole { guid: state.guid, role });
         }
     }
     roles.sort_by(|left, right| left.guid.cmp(&right.guid));
     Ok(roles)
 }
 
-fn log_all_sharing_state(
-    manager: &INetSharingManager,
-    connections: &[INetConnection],
-    event: &'static str,
-) {
+fn log_all_sharing_state(manager: &INetSharingManager, connections: &[INetConnection], event: &'static str) {
     let states = connections
         .iter()
         .filter_map(|connection| connection_log(manager, connection).ok())
         .collect::<Vec<_>>();
-    diagnostics::info(
-        "windows-hotspot-ics",
-        event,
-        json!({"connections": states}),
-    );
+    diagnostics::info("windows-hotspot-ics", event, json!({"connections": states}));
 }
 
 fn role_of_guid(roles: &[SavedRole], guid: GUID) -> Option<SharingRole> {
@@ -437,11 +403,9 @@ fn set_role(configuration: &INetSharingConfiguration, role: SharingRole) -> Resu
 fn restore_snapshot(path: &Path, snapshot: &SavedSharingState) -> Result<()> {
     let _apartment = ComApartment::init()?;
     let sharing_manager: INetSharingManager =
-        unsafe { CoCreateInstance(&NetSharingManager, None, CLSCTX_ALL) }
-            .context("create NetSharingManager failed")?;
-    let connection_manager: INetConnectionManager =
-        unsafe { CoCreateInstance(&CONNECTION_MANAGER, None, CLSCTX_ALL) }
-            .context("create Network Connection Manager failed")?;
+        unsafe { CoCreateInstance(&NetSharingManager, None, CLSCTX_ALL) }.context("create NetSharingManager failed")?;
+    let connection_manager: INetConnectionManager = unsafe { CoCreateInstance(&CONNECTION_MANAGER, None, CLSCTX_ALL) }
+        .context("create Network Connection Manager failed")?;
     let connections = enumerate_connections(&connection_manager)?;
     log_all_sharing_state(&sharing_manager, &connections, "restore-before");
 
@@ -473,9 +437,7 @@ fn restore_snapshot(path: &Path, snapshot: &SavedSharingState) -> Result<()> {
             let Some(connection) = connections.iter().find(|connection| {
                 unsafe { sharing_manager.get_NetConnectionProps(connection) }
                     .and_then(|props| unsafe { props.Guid() })
-                    .is_ok_and(|candidate| {
-                        normalize_guid(&candidate.to_string()) == normalize_guid(&saved.guid)
-                    })
+                    .is_ok_and(|candidate| normalize_guid(&candidate.to_string()) == normalize_guid(&saved.guid))
             }) else {
                 bail!("cannot restore missing ICS connection {}", saved.guid);
             };
@@ -491,11 +453,9 @@ fn restore_snapshot(path: &Path, snapshot: &SavedSharingState) -> Result<()> {
 fn apply_pair(path: &Path, pair: &TargetPair) -> Result<()> {
     let _apartment = ComApartment::init()?;
     let sharing_manager: INetSharingManager =
-        unsafe { CoCreateInstance(&NetSharingManager, None, CLSCTX_ALL) }
-            .context("create NetSharingManager failed")?;
-    let connection_manager: INetConnectionManager =
-        unsafe { CoCreateInstance(&CONNECTION_MANAGER, None, CLSCTX_ALL) }
-            .context("create Network Connection Manager failed")?;
+        unsafe { CoCreateInstance(&NetSharingManager, None, CLSCTX_ALL) }.context("create NetSharingManager failed")?;
+    let connection_manager: INetConnectionManager = unsafe { CoCreateInstance(&CONNECTION_MANAGER, None, CLSCTX_ALL) }
+        .context("create Network Connection Manager failed")?;
     let connections = enumerate_connections(&connection_manager)?;
     log_all_sharing_state(&sharing_manager, &connections, "apply-before");
 
@@ -517,10 +477,7 @@ fn apply_pair(path: &Path, pair: &TargetPair) -> Result<()> {
 
     let apply_result = (|| -> Result<()> {
         set_role(&sharing_configuration(&sharing_manager, tun)?, SharingRole::Public)?;
-        set_role(
-            &sharing_configuration(&sharing_manager, hotspot)?,
-            SharingRole::Private,
-        )?;
+        set_role(&sharing_configuration(&sharing_manager, hotspot)?, SharingRole::Private)?;
 
         let after = current_shared_roles(&sharing_manager, &connections)?;
         if role_of_guid(&after, pair.tun.guid) != Some(SharingRole::Public)
@@ -579,8 +536,7 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
 
     match (saved, pair) {
         (Some(snapshot), Some(pair))
-            if same_guid(&snapshot.tun_guid, pair.tun.guid)
-                && same_guid(&snapshot.hotspot_guid, pair.hotspot.guid) =>
+            if same_guid(&snapshot.tun_guid, pair.tun.guid) && same_guid(&snapshot.hotspot_guid, pair.hotspot.guid) =>
         {
             Ok("lease-already-active")
         }
@@ -630,11 +586,7 @@ async fn monitor_loop() {
 
     loop {
         interval.tick().await;
-        let tun_enabled = Config::verge()
-            .await
-            .latest_arc()
-            .enable_tun_mode
-            .unwrap_or(false);
+        let tun_enabled = Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false);
 
         let signature = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
             let pair = if tun_enabled { target_pair()? } else { None };
