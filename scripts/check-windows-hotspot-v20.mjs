@@ -11,7 +11,10 @@ const paths = {
 
 const source = Object.fromEntries(
   await Promise.all(
-    Object.entries(paths).map(async ([key, path]) => [key, await readFile(path, 'utf8')]),
+    Object.entries(paths).map(async ([key, path]) => [
+      key,
+      await readFile(path, 'utf8'),
+    ]),
   ),
 )
 
@@ -20,7 +23,8 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text)) failures.push(`${label}: contains forbidden ${text}`)
+  if (source[key].includes(text))
+    failures.push(`${label}: contains forbidden ${text}`)
 }
 
 for (const api of [
@@ -145,8 +149,14 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('[通过] Windows Mobile Hotspot 使用原生 HNetCfg COM，不依赖 PowerShell/netsh')
-console.log('[通过] TUN=PUBLIC / Hotspot=PRIVATE 具备持久快照、读回验证与失败回滚')
+console.log(
+  '[通过] Windows Mobile Hotspot 使用原生 HNetCfg COM，不依赖 PowerShell/netsh',
+)
+console.log(
+  '[通过] TUN=PUBLIC / Hotspot=PRIVATE 具备持久快照、读回验证与失败回滚',
+)
 console.log('[通过] 无关 PRIVATE ICS 被 fail-closed 保护，不会被租约覆盖')
 console.log('[通过] 退出先恢复 ICS，再销毁 TUN，并抑制 monitor 重新套 lease')
-console.log('[通过] 深度日志覆盖 GUID、Forwarding、WeakHost、SkipAsSource 与完整 IPv4 路由')
+console.log(
+  '[通过] 深度日志覆盖 GUID、Forwarding、WeakHost、SkipAsSource 与完整 IPv4 路由',
+)
