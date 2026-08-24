@@ -1,0 +1,73 @@
+name: v20 native fixup once
+
+on:
+  push:
+    branches:
+      - fix/karing-windows-hotspot-ics-v20
+
+permissions:
+  contents: write
+
+jobs:
+  fixup:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/karing-windows-hotspot-ics-v20
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          components: rustfmt
+      - name: Apply exact known Rust API/type fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src-tauri/src/core/windows_hotspot_ics.rs')
+          s = p.read_text(encoding='utf-8')
+          old = '''        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+              .context("CoInitializeEx(COINIT_APARTMENTTHREADED) failed")?;'''
+          new = '''        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+              .ok()
+              .context("CoInitializeEx(COINIT_APARTMENTTHREADED) failed")?;'''
+          if old not in s:
+              raise SystemExit('CoInitializeEx replacement anchor not found')
+          s = s.replace(old, new, 1)
+          old = '''            Ok(Err(error)) | Err(error) => {
+                  diagnostics::warn(
+                      "windows-hotspot-ics",
+                      "target-discovery-failed",
+                      json!({"error": error.to_string()}),
+                  );
+                  continue;
+              }'''
+          new = '''            Ok(Err(error)) => {
+                  diagnostics::warn(
+                      "windows-hotspot-ics",
+                      "target-discovery-failed",
+                      json!({"error": error.to_string(), "error_kind": "discovery"}),
+                  );
+                  continue;
+              }
+              Err(error) => {
+                  diagnostics::warn(
+                      "windows-hotspot-ics",
+                      "target-discovery-failed",
+                      json!({"error": error.to_string(), "error_kind": "join"}),
+                  );
+                  continue;
+              }'''
+          if old not in s:
+              raise SystemExit('join-error replacement anchor not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          cargo fmt --all
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri/src/core/windows_hotspot_ics.rs
+          git diff --cached --check
+          git commit -m 'fix(v20): correct COM init and async error handling'
+          git push origin HEAD:fix/karing-windows-hotspot-ics-v20
