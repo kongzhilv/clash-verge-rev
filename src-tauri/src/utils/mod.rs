@@ -18,5 +18,7 @@ pub mod tmpl;
 pub mod tray_speed;
 pub mod window_manager;
 #[cfg(target_os = "windows")]
+pub mod windows_managed_interface;
+#[cfg(target_os = "windows")]
 pub mod windows_network;
 pub mod yaml_emitter;

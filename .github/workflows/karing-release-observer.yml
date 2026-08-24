@@ -1,4 +1,4 @@
-name: Karing .18 发行核验
+name: Karing .19 发行核验
 
 on:
   push:
@@ -19,30 +19,30 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.18 正式发行
+    name: 核验 v2.5.4-karing.19 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '10'
-      STATUS_MARKER: '<!-- karing-v254-karing18-release-audit -->'
+      PR_NUMBER: '11'
+      STATUS_MARKER: '<!-- karing-v254-karing19-release-audit -->'
     steps:
       - name: 检出发行分支
         uses: actions/checkout@v7
         with:
-          fetch-depth: 2
+          fetch-depth: 1
 
       - name: 等待并只读核验正式发行
         shell: bash
         run: |
           set -euo pipefail
 
-          # 观察器自身是紧跟发行源提交之后的只读审计提交，因此父提交
-          # 才是必须与 Release tag / target_commitish 完全一致的发行源。
-          source_sha=$(git rev-parse HEAD^)
-          release_tag=$(git show "${source_sha}:.release/karing-release-tag.txt" | tr -d '\r\n')
-          test "$release_tag" = 'v2.5.4-karing.18'
+          # .19 观察器与主发行工作流由同一个发行源提交触发，因此当前 HEAD
+          # 必须与主 workflow head_sha、Release tag 和 target_commitish 完全一致。
+          source_sha=$(git rev-parse HEAD)
+          release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
+          test "$release_tag" = 'v2.5.4-karing.19'
 
           post_failure() {
             local reason="$1"
@@ -56,7 +56,7 @@ jobs:
           trap 'post_failure "observer step failed at line ${LINENO}"' ERR
 
           run_id=''
-          for attempt in $(seq 1 120); do
+          for _attempt in $(seq 1 120); do
             run_id=$(gh api --method GET \
               "repos/${GITHUB_REPOSITORY}/actions/workflows/${MAIN_WORKFLOW}/runs" \
               -f branch="$RELEASE_BRANCH" -f event=push -f per_page=30 \
@@ -69,7 +69,7 @@ jobs:
           test -n "$run_id"
 
           status=''
-          for attempt in $(seq 1 240); do
+          for _attempt in $(seq 1 240); do
             status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
             if [ "$status" = 'completed' ]; then
               break

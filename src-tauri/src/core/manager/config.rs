@@ -244,8 +244,9 @@ impl CoreManager {
 
     #[cfg(target_os = "windows")]
     async fn prepare_windows_tun_network(&self) -> Result<bool> {
-        use crate::utils::windows_network::{
-            apply_managed_upstream, detect_stable_upstream, tun_needs_managed_upstream,
+        use crate::utils::{
+            windows_managed_interface::apply_managed_physical_interface_lease,
+            windows_network::{apply_managed_upstream, detect_stable_upstream, tun_needs_managed_upstream},
         };
 
         let runtime = Config::runtime().await;
@@ -322,12 +323,32 @@ impl CoreManager {
                 "route_metric": route.route_metric,
                 "interface_metric": route.interface_metric,
                 "effective_metric": route.effective_metric,
+                "hotspot_ready": route.hotspot_ready,
                 "excluded_interfaces": &route.excluded_interfaces,
                 "route_exclude_addresses": &route.route_exclude_addresses,
             }),
         );
 
         apply_managed_upstream(&mut config, &route);
+        let lease = apply_managed_physical_interface_lease(&mut config, route.interface_alias.as_str());
+        diagnostics::info(
+            "windows-tun",
+            "managed-physical-interface-lease-applied",
+            json!({
+                "applied": lease.applied,
+                "interface_alias": lease.interface_alias.as_str(),
+                "interface_index": route.interface_index,
+                "source_address": route.source_address.as_str(),
+                "gateway": route.gateway.as_str(),
+                "hotspot_ready": route.hotspot_ready,
+                "hotspot_interfaces": &route.excluded_interfaces,
+                "route_exclude_addresses": &route.route_exclude_addresses,
+                "tun_auto_detect_interface": lease.auto_detect_interface,
+                "lease_scope": "runtime-only",
+                "lease_owner": "windows-ip-helper-topology-watcher",
+                "failover_strategy": "regenerate-runtime-on-physical-upstream-change",
+            }),
+        );
         diagnostics::info(
             "windows-tun",
             "managed-upstream-applied",
@@ -340,7 +361,7 @@ impl CoreManager {
         logging!(
             info,
             Type::Core,
-            "Windows TUN safety: verified stable physical upstream={} index={} source={} gateway={} metric={}; Mihomo auto-detect-interface remains enabled for reconnect/failover",
+            "Windows TUN safety: stable physical upstream={} index={} source={} gateway={} metric={}; runtime interface lease owns Mihomo outbound selection and follows IP Helper topology changes",
             route.interface_alias,
             route.interface_index,
             route.source_address,
@@ -355,8 +376,12 @@ impl CoreManager {
                 "observed_interface_index": route.interface_index,
                 "observed_source": route.source_address.as_str(),
                 "observed_gateway": route.gateway.as_str(),
-                "auto_detect_interface": true,
-                "top_level_interface_pinned": false,
+                "hotspot_ready": route.hotspot_ready,
+                "auto_detect_interface": lease.auto_detect_interface,
+                "top_level_interface_pinned": lease.applied,
+                "interface_pin_source": "runtime-managed-stable-physical-upstream",
+                "interface_pin_scope": "all-mihomo-outbound",
+                "failover_strategy": "topology-watcher-regenerate-runtime",
             }),
         );
         Ok(true)

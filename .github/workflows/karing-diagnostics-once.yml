@@ -189,9 +189,13 @@ jobs:
           check_contains src-tauri/src/core/sysopt.rs 'record_os_proxy_state("after-apply")' '系统代理写入后回读 OS 状态'
           check_contains src-tauri/src/core/manager/lifecycle.rs 'prepare_windows_tun_runtime_for_start' 'Windows TUN 启动前执行物理出口稳定检查'
           check_contains src-tauri/src/utils/windows_network.rs 'const STABLE_SAMPLES: usize = 6;' 'Windows 默认路由需通过稳定窗口'
-          check_contains src-tauri/src/utils/windows_network.rs 'Value::from("auto-detect-interface"), Value::from(true)' 'Windows TUN 保持 Mihomo 动态出口检测以恢复断网/切网'
-          check_not_contains src-tauri/src/utils/windows_network.rs 'Value::from("interface-name")' 'Windows TUN 自动托管路径不再写死顶层物理出口接口'
-          check_contains src-tauri/src/core/manager/config.rs 'dynamic-upstream-enabled' 'Windows TUN 记录动态出口恢复策略'
+          check_contains src-tauri/src/utils/windows_managed_interface.rs 'config.insert(interface_key, Value::from(alias));' 'Windows TUN Runtime 将全部 Mihomo outbound 绑定稳定物理出口'
+          check_contains src-tauri/src/utils/windows_managed_interface.rs 'tun.insert(Value::from("auto-detect-interface"), Value::from(false));' 'managed lease 下由应用 topology watcher 独占物理出口选择'
+          check_not_contains src-tauri/src/utils/windows_network.rs 'config.insert(\n        Value::from("interface-name")' 'route guard 模块本身不直接拥有顶层物理出口 lease'
+          check_contains src-tauri/src/utils/windows_managed_interface.rs 'windows_network_explicit_user_interface_is_never_overwritten' '用户显式顶层 interface-name 永远优先于 managed lease'
+          check_contains src-tauri/src/core/manager/config.rs 'managed-physical-interface-lease-applied' 'Windows TUN 记录 Runtime-managed 全出站物理接口 lease'
+          check_contains src-tauri/src/core/manager/config.rs 'all-mihomo-outbound' 'Windows TUN 日志记录 managed lease 覆盖全部 Mihomo outbound'
+          check_contains src-tauri/src/core/manager/config.rs 'regenerate-runtime-on-physical-upstream-change' '物理上游切换通过 topology watcher 重生成 Runtime 迁移 lease'
           check_contains src-tauri/src/feat/clash.rs 'MIHOMO_CONTROL_MAX_ATTEMPTS' 'Mihomo 控制 API 启动就绪采用有界重试'
           check_contains src-tauri/src/feat/clash.rs 'control-read-retry' '控制 API 瞬态失败记录重试诊断'
           check_contains src-tauri/src/feat/clash.rs 'control-read-recovered' '控制 API 恢复后记录就绪耗时'
@@ -624,19 +628,20 @@ jobs:
           cat > release-assets/release-notes.md <<'EOF'
           # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
 
-          本轮继续收敛 Windows TUN + 移动热点（ICS）场景下的核心自身出站回灌问题：
+          本轮针对 **Wi-Fi 作为真实上游 + Windows Mobile Hotspot/Wi-Fi Direct 作为 ICS 下游** 的共存场景，按成熟 TUN 实现的 default-interface / bind-interface 模型收敛核心自身出站回灌：
 
-          - 保留 `.17` 已落地的单一 Windows IP Helper topology watcher、热点 Starting -> Ready 稳态确认、动态 `exclude-interface` / `route-exclude-address`，以及未显式绑定 proxy/provider 的物理 NIC 绑定。
-          - 新增原生 `hotspot_ready` 状态：Wi-Fi Direct adapter 仅 Up、尚未获得 Preferred 私网 IPv4/CIDR 时仍视为 Starting，不触发本轮兼容降级；只有真实 ICS 私网地址出现后才进入 Ready。
-          - 针对 Mihomo / sing-tun 当前 Windows `strict-route=true` 自捕获故障类：仅在热点已 ICS-ready 且保存配置要求 `strict-route=true` 时，在生成的 Runtime 副本临时将其设为 `false`；用户保存的 Clash 配置不修改。
-          - 热点关闭后由现有 topology watcher 从权威保存配置重新生成 Runtime，`strict-route` 自动恢复为用户原值；原本就是 `strict-route=false` 的配置保持不变。
-          - 顶层 `interface-name` 仍不固定，`auto-detect-interface=true` 继续用于断网恢复及以太网/WLAN 切换；热点 CIDR、接口名、机场域名和节点 endpoint 均不硬编码。
-          - 新增 Rust 边界回归与 `check-windows-tun-safety.mjs` 发行门禁，覆盖 Ready/Starting、恢复、用户显式绑定、ICS `SkipAsSource`、Wi-Fi Direct filter component 和硬编码回归。
-          - 诊断链继续聚合 DIRECT、DNS、proxy transport 与 `reject loopback connection` 证据，便于实机复测后继续判断是否仍存在 Mihomo 上游 self-process bypass 缺陷。
+          - Windows IP Helper 继续以 6 次稳定采样选择真实物理默认出口；Wi-Fi Direct/ICS 只作为热点下游处理，不会被误选为上游。
+          - 当用户没有显式顶层 `interface-name` 时，在生成的 Runtime 副本设置 `interface-name=<当前稳定物理 NIC>`，让 DIRECT、DNS、provider health-check、proxy 等 **全部 Mihomo outbound** 使用同一真实物理出口。
+          - managed lease 生效时将 `tun.auto-detect-interface=false`，避免 Mihomo 自己的自动选择与应用层 topology watcher 在 Wi-Fi + 热点变化窗口形成两个相互竞争的 selector；真实物理出口变化时由现有单一 watcher 重新生成 Runtime 并迁移 lease。
+          - 用户显式顶层 `interface-name` 永远优先；proxy/provider 自己的显式接口绑定也继续保留，`.17` 的 per-node/provider managed binding 作为 defense-in-depth。
+          - 保留 `.18` 的热点 Starting -> Ready 稳态、动态 `exclude-interface` / `route-exclude-address`、ICS-ready `strict-route` Runtime-only 兼容降级；热点关闭后仍从权威保存配置自动恢复。
+          - 热点 CIDR、热点接口、物理 Wi-Fi/以太网名称、机场域名和节点 endpoint 均不硬编码。
+          - 诊断新增 `managed-physical-interface-lease-applied`，记录 alias/index/source/gateway、热点 Ready、route exclusions、lease scope、Mihomo auto-detect 最终值与 failover strategy；原有 outbound 聚合继续记录 `verge-mihomo.exe` 的 DIRECT/DNS/proxy transport 失败，实机日志可直接关联 lease 是否真正生效。
+          - 累计安全门禁继续覆盖 `.17/.18` 的 proxy/provider binding、Starting/Ready、SkipAsSource、Wi-Fi Direct filter、strict-route 原值恢复、hotspot Off cleanup 与 watchdog，不用 `.19` 新检查替换旧回归。
 
-          重要兼容性说明：Windows `strict-route` 可增强普通多宿主 DNS 解析场景的防泄漏能力。本版为了避免已复现的热点自捕获/整机断网，只在 Mobile Hotspot/ICS Ready 窗口临时关闭该 Runtime 开关；热点关闭即恢复。若上游 Mihomo / sing-tun 后续提供可靠 self-process bypass，应优先移除此兼容降级。
+          重要兼容性说明：Windows `strict-route` 可增强普通多宿主 DNS 解析场景的防泄漏能力。本版仍只在 Mobile Hotspot/ICS Ready 窗口临时关闭该 Runtime 开关；热点关闭即恢复。物理接口 lease 只存在于 Runtime，不写回用户保存的 Clash 配置。
 
-          上游参考：MetaCubeX/mihomo #3122、#2618；SagerNet/sing-box #4415。
+          上游参考：Mihomo 官方文档建议多出站网卡设备手动指定出站接口；sing-box 官方文档明确要求在 TUN auto-route 下通过 default/auto-detected/bound interface 避免 routing loop；MetaCubeX/mihomo #3122 记录 Windows TUN 核心自身出站被回抓并 reject loopback 的故障类。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
 
@@ -694,7 +699,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Hotspot TUN Self-Capture Mitigation" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Wi-Fi + Hotspot TUN Outbound Lease" \
             --notes-file release-assets/release-notes.md \
             --latest
 
