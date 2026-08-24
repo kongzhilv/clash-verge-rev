@@ -322,8 +322,8 @@ fn enumerate_connections(connection_manager: &INetConnectionManager) -> Result<V
 }
 
 fn connection_log(manager: &INetSharingManager, connection: &INetConnection) -> Result<SharingStateLog> {
-    let props = unsafe { manager.get_NetConnectionProps(connection.clone()) }
-        .context("get_NetConnectionProps failed")?;
+    let props =
+        unsafe { manager.get_NetConnectionProps(connection.clone()) }.context("get_NetConnectionProps failed")?;
     let guid = unsafe { props.Guid() }.context("INetConnectionProps::Guid failed")?;
     let name = unsafe { props.Name() }.context("INetConnectionProps::Name failed")?;
     let device_name = unsafe { props.DeviceName() }.context("INetConnectionProps::DeviceName failed")?;
@@ -387,7 +387,8 @@ fn find_connection_by_saved_guid(
     for connection in connections {
         let props = unsafe { manager.get_NetConnectionProps(connection.clone()) }
             .context("get_NetConnectionProps failed while matching saved GUID")?;
-        let candidate = unsafe { props.Guid() }.context("INetConnectionProps::Guid failed while matching saved GUID")?;
+        let candidate =
+            unsafe { props.Guid() }.context("INetConnectionProps::Guid failed while matching saved GUID")?;
         if normalize_guid(&candidate.to_string()) == normalize_guid(guid) {
             return Ok(Some(connection.clone()));
         }
@@ -558,7 +559,10 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
 
     let apply_result = (|| -> Result<()> {
         set_role(&sharing_configuration(&sharing_manager, &tun)?, SharingRole::Public)?;
-        set_role(&sharing_configuration(&sharing_manager, &hotspot)?, SharingRole::Private)?;
+        set_role(
+            &sharing_configuration(&sharing_manager, &hotspot)?,
+            SharingRole::Private,
+        )?;
 
         let after = current_shared_roles(&sharing_manager, &connections)?;
         if role_of_guid(&after, pair.tun.guid) != Some(SharingRole::Public)
@@ -873,9 +877,11 @@ mod tests {
         let retained = lease_owned_original_roles(&roles, &pair);
         assert_eq!(retained.len(), 2);
         assert!(retained.iter().any(|item| item.role == SharingRole::Public));
-        assert!(retained.iter().any(|item| {
-            normalize_guid(&item.guid) == normalize_guid(&format!("{:?}", pair.hotspot.guid))
-        }));
+        assert!(
+            retained
+                .iter()
+                .any(|item| { normalize_guid(&item.guid) == normalize_guid(&format!("{:?}", pair.hotspot.guid)) })
+        );
     }
 
     #[test]
