@@ -56,6 +56,11 @@ for (const marker of [
   'explicit-restore-completed',
   'lease-restored',
   'reapply_suppressed',
+  'lease-readback',
+  'lease-drift-detected',
+  'restore-before-next-reapply',
+  'active_lease_readback',
+  'Resolve both COM connections before persisting rollback state.',
 ]) {
   requireText('ics', marker, `ICS lifecycle invariant ${marker}`)
 }
@@ -64,6 +69,7 @@ for (const testName of [
   'windows_network_guid_normalization_ignores_braces_case_and_space',
   'windows_network_rollback_scope_keeps_public_and_lease_targets_only',
   'windows_network_unrelated_private_ics_is_fail_closed',
+  'windows_network_active_lease_requires_both_expected_roles',
 ]) {
   requireText('ics', testName, `Windows regression ${testName}`)
 }
@@ -155,6 +161,8 @@ console.log(
 console.log(
   '[通过] TUN=PUBLIC / Hotspot=PRIVATE 具备持久快照、读回验证与失败回滚',
 )
+console.log('[通过] active lease 每轮读回角色，漂移先恢复再重建')
+console.log('[通过] snapshot 只在两个 COM 目标都解析成功后落盘')
 console.log('[通过] 无关 PRIVATE ICS 被 fail-closed 保护，不会被租约覆盖')
 console.log('[通过] 退出先恢复 ICS，再销毁 TUN，并抑制 monitor 重新套 lease')
 console.log(
