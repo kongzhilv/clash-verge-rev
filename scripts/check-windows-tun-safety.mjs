@@ -4,6 +4,7 @@ const files = {
   manager: 'src-tauri/src/core/manager/config.rs',
   lifecycle: 'src-tauri/src/core/manager/lifecycle.rs',
   windowsNetwork: 'src-tauri/src/utils/windows_network.rs',
+  windowsManagedInterface: 'src-tauri/src/utils/windows_managed_interface.rs',
   windowsTopologyDiagnostics:
     'src-tauri/src/core/windows_network_diagnostics.rs',
   outboundDiagnostics: 'src-tauri/src/core/outbound_diagnostics.rs',
@@ -64,13 +65,18 @@ requireText(
 )
 requireText(
   'manager',
-  'top_level_interface_pinned',
-  'diagnostics still expose accidental top-level pinning',
+  'managed-physical-interface-lease-applied',
+  'managed all-outbound physical interface lease is observable',
+)
+requireText(
+  'manager',
+  'interface_pin_scope',
+  'diagnostics expose managed interface lease scope',
 )
 requireText(
   'lifecycle',
   'self.prepare_windows_tun_runtime_for_start().await?;',
-  'managed route and proxy bindings are installed before core startup',
+  'managed route and outbound bindings are installed before core startup',
 )
 
 // Native Windows route selection and TUN guards.
@@ -147,7 +153,7 @@ requireText(
 requireText(
   'windowsNetwork',
   'Value::from("auto-detect-interface"), Value::from(true)',
-  'Mihomo physical route auto detection remains enabled',
+  'route guard leaves upstream selection available before the managed lease is applied',
 )
 requireText(
   'windowsNetwork',
@@ -157,7 +163,7 @@ requireText(
 forbidText(
   'windowsNetwork',
   'config.insert(\n        Value::from("interface-name")',
-  'managed Windows TUN must not pin the top-level outbound interface',
+  'route guard module itself must not own the top-level outbound lease',
 )
 for (const forbidden of [
   'powershell.exe',
@@ -174,8 +180,7 @@ for (const forbidden of [
   )
 }
 
-// v2.5.4-karing.17: proactively bind Mihomo proxy sockets to the stable
-// physical NIC, while preserving user bindings.
+// v2.5.4-karing.17: proxy/provider binding remains as defense in depth.
 requireText(
   'windowsNetwork',
   'ManagedProxyBindingStats',
@@ -184,7 +189,7 @@ requireText(
 requireText(
   'windowsNetwork',
   'apply_managed_proxy_bindings',
-  'managed proxy binding is part of Windows TUN preparation',
+  'managed proxy binding remains part of Windows TUN preparation',
 )
 requireText(
   'windowsNetwork',
@@ -195,11 +200,6 @@ requireText(
   'windowsNetwork',
   'config.get_mut("proxy-providers")',
   'proxy providers receive a managed interface override',
-)
-requireText(
-  'windowsNetwork',
-  'Value::String("interface-name".to_owned())',
-  'managed binding uses Mihomo interface-name without top-level pinning',
 )
 requireText(
   'windowsNetwork',
@@ -216,16 +216,8 @@ requireText(
   'explicit_provider_binding_is_preserved',
   'Rust regression preserves explicit provider bindings',
 )
-requireText(
-  'windowsNetwork',
-  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
-  'Rust regression keeps top-level route selection dynamic',
-)
 
-// v2.5.4-karing.18: Windows strict-route is a Runtime-only compatibility
-// lease while a real hotspot private-side interface is active and ICS-ready.
-// The saved Clash configuration remains authoritative and is regenerated when
-// the hotspot exits.
+// v2.5.4-karing.18: strict-route compatibility stays Runtime-only and ICS-ready.
 requireText(
   'windowsNetwork',
   'apply_hotspot_strict_route_compat',
@@ -233,23 +225,8 @@ requireText(
 )
 requireText(
   'windowsNetwork',
-  'Windows Mobile Hotspot/ICS plus strict-route has an upstream self-capture',
-  'compatibility lease documents the upstream failure class it mitigates',
-)
-requireText(
-  'windowsNetwork',
-  'tun.insert(key, Value::from(false));',
-  'hotspot Runtime can relax strict-route without changing saved config',
-)
-requireText(
-  'windowsNetwork',
   'if !route.hotspot_ready',
-  'strict-route relaxation waits for a real ICS private subnet, not adapter Up alone',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_ready = true;',
-  'native route guard records the ICS-ready boundary from a real private CIDR',
+  'strict-route relaxation waits for a real ICS private subnet',
 )
 requireText(
   'windowsNetwork',
@@ -258,23 +235,8 @@ requireText(
 )
 requireText(
   'windowsNetwork',
-  'hotspot_runtime_preserves_an_existing_strict_route_false',
-  'Rust regression preserves an already-disabled strict-route setting',
-)
-requireText(
-  'windowsNetwork',
   'hotspot_adapter_without_private_address_is_not_ready',
   'Rust regression prevents strict-route compatibility during hotspot Starting state',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
-  'Rust regression retains ICS SkipAsSource coverage',
-)
-requireText(
-  'windowsNetwork',
-  'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
-  'Rust regression rejects derived Wi-Fi Direct filter interfaces',
 )
 forbidText(
   'windowsNetwork',
@@ -290,6 +252,64 @@ forbidText(
   'windowsNetwork',
   '192.168.137.0/24',
   'production hotspot compatibility must not hardcode the common ICS subnet',
+)
+
+// v2.5.4-karing.19: all Mihomo outbound receives one Runtime-managed physical
+// interface lease, mirroring the mature default-interface/bind-interface model.
+requireText(
+  'utils',
+  'pub mod windows_managed_interface;',
+  'managed physical interface module is compiled on Windows',
+)
+requireText(
+  'windowsManagedInterface',
+  'apply_managed_physical_interface_lease',
+  'managed physical interface lease implementation exists',
+)
+requireText(
+  'windowsManagedInterface',
+  'config.insert(interface_key, Value::from(alias));',
+  'managed lease binds the global Mihomo outbound interface',
+)
+requireText(
+  'windowsManagedInterface',
+  'tun.insert(Value::from("auto-detect-interface"), Value::from(false));',
+  'application topology watcher becomes the single upstream selector',
+)
+requireText(
+  'windowsManagedInterface',
+  'explicit_user_interface_is_never_overwritten',
+  'Rust regression preserves explicit user interface binding',
+)
+requireText(
+  'windowsManagedInterface',
+  'managed_lease_binds_all_outbound_to_stable_physical_nic',
+  'Rust regression covers all-outbound stable NIC lease',
+)
+requireText(
+  'windowsManagedInterface',
+  'empty_detected_alias_does_not_create_a_broken_lease',
+  'Rust regression rejects an empty detected interface',
+)
+requireText(
+  'manager',
+  'apply_managed_physical_interface_lease',
+  'CoreManager applies the all-outbound lease after stable route detection',
+)
+requireText(
+  'manager',
+  'runtime-managed-stable-physical-upstream',
+  'managed lease source is explicit in diagnostics',
+)
+requireText(
+  'manager',
+  'all-mihomo-outbound',
+  'managed lease scope is explicit in diagnostics',
+)
+requireText(
+  'manager',
+  'regenerate-runtime-on-physical-upstream-change',
+  'managed lease failover behavior is explicit in diagnostics',
 )
 
 // Single topology watcher with an ICS-ready state machine.
@@ -339,6 +359,9 @@ for (const marker of [
   'refresh-deferred-hotspot-starting',
   'guard-state-confirmed',
   'refresh-deferred-topology-still-settling',
+  'runtime_managed_physical_interface_lease',
+  'physical_interface_pin_scope',
+  'mihomo_auto_detect_interface',
 ]) {
   requireText(
     'windowsTopologyDiagnostics',
@@ -350,16 +373,6 @@ requireText(
   'windowsTopologyDiagnostics',
   'const GUARD_CONFIRM_SAMPLES: usize = 3;',
   'hotspot Ready/Off transitions need multiple confirming snapshots',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'WATCHDOG_INTERVAL',
-  'topology watcher retains bounded watchdog sampling',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'is_filter_component',
-  'topology watcher filters derived Wi-Fi Direct components',
 )
 requireText(
   'windowsTopologyDiagnostics',
@@ -379,27 +392,22 @@ requireText(
 requireText(
   'windowsTopologyDiagnostics',
   '"physical-upstream-changed"',
-  'managed proxy binding follows real physical upstream changes',
+  'managed all-outbound lease follows real physical upstream changes',
 )
 requireText(
   'windowsTopologyDiagnostics',
-  'physical_interface_pinned": false',
-  'runtime diagnostics make top-level pinning state explicit',
+  'physical_interface_pinned": true',
+  'runtime diagnostics report the managed physical pin truthfully',
 )
 requireText(
   'windowsTopologyDiagnostics',
-  'hotspot_guard_waits_for_ics_private_address',
-  'Rust regression covers the Off -> Starting -> Ready boundary',
+  'previous_physical_upstream',
+  'topology refresh logs previous physical upstream',
 )
 requireText(
   'windowsTopologyDiagnostics',
-  'hotspot_guard_off_state_is_actionable_for_cleanup',
-  'Rust regression covers stable hotspot shutdown cleanup',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'hotspot_subnets_do_not_short_circuit_on_first_active_adapter',
-  'Rust regression retains the .15 hotspot subnet fix',
+  'current_physical_upstream',
+  'topology refresh logs current physical upstream',
 )
 forbidText(
   'windowsTopologyDiagnostics',
@@ -417,7 +425,7 @@ requireText(
   'Win32 topology snapshots do not block the async executor',
 )
 
-// Existing outbound diagnostics remain available for regression evidence.
+// Existing outbound diagnostics remain available for post-fix evidence.
 requireText(
   'coreMod',
   'pub mod outbound_diagnostics;',
@@ -461,11 +469,6 @@ requireText(
 )
 
 requireText(
-  'utils',
-  'pub mod windows_network;',
-  'Windows managed routing module is compiled',
-)
-requireText(
   'manifest',
   '"Win32_NetworkManagement_Ndis"',
   'native adapter status types are enabled',
@@ -478,15 +481,13 @@ if (failures.length > 0) {
 }
 
 console.log('Windows TUN/self-capture regression passed.')
-console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不再 reload')
-console.log('[通过] Starting 期间任何 topology-driven reload 都被抑制')
+console.log('[通过] Wi-Fi 上游与 Wi-Fi Direct/ICS 热点下游保持角色分离')
+console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不 reload')
 console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
-console.log(
-  '[通过] 未显式绑定的 proxy/provider 出站 socket 动态绑定稳定物理 NIC',
-)
-console.log(
-  '[通过] 热点 Ready 时仅在 Runtime 临时关闭 strict-route，保存配置不变并可自动恢复',
-)
-console.log('[通过] 用户显式 node/provider/interface 配置保持优先')
-console.log('[通过] 顶层 interface-name 仍不固定，物理切网由运行期稳定探测跟随')
-console.log('[通过] 热点 CIDR、接口名、代理 endpoint 均不写死')
+console.log('[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound')
+console.log('[通过] Mihomo auto-detect-interface 在 managed lease 下关闭，避免双 selector 竞争')
+console.log('[通过] 物理上游变化由单一 IP Helper watcher 触发 Runtime 重生成与 lease 迁移')
+console.log('[通过] proxy/provider interface-name 继续作为 defense-in-depth')
+console.log('[通过] 热点 Ready 时 strict-route 仅在 Runtime 临时降级并可自动恢复')
+console.log('[通过] 用户显式 node/provider/top-level interface 配置保持优先')
+console.log('[通过] 热点 CIDR、热点接口、物理 NIC、代理 endpoint 均不写死')
