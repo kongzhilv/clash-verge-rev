@@ -14,9 +14,8 @@ use serde_json::json;
 use windows::Win32::{
     NetworkManagement::{
         IpHelper::{
-            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry,
-            GetUnicastIpAddressTable, MIB_IF_ROW2, MIB_IF_TABLE2, MIB_IPFORWARD_ROW2,
-            MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
+            FreeMibTable, GetIfTable2, GetIpForwardTable2, GetIpInterfaceEntry, GetUnicastIpAddressTable, MIB_IF_ROW2,
+            MIB_IF_TABLE2, MIB_IPFORWARD_ROW2, MIB_IPFORWARD_TABLE2, MIB_IPINTERFACE_ROW, MIB_UNICASTIPADDRESS_ROW,
             MIB_UNICASTIPADDRESS_TABLE,
         },
         Ndis::IfOperStatusUp,
@@ -24,10 +23,7 @@ use windows::Win32::{
     Networking::WinSock::{AF_INET, IpDadStatePreferred, SOCKADDR_INET},
 };
 
-use crate::{
-    core::diagnostics,
-    process::AsyncHandler,
-};
+use crate::{core::diagnostics, process::AsyncHandler};
 
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_ROUTES: usize = 128;
@@ -171,8 +167,7 @@ fn capture_snapshot() -> Result<DeepNetworkSnapshot> {
             let mut ipv4 = addresses
                 .iter()
                 .filter(|address| {
-                    address.InterfaceIndex == row.InterfaceIndex
-                        && address.DadState == IpDadStatePreferred
+                    address.InterfaceIndex == row.InterfaceIndex && address.DadState == IpDadStatePreferred
                 })
                 .filter_map(|address| {
                     let ip = ipv4_from_sockaddr(&address.Address)?;
@@ -217,10 +212,7 @@ fn capture_snapshot() -> Result<DeepNetworkSnapshot> {
                 prefix_length: row.DestinationPrefix.PrefixLength,
                 next_hop: next_hop.to_string(),
                 interface_index: row.InterfaceIndex,
-                interface_alias: alias_by_index
-                    .get(&row.InterfaceIndex)
-                    .cloned()
-                    .unwrap_or_default(),
+                interface_alias: alias_by_index.get(&row.InterfaceIndex).cloned().unwrap_or_default(),
                 route_metric: row.Metric,
                 interface_metric,
                 effective_metric: interface_metric.map(|metric| metric.saturating_add(row.Metric)),
@@ -230,8 +222,16 @@ fn capture_snapshot() -> Result<DeepNetworkSnapshot> {
         })
         .collect::<Vec<_>>();
     route_snapshots.sort_by(|left, right| {
-        (left.prefix_length, left.effective_metric.unwrap_or(u32::MAX), left.interface_index)
-            .cmp(&(right.prefix_length, right.effective_metric.unwrap_or(u32::MAX), right.interface_index))
+        (
+            left.prefix_length,
+            left.effective_metric.unwrap_or(u32::MAX),
+            left.interface_index,
+        )
+            .cmp(&(
+                right.prefix_length,
+                right.effective_metric.unwrap_or(u32::MAX),
+                right.interface_index,
+            ))
     });
     route_snapshots.truncate(MAX_ROUTES);
 
@@ -278,7 +278,11 @@ async fn monitor_loop() {
                 }
                 diagnostics::info(
                     "windows-network-deep",
-                    if previous.is_none() { "deep-baseline" } else { "deep-changed" },
+                    if previous.is_none() {
+                        "deep-baseline"
+                    } else {
+                        "deep-changed"
+                    },
                     json!({
                         "previous": previous.as_ref(),
                         "current": &current,
