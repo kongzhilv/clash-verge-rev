@@ -423,6 +423,11 @@ fn role_of_guid(roles: &[SavedRole], guid: GUID) -> Option<SharingRole> {
         .map(|item| item.role)
 }
 
+fn lease_roles_are_desired(roles: &[SavedRole], pair: &TargetPair) -> bool {
+    role_of_guid(roles, pair.tun.guid) == Some(SharingRole::Public)
+        && role_of_guid(roles, pair.hotspot.guid) == Some(SharingRole::Private)
+}
+
 fn has_unrelated_private_role(original: &[SavedRole], pair: &TargetPair) -> bool {
     original.iter().any(|item| {
         item.role == SharingRole::Private
@@ -460,6 +465,23 @@ fn create_managers() -> Result<(ComApartment, INetSharingManager, INetConnection
     let connection_manager: INetConnectionManager = unsafe { CoCreateInstance(&CONNECTION_MANAGER, None, CLSCTX_ALL) }
         .context("create Network Connection Manager failed")?;
     Ok((apartment, sharing_manager, connection_manager))
+}
+
+fn read_lease_roles(pair: &TargetPair) -> Result<Vec<SavedRole>> {
+    let (_apartment, sharing_manager, connection_manager) = create_managers()?;
+    let connections = enumerate_connections(&connection_manager)?;
+    let roles = current_shared_roles(&sharing_manager, &connections)?;
+    diagnostics::info(
+        "windows-hotspot-ics",
+        "lease-readback",
+        json!({
+            "tun_guid": guid_string(pair.tun.guid),
+            "hotspot_guid": guid_string(pair.hotspot.guid),
+            "roles": &roles,
+            "desired": lease_roles_are_desired(&roles, pair),
+        }),
+    );
+    Ok(roles)
 }
 
 fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Result<()> {
@@ -540,6 +562,14 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
         bail!("refusing to replace an unrelated existing PRIVATE ICS connection");
     }
 
+    // Resolve both COM connections before persisting rollback state. If either target
+    // vanished during the stability window, no mutation has happened and no stale
+    // snapshot is left behind for the next reconcile pass to misinterpret.
+    let tun = find_connection(&sharing_manager, &connections, pair.tun.guid)?
+        .ok_or_else(|| anyhow!("Mihomo TUN connection disappeared before ICS apply"))?;
+    let hotspot = find_connection(&sharing_manager, &connections, pair.hotspot.guid)?
+        .ok_or_else(|| anyhow!("Mobile Hotspot connection disappeared before ICS apply"))?;
+
     let snapshot = SavedSharingState {
         version: 2,
         created_unix_ms: SystemTime::now()
@@ -552,11 +582,6 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
     };
     save_snapshot(path, &snapshot)?;
 
-    let tun = find_connection(&sharing_manager, &connections, pair.tun.guid)?
-        .ok_or_else(|| anyhow!("Mihomo TUN connection disappeared before ICS apply"))?;
-    let hotspot = find_connection(&sharing_manager, &connections, pair.hotspot.guid)?
-        .ok_or_else(|| anyhow!("Mobile Hotspot connection disappeared before ICS apply"))?;
-
     let apply_result = (|| -> Result<()> {
         set_role(&sharing_configuration(&sharing_manager, &tun)?, SharingRole::Public)?;
         set_role(
@@ -565,9 +590,7 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
         )?;
 
         let after = current_shared_roles(&sharing_manager, &connections)?;
-        if role_of_guid(&after, pair.tun.guid) != Some(SharingRole::Public)
-            || role_of_guid(&after, pair.hotspot.guid) != Some(SharingRole::Private)
-        {
+        if !lease_roles_are_desired(&after, pair) {
             bail!("ICS role verification failed after EnableSharing");
         }
         Ok(())
@@ -631,7 +654,23 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
         (Some(snapshot), Some(pair))
             if same_guid(&snapshot.tun_guid, pair.tun.guid) && same_guid(&snapshot.hotspot_guid, pair.hotspot.guid) =>
         {
-            Ok("lease-already-active")
+            let roles = read_lease_roles(&pair)?;
+            if lease_roles_are_desired(&roles, &pair) {
+                Ok("lease-already-active")
+            } else {
+                diagnostics::warn(
+                    "windows-hotspot-ics",
+                    "lease-drift-detected",
+                    json!({
+                        "tun_guid": guid_string(pair.tun.guid),
+                        "hotspot_guid": guid_string(pair.hotspot.guid),
+                        "observed_roles": roles,
+                        "action": "restore-before-next-reapply",
+                    }),
+                );
+                restore_snapshot_unlocked(path, &snapshot)?;
+                Ok("lease-drift-restored")
+            }
         }
         (Some(snapshot), _) => {
             restore_snapshot_unlocked(path, &snapshot)?;
@@ -687,6 +726,7 @@ async fn monitor_loop() {
             "rollback_scope": "original-public+lease-targets-only",
             "unrelated_private_ics_policy": "fail-closed",
             "shutdown_restore_gate": true,
+            "active_lease_readback": true,
             "desired_topology": "mihomo-tun=public,windows-mobile-hotspot=private",
         }),
     );
@@ -830,7 +870,7 @@ pub fn ensure_monitor_running() {
 mod tests {
     use super::{
         InterfaceIdentity, SavedRole, SharingRole, TargetPair, has_unrelated_private_role, lease_owned_original_roles,
-        normalize_guid,
+        lease_roles_are_desired, normalize_guid,
     };
     use windows::core::GUID;
 
@@ -892,5 +932,27 @@ mod tests {
             role: SharingRole::Private,
         }];
         assert!(has_unrelated_private_role(&roles, &pair));
+    }
+
+    #[test]
+    fn windows_network_active_lease_requires_both_expected_roles() {
+        let pair = pair();
+        let desired = vec![
+            SavedRole {
+                guid: format!("{:?}", pair.tun.guid),
+                role: SharingRole::Public,
+            },
+            SavedRole {
+                guid: format!("{:?}", pair.hotspot.guid),
+                role: SharingRole::Private,
+            },
+        ];
+        assert!(lease_roles_are_desired(&desired, &pair));
+
+        let drifted = vec![SavedRole {
+            guid: format!("{:?}", pair.tun.guid),
+            role: SharingRole::Public,
+        }];
+        assert!(!lease_roles_are_desired(&drifted, &pair));
     }
 }
