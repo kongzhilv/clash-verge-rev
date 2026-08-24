@@ -557,6 +557,8 @@ async fn refresh_runtime_network_state(
                 "current_hotspot_present": current.hotspot_present,
                 "previous_hotspot_subnets": &previous.hotspot_subnets,
                 "current_hotspot_subnets": &current.hotspot_subnets,
+                "previous_physical_upstream": &previous.physical_upstream,
+                "current_physical_upstream": &current.physical_upstream,
             }),
         );
         return true;
@@ -580,9 +582,14 @@ async fn refresh_runtime_network_state(
             "current_hotspot_present": current.hotspot_present,
             "previous_hotspot_subnets": &previous.hotspot_subnets,
             "current_hotspot_subnets": &current.hotspot_subnets,
-            "strategy": "stable-hotspot-state+managed-proxy-interface-binding",
-            "physical_interface_pinned": false,
-            "proxy_socket_binding": "per-node/provider-managed-when-unset",
+            "previous_physical_upstream": &previous.physical_upstream,
+            "current_physical_upstream": &current.physical_upstream,
+            "strategy": "stable-hotspot-state+runtime-managed-physical-interface-lease",
+            "physical_interface_pinned": true,
+            "physical_interface_pin_source": "runtime-managed-stable-physical-upstream",
+            "physical_interface_pin_scope": "all-mihomo-outbound",
+            "mihomo_auto_detect_interface": false,
+            "proxy_socket_binding": "per-node/provider-defense-in-depth",
         }),
     );
 
@@ -591,7 +598,11 @@ async fn refresh_runtime_network_state(
             diagnostics::info(
                 "windows-hotspot-guard",
                 "refresh-succeeded",
-                json!({"reason": reason, "outcome": outcome.to_string()}),
+                json!({
+                    "reason": reason,
+                    "outcome": outcome.to_string(),
+                    "requested_physical_upstream": &current.physical_upstream,
+                }),
             );
             true
         }
@@ -631,7 +642,10 @@ async fn monitor_loop() {
             "guard_confirm_samples": GUARD_CONFIRM_SAMPLES,
             "guard_confirm_delay_ms": GUARD_CONFIRM_DELAY.as_millis(),
             "managed_proxy_interface_binding": true,
-            "physical_interface_pinned": false,
+            "runtime_managed_physical_interface_lease": true,
+            "physical_interface_pin_scope": "all-mihomo-outbound",
+            "mihomo_auto_detect_interface": false,
+            "failover_strategy": "regenerate-runtime-on-physical-upstream-change",
         }),
     );
 
@@ -731,6 +745,7 @@ async fn monitor_loop() {
                 "previous_physical_upstream": &previous.physical_upstream,
                 "current_physical_upstream": &current.physical_upstream,
                 "hotspot_guard_ready": current_guard.is_some(),
+                "runtime_managed_physical_interface_lease": true,
                 "snapshot": &current,
             }),
         );
@@ -742,6 +757,7 @@ async fn monitor_loop() {
                 json!({
                     "reason": "hotspot-adapter-up-without-private-subnet",
                     "current_hotspot_subnets": &current.hotspot_subnets,
+                    "current_physical_upstream": &current.physical_upstream,
                     "strategy": "wait-for-ics-private-address-before-any-topology-reload",
                 }),
             );
@@ -760,6 +776,7 @@ async fn monitor_loop() {
                         json!({
                             "signature": &signature,
                             "samples": GUARD_CONFIRM_SAMPLES,
+                            "confirmed_physical_upstream": &confirmed.physical_upstream,
                         }),
                     );
                     if refresh_runtime_network_state("hotspot-guard-state-changed", &previous, &confirmed).await {
@@ -785,8 +802,8 @@ async fn monitor_loop() {
                 }
             }
         } else if physical_upstream_changed {
-            // Proxy nodes/providers are managed against the stable physical NIC. A real
-            // upstream change must regenerate Runtime so those managed bindings follow it.
+            // All Mihomo outbound is leased to the stable physical NIC. A real upstream
+            // change must regenerate Runtime so the managed top-level lease follows it.
             refresh_runtime_network_state("physical-upstream-changed", &previous, &current).await;
         }
 
