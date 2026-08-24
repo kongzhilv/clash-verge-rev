@@ -1,6 +1,10 @@
 name: v19 release metadata helper
 
 on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/v19-release-metadata-helper.yml'
   issue_comment:
     types: [created]
 
@@ -11,9 +15,10 @@ permissions:
 jobs:
   patch:
     if: >-
-      github.event.issue.pull_request &&
-      github.event.issue.number == 11 &&
-      github.event.comment.body == 'v19-release-metadata-apply-6f3a2d'
+      github.event_name == 'push' ||
+      (github.event.issue.pull_request &&
+       github.event.issue.number == 11 &&
+       github.event.comment.body == 'v19-release-metadata-apply-6f3a2d')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout v19 branch
