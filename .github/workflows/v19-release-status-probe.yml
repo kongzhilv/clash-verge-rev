@@ -1,0 +1,55 @@
+name: v19 release status probe
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  probe:
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.issue.number == 11 &&
+      github.event.comment.body == 'v19-release-status-probe-b5f61da'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query v19 release run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: b5f61da783b3a42a6408ef69f9d8a9d6a558fe85
+          MAIN_WORKFLOW: karing-diagnostics-once.yml
+          RELEASE_BRANCH: feature/karing-style-diversion
+          PR_NUMBER: '11'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          runs_json=$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/${MAIN_WORKFLOW}/runs" \
+            -f branch="$RELEASE_BRANCH" -f event=push -f per_page=30)
+          run_json=$(jq -c --arg sha "$SOURCE_SHA" \
+            '[.workflow_runs[] | select(.head_sha == $sha)] | sort_by(.created_at) | last // empty' \
+            <<<"$runs_json")
+
+          if [ -z "$run_json" ]; then
+            gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+              "🔎 v19 release probe: no push run found yet for \`${SOURCE_SHA}\`." >/dev/null
+            exit 0
+          fi
+
+          run_id=$(jq -r '.id' <<<"$run_json")
+          status=$(jq -r '.status' <<<"$run_json")
+          conclusion=$(jq -r '.conclusion // "pending"' <<<"$run_json")
+          created=$(jq -r '.created_at' <<<"$run_json")
+          jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")
+          total=$(jq '.jobs | length' <<<"$jobs_json")
+          completed=$(jq '[.jobs[] | select(.status == "completed")] | length' <<<"$jobs_json")
+          failed=$(jq -r '[.jobs[] | select(.conclusion != null and .conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
+          active=$(jq -r '[.jobs[] | select(.status != "completed") | .name] | join("；")' <<<"$jobs_json")
+
+          gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "🔎 v19 release probe: run **${run_id}**, status **${status}**, conclusion **${conclusion}**, created ${created}, source \`${SOURCE_SHA}\`. Jobs: **${completed}/${total}** completed. Active: ${active:-none}. Failed: ${failed:-none}." >/dev/null
