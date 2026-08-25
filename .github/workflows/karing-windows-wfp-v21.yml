@@ -73,8 +73,24 @@ jobs:
           if (!(Test-Path $stable)) { throw "missing stable core: $stable" }
           if (!(Test-Path $alpha)) { throw "missing alpha core: $alpha" }
           if (!(Test-Path $provenance)) { throw "missing provenance: $provenance" }
+
           $info = Get-Content $provenance -Raw | ConvertFrom-Json
           if ($info.policy -ne 'block-non-loopback-ipv6') { throw 'unexpected WFP policy' }
           if ($info.binaries.Count -ne 2) { throw 'expected stable + alpha binaries' }
-          Get-FileHash $stable -Algorithm SHA256
-          Get-FileHash $alpha -Algorithm SHA256
+
+          $stableInfo = @($info.binaries | Where-Object { $_.name -eq 'stable' -and $_.target -eq $target })
+          $alphaInfo = @($info.binaries | Where-Object { $_.name -eq 'alpha' -and $_.target -eq $target })
+          if ($stableInfo.Count -ne 1) { throw 'expected exactly one stable provenance entry' }
+          if ($alphaInfo.Count -ne 1) { throw 'expected exactly one alpha provenance entry' }
+
+          $stableHash = (Get-FileHash $stable -Algorithm SHA256).Hash.ToLowerInvariant()
+          $alphaHash = (Get-FileHash $alpha -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($stableHash -ne ([string]$stableInfo[0].sha256).ToLowerInvariant()) {
+            throw "stable SHA256 does not match provenance: $stableHash"
+          }
+          if ($alphaHash -ne ([string]$alphaInfo[0].sha256).ToLowerInvariant()) {
+            throw "alpha SHA256 does not match provenance: $alphaHash"
+          }
+
+          Write-Host "stable SHA256 verified: $stableHash"
+          Write-Host "alpha SHA256 verified:  $alphaHash"
