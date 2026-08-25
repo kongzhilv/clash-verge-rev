@@ -38,6 +38,7 @@ for (const [label, token] of [
   mustContain(build, token, label)
 }
 
+mustContain(wrapper, 'check-windows-wfp-v21.mjs', 'prebuild safety gate')
 mustContain(wrapper, 'build-karing-mihomo-windows-v21.mjs', 'prebuild wrapper')
 mustContain(wrapper, "await import('./prebuild.mjs')", 'prebuild fallback')
 if (pkg.scripts.prebuild !== 'node scripts/prebuild-karing-v21.mjs') {
