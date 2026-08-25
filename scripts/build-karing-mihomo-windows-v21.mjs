@@ -155,7 +155,8 @@ function patchSingTun(singTunDir, goExe) {
   )
   fs.writeFileSync(tunPath, tun)
 
-  run(goExe, ['fmt', constantsPath, tunPath], { cwd: singTunDir })
+  const gofmtExe = path.join(path.dirname(goExe), 'gofmt.exe')
+  run(gofmtExe, ['-w', constantsPath, tunPath], { cwd: singTunDir })
 
   const patchedTun = fs.readFileSync(tunPath, 'utf8')
   for (const token of [
