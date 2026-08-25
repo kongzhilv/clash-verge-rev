@@ -30,7 +30,12 @@ const GO_TOOLCHAIN = Object.freeze({
 const PATCH_POLICY = 'block-non-loopback-ipv6'
 const PATCH_GUID = '632ce23b-5167-435c-86d7-e903684aa80c'
 const workspace = path.join(cwd, '.ci', 'mihomo-wfp-v21', target || 'unknown')
-const toolchainRoot = path.join(cwd, '.ci', 'toolchains', `go${GO_TOOLCHAIN.version}`)
+const toolchainRoot = path.join(
+  cwd,
+  '.ci',
+  'toolchains',
+  `go${GO_TOOLCHAIN.version}`,
+)
 
 function run(file, args, options = {}) {
   return execFileSync(file, args, {
@@ -92,6 +97,7 @@ function clonePinned(repoUrl, commit, destination) {
   fs.rmSync(destination, { recursive: true, force: true })
   fs.mkdirSync(destination, { recursive: true })
   run('git', ['init', '--quiet'], { cwd: destination })
+  run('git', ['config', 'core.autocrlf', 'false'], { cwd: destination })
   run('git', ['remote', 'add', 'origin', repoUrl], { cwd: destination })
   run('git', ['fetch', '--quiet', '--depth=1', 'origin', commit], {
     cwd: destination,
@@ -173,8 +179,7 @@ function buildMihomo({ name, commit, version }, singTunDir, goExe, targetInfo) {
   clonePinned('https://github.com/MetaCubeX/mihomo.git', commit, sourceDir)
 
   const goMod = fs.readFileSync(path.join(sourceDir, 'go.mod'), 'utf8')
-  const expectedDependency =
-    `github.com/metacubex/sing-tun ${PINS.singTunVersion}`
+  const expectedDependency = `github.com/metacubex/sing-tun ${PINS.singTunVersion}`
   if (!goMod.includes(expectedDependency)) {
     throw new Error(
       `${name}: expected ${expectedDependency}; upstream dependency changed, re-audit required`,
