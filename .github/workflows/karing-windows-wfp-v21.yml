@@ -1,0 +1,80 @@
+name: Karing Windows WFP v21 loopback safety
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/karing-windows-wfp-v21.yml'
+      - '.release/karing-windows-mihomo-v21.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/build-karing-mihomo-windows-v21.mjs'
+      - 'scripts/prebuild-karing-v21.mjs'
+      - 'scripts/check-windows-wfp-v21.mjs'
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-windows-wfp-v21.yml'
+      - '.release/karing-windows-mihomo-v21.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/build-karing-mihomo-windows-v21.mjs'
+      - 'scripts/prebuild-karing-v21.mjs'
+      - 'scripts/check-windows-wfp-v21.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: 0
+
+jobs:
+  policy:
+    name: Validate non-loopback IPv6 block policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+      - name: Validate source pins and WFP semantics
+        run: node scripts/check-windows-wfp-v21.mjs
+
+  build-windows-core:
+    name: Build patched Mihomo ${{ matrix.target }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build pinned stable and alpha cores with patched sing-tun
+        run: node scripts/build-karing-mihomo-windows-v21.mjs ${{ matrix.target }}
+      - name: Verify patched core outputs and provenance
+        shell: pwsh
+        run: |
+          $target = '${{ matrix.target }}'
+          $stable = "src-tauri/sidecar/verge-mihomo-$target.exe"
+          $alpha = "src-tauri/sidecar/verge-mihomo-alpha-$target.exe"
+          $provenance = ".ci/karing-mihomo-wfp-v21-$target.json"
+          if (!(Test-Path $stable)) { throw "missing stable core: $stable" }
+          if (!(Test-Path $alpha)) { throw "missing alpha core: $alpha" }
+          if (!(Test-Path $provenance)) { throw "missing provenance: $provenance" }
+          $info = Get-Content $provenance -Raw | ConvertFrom-Json
+          if ($info.policy -ne 'block-non-loopback-ipv6') { throw 'unexpected WFP policy' }
+          if ($info.binaries.Count -ne 2) { throw 'expected stable + alpha binaries' }
+          Get-FileHash $stable -Algorithm SHA256
+          Get-FileHash $alpha -Algorithm SHA256
