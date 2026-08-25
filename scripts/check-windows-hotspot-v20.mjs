@@ -189,5 +189,7 @@ console.log(
 console.log('[通过] active lease 每轮读回角色，漂移先恢复再重建')
 console.log('[通过] snapshot 只在两个 COM 目标都解析成功后落盘')
 console.log('[通过] 无关 PRIVATE ICS 被 fail-closed 保护，不会被租约覆盖')
-console.log('[通过] 退出等待 ICS 恢复完成；恢复失败则保留 snapshot 并中止显式 TUN/Core teardown')
+console.log(
+  '[通过] 退出等待 ICS 恢复完成；恢复失败则保留 snapshot 并中止显式 TUN/Core teardown',
+)
 console.log('[通过] 深度日志保留全部接口和完整 IPv4 路由，不截断证据')
