@@ -322,12 +322,11 @@ fn enumerate_connections(connection_manager: &INetConnectionManager) -> Result<V
 }
 
 fn connection_log(manager: &INetSharingManager, connection: &INetConnection) -> Result<SharingStateLog> {
-    let props =
-        unsafe { manager.get_NetConnectionProps(connection.clone()) }.context("get_NetConnectionProps failed")?;
+    let props = unsafe { manager.get_NetConnectionProps(connection) }.context("get_NetConnectionProps failed")?;
     let guid = unsafe { props.Guid() }.context("INetConnectionProps::Guid failed")?;
     let name = unsafe { props.Name() }.context("INetConnectionProps::Name failed")?;
     let device_name = unsafe { props.DeviceName() }.context("INetConnectionProps::DeviceName failed")?;
-    let sharing = unsafe { manager.get_INetSharingConfigurationForINetConnection(connection.clone()) }
+    let sharing = unsafe { manager.get_INetSharingConfigurationForINetConnection(connection) }
         .context("get_INetSharingConfigurationForINetConnection failed")?;
     let enabled = unsafe { sharing.SharingEnabled() }
         .context("INetSharingConfiguration::SharingEnabled failed")?
@@ -359,7 +358,7 @@ fn sharing_configuration(
     manager: &INetSharingManager,
     connection: &INetConnection,
 ) -> Result<INetSharingConfiguration> {
-    unsafe { manager.get_INetSharingConfigurationForINetConnection(connection.clone()) }
+    unsafe { manager.get_INetSharingConfigurationForINetConnection(connection) }
         .context("get_INetSharingConfigurationForINetConnection failed")
 }
 
@@ -369,7 +368,7 @@ fn find_connection(
     guid: GUID,
 ) -> Result<Option<INetConnection>> {
     for connection in connections {
-        let props = unsafe { manager.get_NetConnectionProps(connection.clone()) }
+        let props = unsafe { manager.get_NetConnectionProps(connection) }
             .context("get_NetConnectionProps failed while matching GUID")?;
         let candidate = unsafe { props.Guid() }.context("INetConnectionProps::Guid failed while matching GUID")?;
         if same_guid(&candidate.to_string(), guid) {
@@ -385,7 +384,7 @@ fn find_connection_by_saved_guid(
     guid: &str,
 ) -> Result<Option<INetConnection>> {
     for connection in connections {
-        let props = unsafe { manager.get_NetConnectionProps(connection.clone()) }
+        let props = unsafe { manager.get_NetConnectionProps(connection) }
             .context("get_NetConnectionProps failed while matching saved GUID")?;
         let candidate =
             unsafe { props.Guid() }.context("INetConnectionProps::Guid failed while matching saved GUID")?;
