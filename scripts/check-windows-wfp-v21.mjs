@@ -38,14 +38,12 @@ for (const [label, token] of [
   mustContain(build, token, label)
 }
 
-mustContain(
-  wrapper,
-  'build-karing-mihomo-windows-v21.mjs',
-  'prebuild wrapper',
-)
+mustContain(wrapper, 'build-karing-mihomo-windows-v21.mjs', 'prebuild wrapper')
 mustContain(wrapper, "await import('./prebuild.mjs')", 'prebuild fallback')
 if (pkg.scripts.prebuild !== 'node scripts/prebuild-karing-v21.mjs') {
-  throw new Error(`package prebuild is not v21 wrapper: ${pkg.scripts.prebuild}`)
+  throw new Error(
+    `package prebuild is not v21 wrapper: ${pkg.scripts.prebuild}`,
+  )
 }
 
 mustNotContain(build, 'FWP_MATCH_FLAGS_ALL_SET', 'v21 block semantics')
