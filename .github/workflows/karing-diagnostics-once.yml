@@ -137,6 +137,9 @@ jobs:
       - name: 运行 Windows Mobile Hotspot v20 安全回归
         run: node scripts/check-windows-hotspot-v20.mjs
 
+      - name: 运行 Windows WFP v21 loopback 安全回归
+        run: node scripts/check-windows-wfp-v21.mjs
+
       - name: 运行程序归因专项回归
         run: node scripts/check-karing-process-attribution.mjs
 
@@ -626,25 +629,30 @@ jobs:
           Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
           Signing: unsigned fork build; no upstream Apple notarization or updater signature
           Android: intentionally not included
+          Windows Mihomo stable source: ac017cdd246ce8bd547653d927e7bf77d7ee73d5 (v1.19.30)
+          Windows Mihomo alpha source: fb66af813b3e65023851e94166ec8a4f61e02634
+          Windows sing-tun source: dfc71de64aed159d9a09a5df43077bab0671db1f (v0.4.22)
+          Windows core toolchain: Go 1.20.14 / SHA256 0e0d0190406ead891d94ecf00f961bb5cfa15ddd47499d2649f12eee80aee110
+          WFP layer: FWPM_LAYER_ALE_AUTH_CONNECT_V6
+          WFP condition: FWPM_CONDITION_FLAGS / FWP_MATCH_FLAGS_NONE_SET / FWP_CONDITION_FLAG_IS_LOOPBACK
+          WFP semantics: ipv6:false blocks non-loopback IPv6 while preserving IPv6 loopback traffic
           EOF
 
           cat > release-assets/release-notes.md <<'EOF'
           # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
 
-          本轮继续处理 **Windows Wi-Fi 作为真实上游 + Mobile Hotspot/Wi-Fi Direct 作为 ICS 下游 + Mihomo TUN** 的共存故障，并把 `.19` 已验证的物理出口 lease 进一步扩展为可恢复的原生 ICS 拓扑租约：
+          本版针对 Windows 上 `ipv6:false` + StrictRoute/TUN 场景下的 IPv6 loopback 回归做根因修复。
 
-          - 新增原生 HNetCfg COM 管理路径，使用 `INetSharingManager` / `INetSharingConfiguration`，不依赖 PowerShell 或 `netsh`。
-          - 在热点和 TUN 连续稳定后，将 **Mihomo TUN 设置为 ICS PUBLIC、Mobile Hotspot Wi-Fi Direct 设置为 PRIVATE**；应用后立即读回并验证角色。
-          - 变更前持久化 rollback snapshot；验证失败、目标消失、lease 漂移或应用退出/重启时都会恢复原 PUBLIC 状态，并且恢复范围严格限制为原 PUBLIC + 本次 TUN/热点目标。
-          - 如果检测到与本热点无关的既有 PRIVATE ICS，共享租约直接 fail-closed，不覆盖用户其他网络共享配置。
-          - shutdown/restart 在销毁 TUN 前等待 ICS restore 完成；restore 失败时中止显式 TUN/Core teardown 并保留 snapshot，避免把仍需恢复的 PUBLIC TUN 提前销毁。
-          - 新增 Windows 深度网络诊断：完整记录所有接口 GUID/状态、IPv4/SkipAsSource、metric、ForwardingEnabled、WeakHostSend/Receive、DisableDefaultRoutes，以及 **完整不截断的 IPv4 route table**；仅在状态变化时写入，避免无意义刷日志。
-          - 目标识别和热点网段继续动态推导，不写死中文/英文网卡名、`192.168.137.0/24`、机场域名或节点 endpoint。
-          - `.17/.18/.19` 的 proxy/provider binding、热点 Starting→Ready 稳态、动态路由排除、Runtime-only strict-route 降级、managed physical interface lease 等累计防线继续保留；`.20` 新门禁不替换旧回归。
+          - 根因位于 Mihomo 使用的 `sing-tun v0.4.22`：无 IPv6 TUN 地址时，原 `Meta / block ipv6` 在 `FWPM_LAYER_ALE_AUTH_CONNECT_V6` 创建无条件 BLOCK，连 `::1` 本机 loopback 也会被阻断。
+          - Windows stable 与 alpha 两套 Mihomo core 都改为固定源码构建，避免切换 alpha 后回归；stable 固定 `ac017cdd246ce8bd547653d927e7bf77d7ee73d5`，alpha 固定 `fb66af813b3e65023851e94166ec8a4f61e02634`，sing-tun 固定 `dfc71de64aed159d9a09a5df43077bab0671db1f`。
+          - `block ipv6` 改为 `FWPM_CONDITION_FLAGS + FWP_MATCH_FLAGS_NONE_SET + FWP_CONDITION_FLAG_IS_LOOPBACK`：`ipv6:false` 仍阻断非 loopback IPv6，但 WFP 标记为 loopback 的 `::1` 流量不再匹配该 BLOCK。
+          - 不在 GUI 外层追加高权重 PERMIT 来覆盖 core BLOCK，而是修正产生问题的原始 WFP filter 匹配域。
+          - patched core 使用固定 Go 1.20.14 工具链和固定 SHA256；源码 patch 采用 exact-once/fail-closed，源代码漂移时拒绝静默套补丁。
+          - 每次正式 Windows prebuild 都先运行 v21 WFP pins/语义 gate，再构建 stable+alpha core；独立 Windows x64/ARM64 workflow 还会实际编译两个架构并核验 provenance 与二进制 SHA256。
+          - `.20` 已验证的原生 ICS topology lease、Windows TUN route guard、managed physical interface lease、完整网络诊断与其他旧回归全部继续保留，本版不撤销这些防线。
+          - 发行观察器要求同一 source SHA 的主发行 workflow 与 WFP v21 三个 job 全成功，并对 12 个安装包做 SHA256 集合一一对应验证，避免 GitHub asset 文件名规范化造成假失败。
 
-          本版的目标是先把已通过实机证据收敛出的 ICS/TUN 拓扑冲突做成可回滚、可观察、fail-closed 的生产路径。若实机仍出现核心自身出站在正确物理 WLAN 源地址下超时，下一轮将基于本版新增的完整网络证据继续进入 WFP/ALE 过滤路径排查，而不是继续猜测路由或接口选择。
-
-          本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。
+          本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。Windows patched core 的固定来源与 WFP 语义同时记录在 `BUILD_INFO.txt`。
 
           Commit: `${{ needs.review.outputs.commit }}`
           EOF
@@ -700,7 +708,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Native Hotspot ICS Topology Lease" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows IPv6 Loopback WFP Fix" \
             --notes-file release-assets/release-notes.md \
             --latest
 

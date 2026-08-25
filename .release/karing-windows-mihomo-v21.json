@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "release": "v2.5.4-karing.21",
+  "policy": "block-non-loopback-ipv6",
+  "scope": "windows-mihomo-stable-and-alpha",
+  "wfp": {
+    "layer": "FWPM_LAYER_ALE_AUTH_CONNECT_V6",
+    "condition": "FWPM_CONDITION_FLAGS",
+    "match": "FWP_MATCH_FLAGS_NONE_SET",
+    "flag": "FWP_CONDITION_FLAG_IS_LOOPBACK",
+    "loopback": "permit",
+    "nonLoopbackIPv6": "block-when-ipv6-disabled"
+  },
+  "source": {
+    "mihomoStable": "ac017cdd246ce8bd547653d927e7bf77d7ee73d5",
+    "mihomoAlpha": "fb66af813b3e65023851e94166ec8a4f61e02634",
+    "singTun": "dfc71de64aed159d9a09a5df43077bab0671db1f",
+    "singTunVersion": "v0.4.22"
+  },
+  "toolchain": {
+    "go": "1.20.14",
+    "windowsAmd64ZipSha256": "0e0d0190406ead891d94ecf00f961bb5cfa15ddd47499d2649f12eee80aee110"
+  }
+}
