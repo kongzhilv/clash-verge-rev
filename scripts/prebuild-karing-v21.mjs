@@ -9,6 +9,12 @@ const patchedWindowsTargets = new Set([
   'aarch64-pc-windows-msvc',
 ])
 
+execFileSync(
+  process.execPath,
+  [path.join(scriptsDir, 'check-windows-wfp-v21.mjs')],
+  { stdio: 'inherit' },
+)
+
 if (patchedWindowsTargets.has(target)) {
   if (process.platform !== 'win32') {
     throw new Error(
