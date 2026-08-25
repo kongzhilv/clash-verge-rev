@@ -134,6 +134,9 @@ jobs:
       - name: 运行 Windows TUN/热点安全专项回归
         run: node scripts/check-windows-tun-safety.mjs
 
+      - name: 运行 Windows Mobile Hotspot v20 安全回归
+        run: node scripts/check-windows-hotspot-v20.mjs
+
       - name: 运行程序归因专项回归
         run: node scripts/check-karing-process-attribution.mjs
 
@@ -628,22 +631,20 @@ jobs:
           cat > release-assets/release-notes.md <<'EOF'
           # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
 
-          本轮针对 **Wi-Fi 作为真实上游 + Windows Mobile Hotspot/Wi-Fi Direct 作为 ICS 下游** 的共存场景，按成熟 TUN 实现的 default-interface / bind-interface 模型收敛核心自身出站回灌：
+          本轮继续处理 **Windows Wi-Fi 作为真实上游 + Mobile Hotspot/Wi-Fi Direct 作为 ICS 下游 + Mihomo TUN** 的共存故障，并把 `.19` 已验证的物理出口 lease 进一步扩展为可恢复的原生 ICS 拓扑租约：
 
-          - Windows IP Helper 继续以 6 次稳定采样选择真实物理默认出口；Wi-Fi Direct/ICS 只作为热点下游处理，不会被误选为上游。
-          - 当用户没有显式顶层 `interface-name` 时，在生成的 Runtime 副本设置 `interface-name=<当前稳定物理 NIC>`，让 DIRECT、DNS、provider health-check、proxy 等 **全部 Mihomo outbound** 使用同一真实物理出口。
-          - managed lease 生效时将 `tun.auto-detect-interface=false`，避免 Mihomo 自己的自动选择与应用层 topology watcher 在 Wi-Fi + 热点变化窗口形成两个相互竞争的 selector；真实物理出口变化时由现有单一 watcher 重新生成 Runtime 并迁移 lease。
-          - 用户显式顶层 `interface-name` 永远优先；proxy/provider 自己的显式接口绑定也继续保留，`.17` 的 per-node/provider managed binding 作为 defense-in-depth。
-          - 保留 `.18` 的热点 Starting -> Ready 稳态、动态 `exclude-interface` / `route-exclude-address`、ICS-ready `strict-route` Runtime-only 兼容降级；热点关闭后仍从权威保存配置自动恢复。
-          - 热点 CIDR、热点接口、物理 Wi-Fi/以太网名称、机场域名和节点 endpoint 均不硬编码。
-          - 诊断新增 `managed-physical-interface-lease-applied`，记录 alias/index/source/gateway、热点 Ready、route exclusions、lease scope、Mihomo auto-detect 最终值与 failover strategy；原有 outbound 聚合继续记录 `verge-mihomo.exe` 的 DIRECT/DNS/proxy transport 失败，实机日志可直接关联 lease 是否真正生效。
-          - 累计安全门禁继续覆盖 `.17/.18` 的 proxy/provider binding、Starting/Ready、SkipAsSource、Wi-Fi Direct filter、strict-route 原值恢复、hotspot Off cleanup 与 watchdog，不用 `.19` 新检查替换旧回归。
+          - 新增原生 HNetCfg COM 管理路径，使用 `INetSharingManager` / `INetSharingConfiguration`，不依赖 PowerShell 或 `netsh`。
+          - 在热点和 TUN 连续稳定后，将 **Mihomo TUN 设置为 ICS PUBLIC、Mobile Hotspot Wi-Fi Direct 设置为 PRIVATE**；应用后立即读回并验证角色。
+          - 变更前持久化 rollback snapshot；验证失败、目标消失、lease 漂移或应用退出/重启时都会恢复原 PUBLIC 状态，并且恢复范围严格限制为原 PUBLIC + 本次 TUN/热点目标。
+          - 如果检测到与本热点无关的既有 PRIVATE ICS，共享租约直接 fail-closed，不覆盖用户其他网络共享配置。
+          - shutdown/restart 在销毁 TUN 前等待 ICS restore 完成；restore 失败时中止显式 TUN/Core teardown 并保留 snapshot，避免把仍需恢复的 PUBLIC TUN 提前销毁。
+          - 新增 Windows 深度网络诊断：完整记录所有接口 GUID/状态、IPv4/SkipAsSource、metric、ForwardingEnabled、WeakHostSend/Receive、DisableDefaultRoutes，以及 **完整不截断的 IPv4 route table**；仅在状态变化时写入，避免无意义刷日志。
+          - 目标识别和热点网段继续动态推导，不写死中文/英文网卡名、`192.168.137.0/24`、机场域名或节点 endpoint。
+          - `.17/.18/.19` 的 proxy/provider binding、热点 Starting→Ready 稳态、动态路由排除、Runtime-only strict-route 降级、managed physical interface lease 等累计防线继续保留；`.20` 新门禁不替换旧回归。
 
-          重要兼容性说明：Windows `strict-route` 可增强普通多宿主 DNS 解析场景的防泄漏能力。本版仍只在 Mobile Hotspot/ICS Ready 窗口临时关闭该 Runtime 开关；热点关闭即恢复。物理接口 lease 只存在于 Runtime，不写回用户保存的 Clash 配置。
+          本版的目标是先把已通过实机证据收敛出的 ICS/TUN 拓扑冲突做成可回滚、可观察、fail-closed 的生产路径。若实机仍出现核心自身出站在正确物理 WLAN 源地址下超时，下一轮将基于本版新增的完整网络证据继续进入 WFP/ALE 过滤路径排查，而不是继续猜测路由或接口选择。
 
-          上游参考：Mihomo 官方文档建议多出站网卡设备手动指定出站接口；sing-box 官方文档明确要求在 TUN auto-route 下通过 default/auto-detected/bound interface 避免 routing loop；MetaCubeX/mihomo #3122 记录 Windows TUN 核心自身出站被回抓并 reject loopback 的故障类。
-
-          本分支安装包不包含上游官方签名或 Apple 公证，请使用 SHA256SUMS.txt 验证下载文件。
+          本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。
 
           Commit: `${{ needs.review.outputs.commit }}`
           EOF
@@ -699,7 +700,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows Wi-Fi + Hotspot TUN Outbound Lease" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Native Hotspot ICS Topology Lease" \
             --notes-file release-assets/release-notes.md \
             --latest
 

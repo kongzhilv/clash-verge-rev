@@ -1,4 +1,4 @@
-name: Karing .19 发行核验
+name: Karing .20 发行核验
 
 on:
   push:
@@ -19,14 +19,14 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.19 正式发行
+    name: 核验 v2.5.4-karing.20 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '11'
-      STATUS_MARKER: '<!-- karing-v254-karing19-release-audit -->'
+      PR_NUMBER: '12'
+      STATUS_MARKER: '<!-- karing-v254-karing20-release-audit -->'
     steps:
       - name: 检出发行分支
         uses: actions/checkout@v7
@@ -38,11 +38,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # .19 观察器与主发行工作流由同一个发行源提交触发，因此当前 HEAD
+          # .20 观察器与主发行工作流由同一个发行源提交触发，因此当前 HEAD
           # 必须与主 workflow head_sha、Release tag 和 target_commitish 完全一致。
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.19'
+          test "$release_tag" = 'v2.5.4-karing.20'
 
           post_failure() {
             local reason="$1"
