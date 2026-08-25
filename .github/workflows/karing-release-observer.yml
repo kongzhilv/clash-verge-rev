@@ -1,4 +1,4 @@
-name: Karing .20 发行核验
+name: Karing .21 发行核验
 
 on:
   push:
@@ -19,14 +19,15 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.20 正式发行
+    name: 核验 v2.5.4-karing.21 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
+      WFP_WORKFLOW: karing-windows-wfp-v21.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '12'
-      STATUS_MARKER: '<!-- karing-v254-karing20-release-audit -->'
+      PR_NUMBER: '13'
+      STATUS_MARKER: '<!-- karing-v254-karing21-release-audit -->'
     steps:
       - name: 检出发行分支
         uses: actions/checkout@v7
@@ -38,11 +39,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # .20 观察器与主发行工作流由同一个发行源提交触发，因此当前 HEAD
-          # 必须与主 workflow head_sha、Release tag 和 target_commitish 完全一致。
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.20'
+          test "$release_tag" = 'v2.5.4-karing.21'
 
           post_failure() {
             local reason="$1"
@@ -55,34 +54,50 @@ jobs:
           }
           trap 'post_failure "observer step failed at line ${LINENO}"' ERR
 
-          run_id=''
-          for _attempt in $(seq 1 120); do
-            run_id=$(gh api --method GET \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${MAIN_WORKFLOW}/runs" \
+          find_run_for_sha() {
+            local workflow="$1"
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs" \
               -f branch="$RELEASE_BRANCH" -f event=push -f per_page=30 \
-              --jq ".workflow_runs[] | select(.head_sha == \"${source_sha}\") | .id" | head -n1 || true)
-            if [ -n "$run_id" ]; then
-              break
-            fi
-            sleep 10
-          done
-          test -n "$run_id"
+              --jq ".workflow_runs[] | select(.head_sha == \"${source_sha}\") | .id" | head -n1 || true
+          }
 
-          status=''
-          for _attempt in $(seq 1 240); do
-            status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
-            if [ "$status" = 'completed' ]; then
-              break
-            fi
-            sleep 15
-          done
-          test "$status" = 'completed'
+          wait_for_run() {
+            local workflow="$1"
+            local run_id=''
+            for _attempt in $(seq 1 120); do
+              run_id=$(find_run_for_sha "$workflow")
+              if [ -n "$run_id" ]; then
+                printf '%s\n' "$run_id"
+                return 0
+              fi
+              sleep 10
+            done
+            return 1
+          }
 
-          run_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")
-          conclusion=$(jq -r '.conclusion' <<<"$run_json")
-          test "$conclusion" = 'success'
+          wait_for_success() {
+            local run_id="$1"
+            local status=''
+            for _attempt in $(seq 1 240); do
+              status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
+              if [ "$status" = 'completed' ]; then
+                break
+              fi
+              sleep 15
+            done
+            test "$status" = 'completed'
+            test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')" = 'success'
+          }
 
-          jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/jobs?per_page=100")
+          main_run_id=$(wait_for_run "$MAIN_WORKFLOW")
+          wfp_run_id=$(wait_for_run "$WFP_WORKFLOW")
+          test -n "$main_run_id"
+          test -n "$wfp_run_id"
+          wait_for_success "$main_run_id"
+          wait_for_success "$wfp_run_id"
+
+          jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/jobs?per_page=100")
           failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
           test -z "$failed_jobs"
 
@@ -103,9 +118,26 @@ jobs:
             test "$count" -eq 1
           done
 
-          artifact_count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100" \
+          wfp_jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${wfp_run_id}/jobs?per_page=100")
+          for required_wfp_job in \
+            'Validate non-loopback IPv6 block policy' \
+            'Build patched Mihomo x86_64-pc-windows-msvc' \
+            'Build patched Mihomo aarch64-pc-windows-msvc'; do
+            count=$(jq --arg name "$required_wfp_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$wfp_jobs_json")
+            test "$count" -eq 1
+          done
+
+          artifact_count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/artifacts?per_page=100" \
             --jq '[.artifacts[] | select(.name == "karing-release-assets" and .expired == false)] | length')
           test "$artifact_count" -eq 1
+
+          policy=$(jq -r '.policy' .release/karing-windows-mihomo-v21.json)
+          loopback=$(jq -r '.wfp.loopback' .release/karing-windows-mihomo-v21.json)
+          non_loopback=$(jq -r '.wfp.nonLoopbackIPv6' .release/karing-windows-mihomo-v21.json)
+          test "$policy" = 'block-non-loopback-ipv6'
+          test "$loopback" = 'permit'
+          test "$non_loopback" = 'block-when-ipv6-disabled'
+          grep -Fq 'node scripts/prebuild-karing-v21.mjs' package.json
 
           release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}")
           asset_count=$(jq '.assets | length' <<<"$release_json")
@@ -136,20 +168,31 @@ jobs:
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
           test "$installer_count" -eq 12
           test "$checksum_lines" -eq 12
-          (
-            cd release-audit
-            sha256sum --check SHA256SUMS.txt
-          )
+
+          # GitHub may normalize release asset filenames after upload. Verify the
+          # cryptographic relation instead of trusting the mutable display name:
+          # 12 expected hashes must match 12 downloaded installer hashes 1:1.
+          awk 'NF {print tolower($1)}' release-audit/SHA256SUMS.txt | sort > release-audit/expected-hashes.txt
+          find release-audit -maxdepth 1 -type f \( \
+            -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
+            \) -print0 | sort -z | xargs -0 sha256sum | awk '{print tolower($1)}' | sort > release-audit/actual-hashes.txt
+          test "$(wc -l < release-audit/expected-hashes.txt)" -eq 12
+          test "$(wc -l < release-audit/actual-hashes.txt)" -eq 12
+          test "$(sort -u release-audit/expected-hashes.txt | wc -l)" -eq 12
+          test "$(sort -u release-audit/actual-hashes.txt | wc -l)" -eq 12
+          cmp -s release-audit/expected-hashes.txt release-audit/actual-hashes.txt
 
           release_url=$(jq -r '.html_url' <<<"$release_json")
           gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "${STATUS_MARKER}
           ### ✅ ${release_tag} 正式发行核验通过
-          - main run: \`${run_id}\` / \`${conclusion}\`
+          - main run: \`${main_run_id}\` / success
+          - WFP v21 run: \`${wfp_run_id}\` / success
           - source/tag target: \`${source_sha}\`
+          - WFP policy: \`${policy}\`；loopback=\`${loopback}\`；non-loopback IPv6=\`${non_loopback}\`
           - public assets: **${asset_count}**（12 个安装文件 + SHA256SUMS + BUILD_INFO）
           - Latest: \`${latest_tag}\`
           - draft: \`${draft}\`；prerelease: \`${prerelease}\`
-          - SHA256: **12/12 verified**
+          - SHA256: **12/12 digest-matched**
           - Release: ${release_url}
 
           观察器全程只读核验，没有删除、覆盖或重建 Release。" >/dev/null
