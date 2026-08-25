@@ -77,15 +77,12 @@ pub async fn clean_async() -> bool {
 
         // The leased ICS PUBLIC side is the Mihomo TUN adapter. Restore Windows ICS
         // before asking Mihomo to destroy that adapter, otherwise the original PUBLIC
-        // role may no longer be recoverable during shutdown/restart.
+        // role may no longer be recoverable during shutdown/restart. Do not wrap the
+        // blocking COM restore in a Tokio timeout: timing out the future cannot cancel
+        // spawn_blocking and would race an in-flight rollback against TUN destruction.
         #[cfg(target_os = "windows")]
-        let ics_restore_success = match timeout(
-            Duration::from_secs(3),
-            crate::core::windows_hotspot_ics::restore_now("shutdown"),
-        )
-        .await
-        {
-            Ok(Ok(restored)) => {
+        let ics_restore_success = match crate::core::windows_hotspot_ics::restore_now("shutdown").await {
+            Ok(restored) => {
                 diagnostics::info(
                     "shutdown",
                     "windows-ics-restore-completed",
@@ -93,25 +90,33 @@ pub async fn clean_async() -> bool {
                 );
                 true
             }
-            Ok(Err(error)) => {
+            Err(error) => {
                 diagnostics::error(
                     "shutdown",
                     "windows-ics-restore-failed",
-                    serde_json::json!({"error": error.to_string()}),
-                );
-                false
-            }
-            Err(_) => {
-                diagnostics::error(
-                    "shutdown",
-                    "windows-ics-restore-timeout",
-                    serde_json::json!({"timeout_ms": 3000}),
+                    serde_json::json!({
+                        "error": error.to_string(),
+                        "action": "abort-explicit-tun-core-teardown-preserve-snapshot",
+                    }),
                 );
                 false
             }
         };
         #[cfg(not(target_os = "windows"))]
         let ics_restore_success = true;
+
+        if !ics_restore_success {
+            diagnostics::error(
+                "shutdown",
+                "windows-ics-teardown-aborted",
+                serde_json::json!({
+                    "reason": "ics-restore-failed",
+                    "tun_teardown_attempted": false,
+                    "core_stop_attempted": false,
+                }),
+            );
+            return false;
+        }
 
         if tun_enabled && core_running {
             let disable_tun = serde_json::json!({ "tun": { "enable": false } });
