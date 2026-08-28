@@ -19,8 +19,6 @@ pub mod windows_deep_network_diagnostics;
 #[cfg(target_os = "windows")]
 pub mod windows_hotspot_ics;
 #[cfg(target_os = "windows")]
-pub mod windows_hotspot_winrt;
-#[cfg(target_os = "windows")]
 pub mod windows_network_diagnostics;
 
 pub use self::{manager::CoreManager, timer::Timer, updater::SilentUpdater};
