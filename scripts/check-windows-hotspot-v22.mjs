@@ -57,6 +57,7 @@ for (const marker of [
   'target-identification-ambiguous',
   'fail-closed-no-tethering-mutation',
   'original-public-profile-ambiguous',
+  'let _original_manager_preflight = manager_for(&original)?;',
   'saved adapter GUID {guid} mapped to {count} ConnectionProfiles',
   'fail-closed-preserve-current-hotspot',
   'restore-original-hotspot-immediately',

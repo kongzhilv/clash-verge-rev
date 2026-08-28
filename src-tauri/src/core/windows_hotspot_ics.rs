@@ -474,6 +474,8 @@ fn apply_tun_unlocked(path: &Path, tun: &InterfaceIdentity) -> Result<&'static s
     }
 
     let original = find_original_public_profile(&items, tun.guid)?;
+    require_capability(&original)?;
+    let _original_manager_preflight = manager_for(&original)?;
     let original_guid = profile_guid(&original)?;
     if original_guid == tun.guid {
         bail!("refusing to snapshot Mihomo TUN as original hotspot public profile");
