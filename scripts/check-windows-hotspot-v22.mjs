@@ -155,6 +155,12 @@ for (const feature of [
   requireText('manifest', feature, `windows-rs feature ${feature}`)
 }
 
+requireText(
+  'workflow',
+  'cargo test --target x86_64-pc-windows-msvc --lib windows_hotspot_ --all-features',
+  'Windows unit regression filter must execute the concrete hotspot tests',
+)
+
 if (failures.length > 0) {
   console.error(
     'Windows Mobile Hotspot v22 persistent WinRT safety gate failed:',
@@ -179,9 +185,4 @@ console.log(
 console.log(
   '[通过] HNetCfg EnableSharing、PowerShell/netsh 和重复临时 WinRT 控制器均不在主路径',
 )
-
-requireText(
-  'workflow',
-  'cargo test --target x86_64-pc-windows-msvc --lib windows_hotspot_ --all-features',
-  'Windows unit regression filter must execute the concrete hotspot tests',
-)
+console.log('[通过] Windows 单测过滤器命中具名 windows_hotspot_ 回归测试')
