@@ -23,7 +23,8 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text)) failures.push(`${label}: contains forbidden ${text}`)
+  if (source[key].includes(text))
+    failures.push(`${label}: contains forbidden ${text}`)
 }
 
 for (const marker of [
@@ -141,9 +142,21 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('[通过] Karing .22 主热点控制器使用 NetworkOperatorTetheringManager，而非 HNetCfg EnableSharing')
-console.log('[通过] Mihomo ConnectionProfile 通过 IP Helper adapter GUID 对齐，不依赖本地化 ProfileName')
-console.log('[通过] WinRT !Send/!Sync 对象仅在单个阻塞线程内创建、Stop/Start、join 与读回')
-console.log('[通过] Start 失败会尝试立即恢复物理热点上游，不把热点静默留在关闭状态')
-console.log('[通过] 退出采用 Stop hotspot → teardown TUN → physical profile Start 的两阶段恢复')
-console.log('[通过] v20 HNetCfg 代码保留为回滚/诊断参考，但默认 mutation monitor 已关闭')
+console.log(
+  '[通过] Karing .22 主热点控制器使用 NetworkOperatorTetheringManager，而非 HNetCfg EnableSharing',
+)
+console.log(
+  '[通过] Mihomo ConnectionProfile 通过 IP Helper adapter GUID 对齐，不依赖本地化 ProfileName',
+)
+console.log(
+  '[通过] WinRT !Send/!Sync 对象仅在单个阻塞线程内创建、Stop/Start、join 与读回',
+)
+console.log(
+  '[通过] Start 失败会尝试立即恢复物理热点上游，不把热点静默留在关闭状态',
+)
+console.log(
+  '[通过] 退出采用 Stop hotspot → teardown TUN → physical profile Start 的两阶段恢复',
+)
+console.log(
+  '[通过] v20 HNetCfg 代码保留为回滚/诊断参考，但默认 mutation monitor 已关闭',
+)
