@@ -32,33 +32,12 @@ jobs:
         run: |
           set -euo pipefail
           python <<'PY'
+          from base64 import b64decode
           from pathlib import Path
-
+          old = b64decode('Zm4gZmluZF9wcm9maWxlX2J5X3NhdmVkX2d1aWQoaXRlbXM6ICZbQ29ubmVjdGlvblByb2ZpbGVdLCBndWlkOiAmc3RyKSAtPiBSZXN1bHQ8T3B0aW9uPENvbm5lY3Rpb25Qcm9maWxlPj4gewogICAgZm9yIHByb2ZpbGUgaW4gaXRlbXMgewogICAgICAgIGlmIHNhbWVfZ3VpZChndWlkLCBwcm9maWxlX2d1aWQocHJvZmlsZSk/KSB7CiAgICAgICAgICAgIHJldHVybiBPayhTb21lKHByb2ZpbGUuY2xvbmUoKSkpOwogICAgICAgIH0KICAgIH0KICAgIE9rKE5vbmUpCn0K').decode()
+          new = b64decode('Zm4gZmluZF9wcm9maWxlX2J5X3NhdmVkX2d1aWQoaXRlbXM6ICZbQ29ubmVjdGlvblByb2ZpbGVdLCBndWlkOiAmc3RyKSAtPiBSZXN1bHQ8T3B0aW9uPENvbm5lY3Rpb25Qcm9maWxlPj4gewogICAgbGV0IG11dCBtYXRjaGVzID0gVmVjOjpuZXcoKTsKICAgIGZvciBwcm9maWxlIGluIGl0ZW1zIHsKICAgICAgICBpZiBzYW1lX2d1aWQoZ3VpZCwgcHJvZmlsZV9ndWlkKHByb2ZpbGUpPykgewogICAgICAgICAgICBtYXRjaGVzLnB1c2gocHJvZmlsZS5jbG9uZSgpKTsKICAgICAgICB9CiAgICB9CiAgICBtYXRjaCBtYXRjaGVzLmxlbigpIHsKICAgICAgICAwID0+IE9rKE5vbmUpLAogICAgICAgIDEgPT4gT2sobWF0Y2hlcy5wb3AoKSksCiAgICAgICAgY291bnQgPT4gYmFpbCEoInNhdmVkIGFkYXB0ZXIgR1VJRCB7Z3VpZH0gbWFwcGVkIHRvIHtjb3VudH0gQ29ubmVjdGlvblByb2ZpbGVzIiksCiAgICB9Cn0K').decode()
           controller = Path('src-tauri/src/core/windows_hotspot_ics.rs')
           text = controller.read_text(encoding='utf-8')
-          old = '''fn find_profile_by_saved_guid(items: &[ConnectionProfile], guid: &str) -> Result<Option<ConnectionProfile>> {
-    for profile in items {
-        if same_guid(guid, profile_guid(profile)?) {
-            return Ok(Some(profile.clone()));
-        }
-    }
-    Ok(None)
-}
-'''
-          new = '''fn find_profile_by_saved_guid(items: &[ConnectionProfile], guid: &str) -> Result<Option<ConnectionProfile>> {
-    let mut matches = Vec::new();
-    for profile in items {
-        if same_guid(guid, profile_guid(profile)?) {
-            matches.push(profile.clone());
-        }
-    }
-    match matches.len() {
-        0 => Ok(None),
-        1 => Ok(matches.pop()),
-        count => bail!("saved adapter GUID {guid} mapped to {count} ConnectionProfiles"),
-    }
-}
-'''
           count = text.count(old)
           if count != 1:
               raise SystemExit(f'expected one saved-GUID lookup anchor, found {count}')
@@ -70,7 +49,7 @@ jobs:
           addition = "  'saved adapter GUID {guid} mapped to {count} ConnectionProfiles',\n"
           if addition not in gate_text:
               if gate_text.count(anchor) != 1:
-                  raise SystemExit('expected one static-gate marker insertion anchor')
+                  raise SystemExit('expected one static-gate insertion anchor')
               gate_text = gate_text.replace(anchor, anchor + addition, 1)
               gate.write_text(gate_text, encoding='utf-8')
           PY
