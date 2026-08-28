@@ -22,7 +22,8 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text)) failures.push(`${label}: contains forbidden ${text}`)
+  if (source[key].includes(text))
+    failures.push(`${label}: contains forbidden ${text}`)
 }
 
 for (const marker of [
@@ -60,7 +61,11 @@ for (const marker of [
   'mihomo-connection-profile=public,wifi=private',
   'hnetcfg_mutation',
 ]) {
-  requireText('controller', marker, `persistent WinRT hotspot invariant ${marker}`)
+  requireText(
+    'controller',
+    marker,
+    `persistent WinRT hotspot invariant ${marker}`,
+  )
 }
 
 for (const forbidden of [
@@ -140,14 +145,26 @@ for (const feature of [
 }
 
 if (failures.length > 0) {
-  console.error('Windows Mobile Hotspot v22 persistent WinRT safety gate failed:')
+  console.error(
+    'Windows Mobile Hotspot v22 persistent WinRT safety gate failed:',
+  )
   for (const failure of failures) console.error(`- ${failure}`)
   process.exit(1)
 }
 
 console.log('[通过] Karing .22 只有一个持久化 WinRT Mobile Hotspot 控制器')
-console.log('[通过] Mihomo TUN 通过 IP Helper adapter GUID 对齐 WinRT ConnectionProfile')
-console.log('[通过] 热点重绑严格执行 StopTetheringAsync → StartTetheringAsync 并等待真实结果')
-console.log('[通过] 原物理 public profile 在变更前持久化，失败/退出均可恢复且恢复失败会 fail-closed')
-console.log('[通过] 用户主动关闭热点会清理 lease，不会被后台 monitor 强行重新开启')
-console.log('[通过] HNetCfg EnableSharing、PowerShell/netsh 和重复临时 WinRT 控制器均不在主路径')
+console.log(
+  '[通过] Mihomo TUN 通过 IP Helper adapter GUID 对齐 WinRT ConnectionProfile',
+)
+console.log(
+  '[通过] 热点重绑严格执行 StopTetheringAsync → StartTetheringAsync 并等待真实结果',
+)
+console.log(
+  '[通过] 原物理 public profile 在变更前持久化，失败/退出均可恢复且恢复失败会 fail-closed',
+)
+console.log(
+  '[通过] 用户主动关闭热点会清理 lease，不会被后台 monitor 强行重新开启',
+)
+console.log(
+  '[通过] HNetCfg EnableSharing、PowerShell/netsh 和重复临时 WinRT 控制器均不在主路径',
+)
