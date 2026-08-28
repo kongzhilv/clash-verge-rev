@@ -104,11 +104,17 @@ for (const forbidden of ['MAX_ROUTES', 'MAX_INTERFACES', '.truncate(']) {
   )
 }
 
-requireText(
-  'coreMod',
-  'pub mod windows_hotspot_ics;',
-  'native ICS module is compiled on Windows',
-)
+const directV20Module = source.coreMod.includes('pub mod windows_hotspot_ics;')
+const preservedV20Fallback =
+  source.coreMod.includes('#[path = "windows_hotspot_ics.rs"]') &&
+  source.coreMod.includes('mod windows_hotspot_ics_legacy;') &&
+  source.coreMod.includes('pub mod windows_hotspot_tethering;') &&
+  source.coreMod.includes('pub use windows_hotspot_tethering as windows_hotspot_ics;')
+if (!directV20Module && !preservedV20Fallback) {
+  failures.push(
+    'native ICS module must remain compiled directly or as the explicit v22 legacy fallback',
+  )
+}
 requireText(
   'coreMod',
   'pub mod windows_deep_network_diagnostics;',
