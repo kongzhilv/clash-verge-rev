@@ -18,7 +18,6 @@ pub async fn open_or_close_dashboard() {
 
 pub async fn quit() {
     logging!(debug, Type::System, "启动退出流程");
-    // 设置退出标志
     handle::Handle::global().set_is_exiting();
 
     utils::server::shutdown_embedded_server();
@@ -41,7 +40,6 @@ pub async fn quit() {
 pub async fn clean_async() -> bool {
     logging!(info, Type::System, "开始执行异步清理操作...");
 
-    // 重置系统代理
     let proxy_task = tokio::task::spawn(async {
         let sys_proxy_enabled = Config::verge().await.data_arc().enable_system_proxy.unwrap_or(false);
         if !sys_proxy_enabled {
@@ -66,7 +64,6 @@ pub async fn clean_async() -> bool {
         }
     });
 
-    // 关闭 Tun 模式 + 停止核心服务
     let core_task = tokio::task::spawn(async {
         logging!(info, Type::System, "disable tun");
         let tun_enabled = Config::verge().await.data_arc().enable_tun_mode.unwrap_or(false);
@@ -75,17 +72,17 @@ pub async fn clean_async() -> bool {
             RunningMode::NotRunning
         );
 
-        // The leased ICS PUBLIC side is the Mihomo TUN adapter. Restore Windows ICS
-        // before asking Mihomo to destroy that adapter, otherwise the original PUBLIC
-        // role may no longer be recoverable during shutdown/restart. Do not wrap the
-        // blocking COM restore in a Tokio timeout: timing out the future cannot cancel
-        // spawn_blocking and would race an in-flight rollback against TUN destruction.
+        // Karing .22 owns Mobile Hotspot through one persistent WinRT lease. Restore
+        // the original physical ConnectionProfile before destroying Mihomo TUN. The
+        // restore is intentionally awaited without a Tokio timeout: cancelling the
+        // future would not cancel its blocking WinRT operation and could race TUN
+        // teardown against an in-flight hotspot rebind.
         #[cfg(target_os = "windows")]
-        let ics_restore_success = match crate::core::windows_hotspot_ics::restore_now("shutdown").await {
+        let hotspot_restore_success = match crate::core::windows_hotspot_ics::restore_now("shutdown").await {
             Ok(restored) => {
                 diagnostics::info(
                     "shutdown",
-                    "windows-ics-restore-completed",
+                    "windows-winrt-hotspot-restore-completed",
                     serde_json::json!({"restored": restored}),
                 );
                 true
@@ -93,7 +90,7 @@ pub async fn clean_async() -> bool {
             Err(error) => {
                 diagnostics::error(
                     "shutdown",
-                    "windows-ics-restore-failed",
+                    "windows-winrt-hotspot-restore-failed",
                     serde_json::json!({
                         "error": error.to_string(),
                         "action": "abort-explicit-tun-core-teardown-preserve-snapshot",
@@ -103,14 +100,14 @@ pub async fn clean_async() -> bool {
             }
         };
         #[cfg(not(target_os = "windows"))]
-        let ics_restore_success = true;
+        let hotspot_restore_success = true;
 
-        if !ics_restore_success {
+        if !hotspot_restore_success {
             diagnostics::error(
                 "shutdown",
-                "windows-ics-teardown-aborted",
+                "windows-winrt-hotspot-teardown-aborted",
                 serde_json::json!({
-                    "reason": "ics-restore-failed",
+                    "reason": "winrt-hotspot-restore-failed",
                     "tun_teardown_attempted": false,
                     "core_stop_attempted": false,
                 }),
@@ -174,10 +171,9 @@ pub async fn clean_async() -> bool {
             }
         };
 
-        ics_restore_success && core_stop_success
+        hotspot_restore_success && core_stop_success
     });
 
-    // DNS恢复（仅macOS）
     let dns_task = tokio::task::spawn(async {
         #[cfg(target_os = "macos")]
         match timeout(
@@ -199,7 +195,6 @@ pub async fn clean_async() -> bool {
         true
     });
 
-    // 并行执行清理任务
     let (proxy_result, core_result, dns_result) = tokio::join!(proxy_task, core_task, dns_task);
 
     let proxy_success = proxy_result.unwrap_or_default();

@@ -1,4 +1,4 @@
-name: Karing .21 发行核验
+name: Karing .22 发行核验
 
 on:
   push:
@@ -19,15 +19,15 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.21 正式发行
+    name: 核验 v2.5.4-karing.22 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       WFP_WORKFLOW: karing-windows-wfp-v21.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '13'
-      STATUS_MARKER: '<!-- karing-v254-karing21-release-audit -->'
+      PR_NUMBER: '15'
+      STATUS_MARKER: '<!-- karing-v254-karing22-release-audit -->'
     steps:
       - name: 检出发行分支
         uses: actions/checkout@v7
@@ -41,7 +41,7 @@ jobs:
 
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.21'
+          test "$release_tag" = 'v2.5.4-karing.22'
 
           post_failure() {
             local reason="$1"
