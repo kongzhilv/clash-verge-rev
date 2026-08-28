@@ -75,6 +75,49 @@ pub async fn clean_async() -> bool {
             RunningMode::NotRunning
         );
 
+        // Karing .22 WinRT topology is restored in two phases. First stop the
+        // Mihomo-backed hotspot while the TUN ConnectionProfile still exists. This
+        // prevents Windows from forwarding hotspot traffic into an adapter that is
+        // being destroyed. After the core/TUN is gone we restart tethering from the
+        // best physical ConnectionProfile.
+        #[cfg(target_os = "windows")]
+        let winrt_suspend_success = match crate::core::windows_hotspot_winrt::suspend_for_tun_teardown("shutdown").await {
+            Ok(suspended) => {
+                diagnostics::info(
+                    "shutdown",
+                    "windows-winrt-hotspot-suspend-completed",
+                    serde_json::json!({"suspended": suspended}),
+                );
+                true
+            }
+            Err(error) => {
+                diagnostics::error(
+                    "shutdown",
+                    "windows-winrt-hotspot-suspend-failed",
+                    serde_json::json!({
+                        "error": error.to_string(),
+                        "action": "abort-explicit-tun-core-teardown-preserve-working-topology",
+                    }),
+                );
+                false
+            }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let winrt_suspend_success = true;
+
+        if !winrt_suspend_success {
+            diagnostics::error(
+                "shutdown",
+                "windows-winrt-hotspot-teardown-aborted",
+                serde_json::json!({
+                    "reason": "winrt-hotspot-suspend-failed",
+                    "tun_teardown_attempted": false,
+                    "core_stop_attempted": false,
+                }),
+            );
+            return false;
+        }
+
         // The leased ICS PUBLIC side is the Mihomo TUN adapter. Restore Windows ICS
         // before asking Mihomo to destroy that adapter, otherwise the original PUBLIC
         // role may no longer be recoverable during shutdown/restart. Do not wrap the
@@ -174,7 +217,32 @@ pub async fn clean_async() -> bool {
             }
         };
 
-        ics_restore_success && core_stop_success
+        #[cfg(target_os = "windows")]
+        let winrt_restore_success = match crate::core::windows_hotspot_winrt::restore_after_tun_teardown("shutdown").await {
+            Ok(restored) => {
+                diagnostics::info(
+                    "shutdown",
+                    "windows-winrt-hotspot-restore-completed",
+                    serde_json::json!({"restored": restored}),
+                );
+                true
+            }
+            Err(error) => {
+                diagnostics::error(
+                    "shutdown",
+                    "windows-winrt-hotspot-restore-failed",
+                    serde_json::json!({
+                        "error": error.to_string(),
+                        "action": "leave-hotspot-off-instead-of-binding-to-destroyed-tun",
+                    }),
+                );
+                false
+            }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let winrt_restore_success = true;
+
+        winrt_suspend_success && ics_restore_success && core_stop_success && winrt_restore_success
     });
 
     // DNS恢复（仅macOS）
