@@ -9,7 +9,10 @@ const paths = {
 
 const source = Object.fromEntries(
   await Promise.all(
-    Object.entries(paths).map(async ([key, path]) => [key, await readFile(path, 'utf8')]),
+    Object.entries(paths).map(async ([key, path]) => [
+      key,
+      await readFile(path, 'utf8'),
+    ]),
   ),
 )
 
@@ -18,7 +21,8 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text)) failures.push(`${label}: contains forbidden ${text}`)
+  if (source[key].includes(text))
+    failures.push(`${label}: contains forbidden ${text}`)
 }
 
 for (const marker of [
@@ -63,7 +67,11 @@ for (const forbidden of [
   'std::process::Command',
   '192.168.137.0/24',
 ]) {
-  forbidText('hotspot', forbidden, 'hotspot v22 must not mutate classic ICS or shell out')
+  forbidText(
+    'hotspot',
+    forbidden,
+    'hotspot v22 must not mutate classic ICS or shell out',
+  )
 }
 
 for (const feature of [
@@ -100,8 +108,12 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('[通过] 热点上游切换使用 NetworkOperatorTetheringManager / CreateFromConnectionProfile')
-console.log('[通过] 已移除热点控制路径中的 HNetCfg EnableSharing/DisableSharing 写操作')
+console.log(
+  '[通过] 热点上游切换使用 NetworkOperatorTetheringManager / CreateFromConnectionProfile',
+)
+console.log(
+  '[通过] 已移除热点控制路径中的 HNetCfg EnableSharing/DisableSharing 写操作',
+)
 console.log('[通过] WinRT IAsyncOperation 使用 join() 在单个阻塞线程内同步完成')
 console.log('[通过] 变更前持久化原 public profile，失败和退出均具备恢复路径')
 console.log('[通过] 用户主动关闭热点时清理 lease，不会被后台监控强行重新开启')

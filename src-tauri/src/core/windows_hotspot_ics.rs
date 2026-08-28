@@ -313,8 +313,7 @@ fn find_original_public_profile(items: &[ConnectionProfile], tun_guid: GUID) -> 
 }
 
 fn manager_for(profile: &ConnectionProfile) -> Result<NetworkOperatorTetheringManager> {
-    NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile)
-        .context("CreateFromConnectionProfile failed")
+    NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile).context("CreateFromConnectionProfile failed")
 }
 
 fn require_capability(profile: &ConnectionProfile) -> Result<()> {
