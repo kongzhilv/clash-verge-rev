@@ -56,8 +56,6 @@ struct ProfileLog {
     guid: String,
     name: String,
     capability: String,
-    state: String,
-    client_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +69,12 @@ enum ReconcileDecision {
 fn legacy_fallback_enabled() -> bool {
     std::env::var(LEGACY_FALLBACK_ENV)
         .ok()
-        .is_some_and(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
 }
 
 fn utf16z(value: &[u16]) -> String {
@@ -179,7 +182,10 @@ fn load_lease(path: &Path) -> Result<Option<TetheringLease>> {
         Ok(bytes) => {
             let lease: TetheringLease = serde_json::from_slice(&bytes)?;
             if lease.version != 22 {
-                bail!("unsupported Windows hotspot WinRT lease version {}", lease.version);
+                bail!(
+                    "unsupported Windows hotspot WinRT lease version {}",
+                    lease.version
+                );
             }
             Ok(Some(lease))
         }
@@ -205,19 +211,32 @@ fn profile_guid(profile: &ConnectionProfile) -> Result<GUID> {
 }
 
 fn profile_name(profile: &ConnectionProfile) -> String {
-    profile.ProfileName().map(|value| value.to_string_lossy()).unwrap_or_else(|_| "<unknown>".to_string())
+    profile
+        .ProfileName()
+        .map(|value| value.to_string_lossy())
+        .unwrap_or_else(|_| "<unknown>".to_string())
 }
 
 fn all_profiles() -> Result<Vec<ConnectionProfile>> {
-    let profiles = NetworkInformation::GetConnectionProfiles().context("NetworkInformation::GetConnectionProfiles failed")?;
-    let mut result = Vec::with_capacity(profiles.Size()? as usize);
-    for index in 0..profiles.Size()? {
+    let profiles = NetworkInformation::GetConnectionProfiles()
+        .context("NetworkInformation::GetConnectionProfiles failed")?;
+    let size = profiles.Size()?;
+    let mut result = Vec::with_capacity(size as usize);
+    for index in 0..size {
         result.push(profiles.GetAt(index)?);
     }
     Ok(result)
 }
 
-fn find_profile_by_guid<'a>(profiles: &'a [ConnectionProfile], guid: GUID) -> Result<Option<&'a ConnectionProfile>> {
+fn preferred_internet_profile() -> Result<ConnectionProfile> {
+    NetworkInformation::GetInternetConnectionProfile()
+        .context("NetworkInformation::GetInternetConnectionProfile failed")
+}
+
+fn find_profile_by_guid(
+    profiles: &[ConnectionProfile],
+    guid: GUID,
+) -> Result<Option<&ConnectionProfile>> {
     for profile in profiles {
         if profile_guid(profile).is_ok_and(|candidate| candidate == guid) {
             return Ok(Some(profile));
@@ -296,7 +315,11 @@ fn stop_manager(manager: &NetworkOperatorTetheringManager, label: &str) -> Resul
     diagnostics::info(
         "windows-hotspot-winrt",
         "stop-result",
-        json!({"profile": label, "status": format!("{status:?}"), "additional_error": message}),
+        json!({
+            "profile": label,
+            "status": format!("{status:?}"),
+            "additional_error": message
+        }),
     );
     if !operation_succeeded(status, false) {
         bail!("StopTetheringAsync failed for {label}: {status:?}: {message}");
@@ -315,7 +338,11 @@ fn start_manager(manager: &NetworkOperatorTetheringManager, label: &str) -> Resu
     diagnostics::info(
         "windows-hotspot-winrt",
         "start-result",
-        json!({"profile": label, "status": format!("{status:?}"), "additional_error": message}),
+        json!({
+            "profile": label,
+            "status": format!("{status:?}"),
+            "additional_error": message
+        }),
     );
     if !operation_succeeded(status, true) {
         bail!("StartTetheringAsync failed for {label}: {status:?}: {message}");
@@ -328,41 +355,34 @@ fn profile_logs(profiles: &[ConnectionProfile]) -> Vec<ProfileLog> {
         .iter()
         .filter_map(|profile| {
             let guid = profile_guid(profile).ok()?;
-            let capability = NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(profile).ok()?;
-            let manager = manager_for(profile).ok()?;
-            let state = manager.TetheringOperationalState().ok()?;
+            let capability =
+                NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(
+                    profile,
+                )
+                .ok()?;
             Some(ProfileLog {
                 guid: guid_string(guid),
                 name: profile_name(profile),
                 capability: capability_name(capability),
-                state: state_name(state),
-                client_count: manager.ClientCount().ok(),
             })
         })
         .collect()
 }
 
-fn active_profiles<'a>(profiles: &'a [ConnectionProfile]) -> Result<Vec<&'a ConnectionProfile>> {
-    let mut active = Vec::new();
-    for profile in profiles {
-        let manager = match manager_for(profile) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        if manager.TetheringOperationalState()? == TetheringOperationalState::On {
-            active.push(profile);
-        }
-    }
-    Ok(active)
-}
-
-fn decide_reconcile(active_count: usize, active_is_mihomo: bool, mihomo_available: bool) -> ReconcileDecision {
-    if !mihomo_available || active_count > 1 {
+fn decide_reconcile(
+    hotspot_on: bool,
+    lease_owned: bool,
+    mihomo_available: bool,
+    original_available: bool,
+) -> ReconcileDecision {
+    if !mihomo_available {
         ReconcileDecision::FailClosed
-    } else if active_count == 0 {
+    } else if !hotspot_on {
         ReconcileDecision::Noop
-    } else if active_is_mihomo {
+    } else if lease_owned {
         ReconcileDecision::AlreadyDesired
+    } else if !original_available {
+        ReconcileDecision::FailClosed
     } else {
         ReconcileDecision::Rehome
     }
@@ -378,30 +398,60 @@ fn restore_owned_lease(path: &Path, reason: &str) -> Result<bool> {
     }
 
     let profiles = all_profiles()?;
-    diagnostics::info(
-        "windows-hotspot-winrt",
-        "restore-started",
-        json!({"reason": reason, "lease": lease, "profiles": profile_logs(&profiles)}),
-    );
-
-    if let Some(mihomo) = find_profile_by_saved_identity(
+    let original = find_profile_by_saved_identity(
+        &profiles,
+        &lease.original_profile_guid,
+        &lease.original_profile_name,
+    )?;
+    let mihomo = find_profile_by_saved_identity(
         &profiles,
         &lease.mihomo_profile_guid,
         &lease.mihomo_profile_name,
-    )? {
-        let manager = manager_for(mihomo)?;
-        if manager.TetheringOperationalState()? != TetheringOperationalState::Off {
-            stop_manager(&manager, &profile_name(mihomo))?;
+    )?;
+
+    diagnostics::info(
+        "windows-hotspot-winrt",
+        "restore-started",
+        json!({
+            "reason": reason,
+            "lease": lease,
+            "profiles": profile_logs(&profiles),
+        }),
+    );
+
+    let control_profile = mihomo.or(original);
+    let global_was_on = if let Some(profile) = control_profile {
+        let manager = manager_for(profile)?;
+        let on = manager.TetheringOperationalState()? == TetheringOperationalState::On;
+        if on {
+            stop_manager(&manager, &profile_name(profile))?;
         }
-    }
+        on
+    } else {
+        diagnostics::error(
+            "windows-hotspot-winrt",
+            "restore-control-profile-missing",
+            json!({
+                "action": "abort-tun-teardown-preserve-lease",
+                "mihomo_profile_guid": lease.mihomo_profile_guid,
+                "original_profile_guid": lease.original_profile_guid,
+            }),
+        );
+        bail!("no saved tethering profile remains available to stop the owned hotspot");
+    };
 
     let mut original_restored = false;
-    if lease.hotspot_was_on {
-        if let Some(original) = find_profile_by_saved_identity(
-            &profiles,
-            &lease.original_profile_guid,
-            &lease.original_profile_name,
-        )? {
+    if lease.hotspot_was_on && global_was_on {
+        if let Some(original) = original {
+            let capability =
+                NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(
+                    original,
+                )?;
+            if capability != TetheringCapability::Enabled {
+                bail!(
+                    "original tethering capability is not Enabled during restore: {capability:?}"
+                );
+            }
             let manager = manager_for(original)?;
             start_manager(&manager, &profile_name(original))?;
             original_restored = true;
@@ -422,7 +472,11 @@ fn restore_owned_lease(path: &Path, reason: &str) -> Result<bool> {
     diagnostics::info(
         "windows-hotspot-winrt",
         "lease-restored",
-        json!({"reason": reason, "original_restored": original_restored}),
+        json!({
+            "reason": reason,
+            "global_was_on": global_was_on,
+            "original_restored": original_restored,
+        }),
     );
     Ok(true)
 }
@@ -444,12 +498,16 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
         diagnostics::warn(
             "windows-hotspot-winrt",
             "mihomo-connection-profile-missing",
-            json!({"tun_guid": guid_string(tun_guid), "profiles": profile_logs(&profiles)}),
+            json!({
+                "tun_guid": guid_string(tun_guid),
+                "profiles": profile_logs(&profiles)
+            }),
         );
         return Ok("mihomo-profile-missing");
     };
 
-    let capability = NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(mihomo_profile)?;
+    let capability =
+        NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(mihomo_profile)?;
     if capability != TetheringCapability::Enabled {
         diagnostics::warn(
             "windows-hotspot-winrt",
@@ -464,129 +522,188 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
         return Ok("capability-disabled");
     }
 
-    let active = active_profiles(&profiles)?;
-    let active_is_mihomo = active.len() == 1 && profile_guid(active[0])? == tun_guid;
-    match decide_reconcile(active.len(), active_is_mihomo, true) {
-        ReconcileDecision::FailClosed => {
+    let mihomo_manager = manager_for(mihomo_profile)?;
+    let hotspot_state = mihomo_manager.TetheringOperationalState()?;
+    let lease = load_lease(path)?;
+
+    if let Some(existing) = lease.as_ref() {
+        if !same_guid(&existing.mihomo_profile_guid, tun_guid) {
             diagnostics::warn(
                 "windows-hotspot-winrt",
-                "active-tethering-ambiguous",
-                json!({"profiles": profile_logs(&profiles), "action": "fail-closed-no-hotspot-mutation"}),
-            );
-            Ok("ambiguous")
-        }
-        ReconcileDecision::Noop => {
-            if load_lease(path)?.is_some() {
-                // User turning Mobile Hotspot off is authoritative. Do not reopen it during reconciliation.
-                remove_lease(path)?;
-                diagnostics::info(
-                    "windows-hotspot-winrt",
-                    "lease-released-hotspot-off",
-                    json!({"action": "respect-user-hotspot-off"}),
-                );
-            }
-            Ok("hotspot-off")
-        }
-        ReconcileDecision::AlreadyDesired => Ok("already-mihomo"),
-        ReconcileDecision::Rehome => {
-            let original = active[0];
-            let original_guid = profile_guid(original)?;
-            let original_name = profile_name(original);
-            let mihomo_name = profile_name(mihomo_profile);
-
-            if let Some(existing) = load_lease(path)? {
-                if !same_guid(&existing.original_profile_guid, original_guid) {
-                    diagnostics::warn(
-                        "windows-hotspot-winrt",
-                        "lease-drift-fail-closed",
-                        json!({
-                            "saved_original_guid": existing.original_profile_guid,
-                            "observed_original_guid": guid_string(original_guid),
-                            "action": "fail-closed-preserve-existing-lease",
-                        }),
-                    );
-                    return Ok("lease-drift");
-                }
-            }
-
-            let lease = TetheringLease {
-                version: 22,
-                created_unix_ms: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-                owned: true,
-                hotspot_was_on: true,
-                mihomo_profile_guid: guid_string(tun_guid),
-                mihomo_profile_name: mihomo_name.clone(),
-                original_profile_guid: guid_string(original_guid),
-                original_profile_name: original_name.clone(),
-            };
-            save_lease(path, &lease)?;
-            diagnostics::info(
-                "windows-hotspot-winrt",
-                "rehome-started",
+                "lease-drift-fail-closed",
                 json!({
-                    "original_profile": original_name,
-                    "original_guid": guid_string(original_guid),
-                    "mihomo_profile": mihomo_name,
-                    "mihomo_guid": guid_string(tun_guid),
-                    "profiles_before": profile_logs(&profiles),
+                    "saved_mihomo_guid": existing.mihomo_profile_guid,
+                    "observed_mihomo_guid": guid_string(tun_guid),
+                    "action": "restore-stale-lease-before-reconcile",
                 }),
             );
-
-            let original_manager = manager_for(original)?;
-            stop_manager(&original_manager, &original_name)?;
-
-            let mihomo_manager = manager_for(mihomo_profile)?;
-            if let Err(start_error) = start_manager(&mihomo_manager, &mihomo_name) {
-                diagnostics::error(
-                    "windows-hotspot-winrt",
-                    "rehome-start-failed-rollback",
-                    json!({"error": start_error.to_string(), "rollback_profile": original_name}),
-                );
-                let rollback = start_manager(&original_manager, &original_name);
-                if rollback.is_ok() {
-                    remove_lease(path)?;
-                    bail!("Mihomo tethering start failed and original hotspot was restored: {start_error}");
-                }
-                diagnostics::error(
-                    "windows-hotspot-winrt",
-                    "rollback-failed-safe-off",
-                    json!({
-                        "start_error": start_error.to_string(),
-                        "rollback_error": rollback.as_ref().err().map(ToString::to_string),
-                        "action": "leave-hotspot-off-preserve-lease-for-next-restore",
-                    }),
-                );
-                return Err(anyhow!(
-                    "Mihomo tethering start failed ({start_error}); original hotspot rollback also failed ({})",
-                    rollback.unwrap_err()
-                ));
-            }
-
-            let state = mihomo_manager.TetheringOperationalState()?;
-            let clients = mihomo_manager.ClientCount().ok();
-            if state != TetheringOperationalState::On {
-                bail!("Mihomo tethering verification failed: state={state:?}");
-            }
-            diagnostics::info(
-                "windows-hotspot-winrt",
-                "rehome-verified",
-                json!({
-                    "mihomo_guid": guid_string(tun_guid),
-                    "state": state_name(state),
-                    "client_count": clients,
-                    "control_plane": "NetworkOperatorTetheringManager",
-                }),
-            );
-            Ok("rehome-verified")
+            restore_owned_lease(path, "mihomo-guid-drift")?;
+            return Ok("lease-drift-restored");
         }
     }
+
+    if hotspot_state == TetheringOperationalState::Off {
+        if lease.is_some() {
+            remove_lease(path)?;
+            diagnostics::info(
+                "windows-hotspot-winrt",
+                "lease-released-hotspot-off",
+                json!({"action": "respect-user-hotspot-off"}),
+            );
+        }
+        return Ok("hotspot-off");
+    }
+
+    if hotspot_state != TetheringOperationalState::On {
+        diagnostics::info(
+            "windows-hotspot-winrt",
+            "hotspot-transition-in-progress",
+            json!({"state": state_name(hotspot_state)}),
+        );
+        return Ok("hotspot-transition");
+    }
+
+    let lease_owned = lease.as_ref().is_some_and(|item| item.owned);
+    if decide_reconcile(true, lease_owned, true, true) == ReconcileDecision::AlreadyDesired {
+        diagnostics::info(
+            "windows-hotspot-winrt",
+            "owned-hotspot-verified",
+            json!({
+                "mihomo_guid": guid_string(tun_guid),
+                "state": state_name(hotspot_state),
+                "client_count": mihomo_manager.ClientCount().ok(),
+                "ownership_source": "persisted-v22-lease",
+            }),
+        );
+        return Ok("already-mihomo");
+    }
+
+    let original = preferred_internet_profile()?;
+    let original_guid = profile_guid(&original)?;
+    if original_guid == tun_guid {
+        diagnostics::warn(
+            "windows-hotspot-winrt",
+            "preferred-internet-profile-is-mihomo-without-lease",
+            json!({
+                "mihomo_guid": guid_string(tun_guid),
+                "profile": profile_name(&original),
+                "action": "fail-closed-no-hotspot-mutation",
+            }),
+        );
+        return Ok("original-profile-ambiguous");
+    }
+
+    let original_capability =
+        NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(&original)?;
+    if original_capability != TetheringCapability::Enabled {
+        diagnostics::warn(
+            "windows-hotspot-winrt",
+            "original-tethering-capability-disabled",
+            json!({
+                "profile": profile_name(&original),
+                "guid": guid_string(original_guid),
+                "capability": capability_name(original_capability),
+                "action": "fail-closed-preserve-current-hotspot",
+            }),
+        );
+        return Ok("original-capability-disabled");
+    }
+
+    if decide_reconcile(true, false, true, true) != ReconcileDecision::Rehome {
+        return Ok("no-rehome");
+    }
+
+    let original_name = profile_name(&original);
+    let mihomo_name = profile_name(mihomo_profile);
+    let new_lease = TetheringLease {
+        version: 22,
+        created_unix_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+        owned: true,
+        hotspot_was_on: true,
+        mihomo_profile_guid: guid_string(tun_guid),
+        mihomo_profile_name: mihomo_name.clone(),
+        original_profile_guid: guid_string(original_guid),
+        original_profile_name: original_name.clone(),
+    };
+    save_lease(path, &new_lease)?;
+
+    diagnostics::info(
+        "windows-hotspot-winrt",
+        "rehome-started",
+        json!({
+            "original_profile": original_name,
+            "original_guid": guid_string(original_guid),
+            "mihomo_profile": mihomo_name,
+            "mihomo_guid": guid_string(tun_guid),
+            "global_hotspot_state": state_name(hotspot_state),
+            "profiles_before": profile_logs(&profiles),
+            "ownership_model": "persisted-lease-not-per-profile-operational-state",
+        }),
+    );
+
+    let original_manager = manager_for(&original)?;
+    stop_manager(&original_manager, &original_name)?;
+
+    if let Err(start_error) = start_manager(&mihomo_manager, &mihomo_name) {
+        diagnostics::error(
+            "windows-hotspot-winrt",
+            "rehome-start-failed-rollback",
+            json!({
+                "error": start_error.to_string(),
+                "rollback_profile": original_name
+            }),
+        );
+        let rollback = start_manager(&original_manager, &original_name);
+        if rollback.is_ok() {
+            remove_lease(path)?;
+            bail!("Mihomo tethering start failed and original hotspot was restored: {start_error}");
+        }
+        diagnostics::error(
+            "windows-hotspot-winrt",
+            "rollback-failed-safe-off",
+            json!({
+                "start_error": start_error.to_string(),
+                "rollback_error": rollback.as_ref().err().map(ToString::to_string),
+                "action": "leave-hotspot-off-preserve-lease-for-next-restore",
+            }),
+        );
+        return Err(anyhow!(
+            "Mihomo tethering start failed ({start_error}); original hotspot rollback also failed ({})",
+            rollback.unwrap_err()
+        ));
+    }
+
+    let state = mihomo_manager.TetheringOperationalState()?;
+    let clients = mihomo_manager.ClientCount().ok();
+    if state != TetheringOperationalState::On {
+        bail!("Mihomo tethering verification failed: state={state:?}");
+    }
+    diagnostics::info(
+        "windows-hotspot-winrt",
+        "rehome-verified",
+        json!({
+            "mihomo_guid": guid_string(tun_guid),
+            "state": state_name(state),
+            "client_count": clients,
+            "control_plane": "NetworkOperatorTetheringManager",
+            "public_profile_source": "NetworkInformation::GetInternetConnectionProfile snapshot -> Mihomo",
+        }),
+    );
+    Ok("rehome-verified")
 }
 
 async fn monitor_loop() {
     let path = match snapshot_path() {
         Ok(value) => value,
         Err(error) => {
-            diagnostics::error("windows-hotspot-winrt", "snapshot-path-failed", json!({"error": error.to_string()}));
+            diagnostics::error(
+                "windows-hotspot-winrt",
+                "snapshot-path-failed",
+                json!({"error": error.to_string()}),
+            );
             return;
         }
     };
@@ -599,6 +716,8 @@ async fn monitor_loop() {
             "retry_cooldown_ms": RETRY_COOLDOWN.as_millis(),
             "snapshot": path,
             "legacy_hnetcfg": false,
+            "tethering_state_semantics": "global-feature-state",
+            "ownership_authority": "persisted-v22-lease",
         }),
     );
 
@@ -611,7 +730,11 @@ async fn monitor_loop() {
 
     loop {
         interval.tick().await;
-        let tun_enabled = Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false);
+        let tun_enabled = Config::verge()
+            .await
+            .latest_arc()
+            .enable_tun_mode
+            .unwrap_or(false);
         let restore_requested = RESTORE_REQUESTED.load(Ordering::Acquire);
 
         let signature = tokio::task::spawn_blocking(move || -> Result<String> {
@@ -629,7 +752,11 @@ async fn monitor_loop() {
             Ok(Err(error)) => {
                 let message = error.to_string();
                 if message != last_error {
-                    diagnostics::warn("windows-hotspot-winrt", "signature-failed", json!({"error": message}));
+                    diagnostics::warn(
+                        "windows-hotspot-winrt",
+                        "signature-failed",
+                        json!({"error": message}),
+                    );
                     last_error = message;
                 }
                 continue;
@@ -637,7 +764,11 @@ async fn monitor_loop() {
             Err(error) => {
                 let message = error.to_string();
                 if message != last_error {
-                    diagnostics::error("windows-hotspot-winrt", "signature-task-failed", json!({"error": message}));
+                    diagnostics::error(
+                        "windows-hotspot-winrt",
+                        "signature-task-failed",
+                        json!({"error": message}),
+                    );
                     last_error = message;
                 }
                 continue;
@@ -659,13 +790,18 @@ async fn monitor_loop() {
         }
 
         let path_for_task = path.clone();
-        let outcome = tokio::task::spawn_blocking(move || reconcile_once(tun_enabled, &path_for_task)).await;
+        let outcome =
+            tokio::task::spawn_blocking(move || reconcile_once(tun_enabled, &path_for_task)).await;
         match outcome {
             Ok(Ok(outcome)) => {
                 last_error.clear();
                 retry_after = None;
                 if outcome != last_outcome {
-                    diagnostics::info("windows-hotspot-winrt", "reconcile-completed", json!({"outcome": outcome}));
+                    diagnostics::info(
+                        "windows-hotspot-winrt",
+                        "reconcile-completed",
+                        json!({"outcome": outcome}),
+                    );
                     last_outcome = outcome.to_string();
                 }
             }
@@ -676,7 +812,10 @@ async fn monitor_loop() {
                     diagnostics::error(
                         "windows-hotspot-winrt",
                         "reconcile-failed",
-                        json!({"error": message, "retry_cooldown_ms": RETRY_COOLDOWN.as_millis()}),
+                        json!({
+                            "error": message,
+                            "retry_cooldown_ms": RETRY_COOLDOWN.as_millis()
+                        }),
                     );
                     last_error = message;
                 }
@@ -688,7 +827,10 @@ async fn monitor_loop() {
                     diagnostics::error(
                         "windows-hotspot-winrt",
                         "reconcile-task-failed",
-                        json!({"error": message, "retry_cooldown_ms": RETRY_COOLDOWN.as_millis()}),
+                        json!({
+                            "error": message,
+                            "retry_cooldown_ms": RETRY_COOLDOWN.as_millis()
+                        }),
                     );
                     last_error = message;
                 }
@@ -731,33 +873,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reconcile_is_fail_closed_when_active_state_is_ambiguous() {
-        assert_eq!(decide_reconcile(2, false, true), ReconcileDecision::FailClosed);
-    }
-
-    #[test]
     fn reconcile_does_not_open_a_hotspot_the_user_left_off() {
-        assert_eq!(decide_reconcile(0, false, true), ReconcileDecision::Noop);
+        assert_eq!(
+            decide_reconcile(false, false, true, true),
+            ReconcileDecision::Noop
+        );
     }
 
     #[test]
-    fn reconcile_rehomes_a_single_physical_upstream() {
-        assert_eq!(decide_reconcile(1, false, true), ReconcileDecision::Rehome);
+    fn reconcile_rehomes_hotspot_on_without_an_owned_lease() {
+        assert_eq!(
+            decide_reconcile(true, false, true, true),
+            ReconcileDecision::Rehome
+        );
     }
 
     #[test]
-    fn reconcile_keeps_an_already_mihomo_backed_hotspot() {
-        assert_eq!(decide_reconcile(1, true, true), ReconcileDecision::AlreadyDesired);
+    fn reconcile_keeps_an_owned_mihomo_backed_hotspot() {
+        assert_eq!(
+            decide_reconcile(true, true, true, true),
+            ReconcileDecision::AlreadyDesired
+        );
     }
 
     #[test]
     fn reconcile_fails_closed_without_mihomo_profile() {
-        assert_eq!(decide_reconcile(1, false, false), ReconcileDecision::FailClosed);
+        assert_eq!(
+            decide_reconcile(true, false, false, true),
+            ReconcileDecision::FailClosed
+        );
+    }
+
+    #[test]
+    fn reconcile_fails_closed_without_original_internet_profile() {
+        assert_eq!(
+            decide_reconcile(true, false, true, false),
+            ReconcileDecision::FailClosed
+        );
     }
 
     #[test]
     fn guid_normalization_ignores_braces_and_case() {
         let guid = GUID::from_u128(0x12345678_1234_5678_90ab_1234567890ab);
-        assert!(same_guid("{12345678-1234-5678-90AB-1234567890AB}", guid));
+        assert!(same_guid(
+            "{12345678-1234-5678-90AB-1234567890AB}",
+            guid
+        ));
     }
 }
