@@ -1,0 +1,48 @@
+name: Karing v22 release metadata hardening
+
+on:
+  push:
+    branches:
+      - fix/karing-windows-hotspot-v22
+    paths:
+      - '.github/workflows/karing-v22-release-metadata-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/karing-windows-hotspot-v22
+          fetch-depth: 0
+      - name: Align final Release title with v22 scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '· Windows IPv6 Loopback WFP Fix'
+          new = '· WinRT Hotspot + IPv6 Loopback WFP'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one legacy release title, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          grep -Fq 'WinRT Hotspot + IPv6 Loopback WFP' .github/workflows/karing-diagnostics-once.yml
+      - name: Upload reviewed candidate commit for authorized fast-forward
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/karing-v22-release-metadata-hardening.yml
+          git add .github/workflows/karing-diagnostics-once.yml
+          git diff --cached --check
+          git commit -m 'ci: align v22 release title and remove metadata helper'
+          echo "candidate_sha=$(git rev-parse HEAD)"
+          git push origin HEAD:fix/karing-windows-hotspot-v22
