@@ -17,7 +17,13 @@ pub mod win_uwp;
 #[cfg(target_os = "windows")]
 pub mod windows_deep_network_diagnostics;
 #[cfg(target_os = "windows")]
-pub mod windows_hotspot_ics;
+#[allow(dead_code)]
+#[path = "windows_hotspot_ics.rs"]
+mod windows_hotspot_ics_legacy;
+#[cfg(target_os = "windows")]
+pub mod windows_hotspot_tethering;
+#[cfg(target_os = "windows")]
+pub use windows_hotspot_tethering as windows_hotspot_ics;
 #[cfg(target_os = "windows")]
 pub mod windows_network_diagnostics;
 
