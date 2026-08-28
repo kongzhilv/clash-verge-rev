@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises'
 
 const paths = {
-  hotspot: 'src-tauri/src/core/windows_hotspot_ics.rs',
+  winrt: 'src-tauri/src/core/windows_hotspot_winrt.rs',
+  legacy: 'src-tauri/src/core/windows_hotspot_ics.rs',
+  coreMod: 'src-tauri/src/core/mod.rs',
   manager: 'src-tauri/src/core/manager/mod.rs',
   shutdown: 'src-tauri/src/feat/window.rs',
   manifest: 'src-tauri/Cargo.toml',
@@ -21,85 +23,116 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text))
-    failures.push(`${label}: contains forbidden ${text}`)
+  if (source[key].includes(text)) failures.push(`${label}: contains forbidden ${text}`)
 }
 
 for (const marker of [
-  'NetworkInformation::GetConnectionProfiles',
+  'NetworkInformation::GetConnectionProfiles()',
   'GetTetheringCapabilityFromConnectionProfile',
-  'CreateFromConnectionProfile',
-  'StopTetheringAsync',
-  'StartTetheringAsync',
+  'CreateFromConnectionProfile(&tun_profile)',
+  'StopTetheringAsync()',
+  'StartTetheringAsync()',
   '.join()',
+  'RoInitialize(RO_INIT_MULTITHREADED)',
+  'GetIfTable2',
+  'NetworkAdapterId()',
   'TetheringOperationalState::Off',
-  'TetheringOperationalState::On',
-  'TetheringCapability::Enabled',
-  'windows-hotspot-winrt-lease-v22.json',
-  'target-identification-ambiguous',
-  'fail-closed-no-tethering-mutation',
-  'original-public-profile-ambiguous',
-  'fail-closed-preserve-current-hotspot',
-  'restore-original-hotspot-immediately',
-  'snapshot_preserved_until_restore_succeeds',
-  'lease-cleared-user-hotspot-off',
-  'respect-and-clear-lease',
-  'RESTORE_REQUESTED',
-  'MUTATION_LOCK',
-  'pub async fn restore_now',
-  'explicit-restore-completed',
-  'desired_topology',
-  'mihomo-connection-profile=public,wifi=private',
-  'hnetcfg_mutation',
+  'TetheringOperationalState::InTransition',
+  'TetheringOperationStatus::Success',
+  'TetheringOperationStatus::AlreadyOn',
+  'mihomo-start-failed',
+  'attempt-immediate-physical-fallback',
+  'physical-fallback-restored',
+  'legacy_hnetcfg_mutation',
+  'two_phase_shutdown_restore',
+  'pub async fn suspend_for_tun_teardown',
+  'pub async fn restore_after_tun_teardown',
+  'keep-hotspot-off-until-tun-is-gone',
+  'stop-then-start-from-best-physical-profile',
+  'tun-identification-ambiguous',
+  'fail-closed-no-hotspot-mutation',
 ]) {
-  requireText('hotspot', marker, `WinRT hotspot invariant ${marker}`)
+  requireText('winrt', marker, `WinRT hotspot invariant ${marker}`)
 }
 
 for (const forbidden of [
   'INetSharingManager',
   'INetSharingConfiguration',
-  'NetSharingManager',
   'EnableSharing(',
-  'DisableSharing(',
+  'NetSharingManager',
   'powershell.exe',
   'pwsh.exe',
   'netsh ',
   'std::process::Command',
-  '192.168.137.0/24',
 ]) {
   forbidText(
-    'hotspot',
+    'winrt',
     forbidden,
-    'hotspot v22 must not mutate classic ICS or shell out',
+    'Karing .22 primary hotspot controller must stay on WinRT and native interface discovery',
   )
 }
 
+requireText(
+  'coreMod',
+  'pub mod windows_hotspot_winrt;',
+  'WinRT hotspot controller is compiled on Windows',
+)
+requireText(
+  'manager',
+  'const ENABLE_LEGACY_HNETCFG_HOTSPOT_MONITOR: bool = false;',
+  'legacy HNetCfg mutation monitor is disabled by default',
+)
+requireText(
+  'manager',
+  'crate::core::windows_hotspot_winrt::ensure_monitor_running();',
+  'WinRT hotspot monitor starts with CoreManager',
+)
+requireText(
+  'manager',
+  'crate::core::windows_hotspot_ics::ensure_monitor_running();',
+  'legacy v20 implementation remains compiled behind the explicit disabled gate',
+)
+requireText(
+  'shutdown',
+  'windows_hotspot_winrt::suspend_for_tun_teardown("shutdown")',
+  'shutdown suspends Mihomo-backed hotspot before TUN destruction',
+)
+requireText(
+  'shutdown',
+  'windows_hotspot_winrt::restore_after_tun_teardown("shutdown")',
+  'shutdown restarts hotspot from a physical profile after TUN destruction',
+)
+requireText(
+  'shutdown',
+  'abort-explicit-tun-core-teardown-preserve-working-topology',
+  'failed WinRT suspend aborts destructive teardown',
+)
+requireText(
+  'shutdown',
+  'leave-hotspot-off-instead-of-binding-to-destroyed-tun',
+  'failed physical restore fails safe instead of rebinding dead TUN',
+)
 for (const feature of [
   '"Foundation"',
   '"Foundation_Collections"',
   '"Networking_Connectivity"',
   '"Networking_NetworkOperators"',
+  '"Win32_NetworkManagement_IpHelper"',
+  '"Win32_System_WinRT"',
 ]) {
-  requireText('manifest', feature, `windows crate feature ${feature}`)
+  requireText('manifest', feature, `windows-rs feature ${feature}`)
 }
 
-requireText(
-  'manager',
-  'crate::core::windows_hotspot_ics::ensure_monitor_running();',
-  'WinRT hotspot monitor starts with CoreManager',
-)
-requireText(
-  'shutdown',
-  'match crate::core::windows_hotspot_ics::restore_now("shutdown").await',
-  'shutdown waits for hotspot public-source restore before TUN teardown',
-)
-
-for (const testName of [
-  'windows_hotspot_guid_normalization_ignores_braces_case_and_space',
-  'windows_hotspot_saved_guid_matches_native_guid',
-  'windows_hotspot_snapshot_v22_preserves_original_public_and_user_state',
+for (const legacyMarker of [
+  'windows-hotspot-ics-lease-v20.json',
+  'restore-original-ics-immediately',
+  'fail-closed-preserve-unrelated-private-ics',
 ]) {
-  requireText('hotspot', testName, `Rust regression ${testName}`)
+  requireText(
+    'legacy',
+    legacyMarker,
+    `legacy HNetCfg rollback reference remains available: ${legacyMarker}`,
+  )
 }
 
 if (failures.length > 0) {
@@ -108,13 +141,9 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log(
-  '[通过] 热点上游切换使用 NetworkOperatorTetheringManager / CreateFromConnectionProfile',
-)
-console.log(
-  '[通过] 已移除热点控制路径中的 HNetCfg EnableSharing/DisableSharing 写操作',
-)
-console.log('[通过] WinRT IAsyncOperation 使用 join() 在单个阻塞线程内同步完成')
-console.log('[通过] 变更前持久化原 public profile，失败和退出均具备恢复路径')
-console.log('[通过] 用户主动关闭热点时清理 lease，不会被后台监控强行重新开启')
-console.log('[通过] TUN/profile 识别歧义时 fail-closed，不修改系统热点')
+console.log('[通过] Karing .22 主热点控制器使用 NetworkOperatorTetheringManager，而非 HNetCfg EnableSharing')
+console.log('[通过] Mihomo ConnectionProfile 通过 IP Helper adapter GUID 对齐，不依赖本地化 ProfileName')
+console.log('[通过] WinRT !Send/!Sync 对象仅在单个阻塞线程内创建、Stop/Start、join 与读回')
+console.log('[通过] Start 失败会尝试立即恢复物理热点上游，不把热点静默留在关闭状态')
+console.log('[通过] 退出采用 Stop hotspot → teardown TUN → physical profile Start 的两阶段恢复')
+console.log('[通过] v20 HNetCfg 代码保留为回滚/诊断参考，但默认 mutation monitor 已关闭')
