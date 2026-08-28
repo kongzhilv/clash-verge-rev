@@ -253,12 +253,17 @@ fn find_profile_by_guid(items: &[ConnectionProfile], guid: GUID) -> Result<Optio
 }
 
 fn find_profile_by_saved_guid(items: &[ConnectionProfile], guid: &str) -> Result<Option<ConnectionProfile>> {
+    let mut matches = Vec::new();
     for profile in items {
         if same_guid(guid, profile_guid(profile)?) {
-            return Ok(Some(profile.clone()));
+            matches.push(profile.clone());
         }
     }
-    Ok(None)
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.pop()),
+        count => bail!("saved adapter GUID {guid} mapped to {count} ConnectionProfiles"),
+    }
 }
 
 fn profile_log(profile: &ConnectionProfile) -> Result<ProfileLog> {
