@@ -1,4 +1,4 @@
-name: Karing v22 restore manager hardening
+name: Karing v22 saved GUID uniqueness hardening
 
 on:
   push:
@@ -27,37 +27,68 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
-      - name: Make restore stop profile-scoped in the normal path
+      - name: Fail closed on ambiguous persisted ConnectionProfile GUIDs
         shell: bash
         run: |
           set -euo pipefail
           python <<'PY'
-          from base64 import b64decode
           from pathlib import Path
-          old = b64decode('Zm4gcmVzdG9yZV9zbmFwc2hvdF91bmxvY2tlZChwYXRoOiAmUGF0aCwgc25hcHNob3Q6ICZTYXZlZFRldGhlcmluZ1N0YXRlKSAtPiBSZXN1bHQ8KCk+IHsKICAgIGxldCBfYXBhcnRtZW50ID0gV2luUnRBcGFydG1lbnQ6OmluaXQoKT87CiAgICBsZXQgaXRlbXMgPSBwcm9maWxlcygpPzsKICAgIGxldCBvcmlnaW5hbCA9IGZpbmRfcHJvZmlsZV9ieV9zYXZlZF9ndWlkKCZpdGVtcywgJnNuYXBzaG90Lm9yaWdpbmFsX3B1YmxpY19ndWlkKT8KICAgICAgICAub2tfb3JfZWxzZSh8fCBhbnlob3chKCJvcmlnaW5hbCBob3RzcG90IHB1YmxpYyBDb25uZWN0aW9uUHJvZmlsZSBpcyBubyBsb25nZXIgYXZhaWxhYmxlIikpPzsKCiAgICByZXF1aXJlX2NhcGFiaWxpdHkoJm9yaWdpbmFsKT87CiAgICBsZXQgb3JpZ2luYWxfbWFuYWdlciA9IG1hbmFnZXJfZm9yKCZvcmlnaW5hbCk/OwoKICAgIC8vIFRldGhlcmluZyBzdGF0ZSBpcyBzeXN0ZW0tZ2xvYmFsLiBTdG9wIHRoZSBjdXJyZW50IHNlc3Npb24gZmlyc3QgZXZlbiBpZiB0aGUKICAgIC8vIG9yaWdpbmFsIHNvdXJjZSBwcm9maWxlIGlzIG5vdCB0aGUgcHJvZmlsZSBjdXJyZW50bHkgYmFja2luZyB0aGUgaG90c3BvdC4KICAgIHN0b3BfdGV0aGVyaW5nKCZvcmlnaW5hbF9tYW5hZ2VyLCAicmVzdG9yZS1zdG9wLWN1cnJlbnQiKT87CiAgICBpZiBzbmFwc2hvdC5ob3RzcG90X3dhc19vbiB7CiAgICAgICAgc3RhcnRfdGV0aGVyaW5nKCZvcmlnaW5hbF9tYW5hZ2VyLCAicmVzdG9yZS1vcmlnaW5hbC1wdWJsaWMiKT87CiAgICB9CgogICAgcmVtb3ZlX3NuYXBzaG90KHBhdGgpPzsKICAgIGRpYWdub3N0aWNzOjppbmZvKAogICAgICAgICJ3aW5kb3dzLWhvdHNwb3Qtd2lucnQiLAogICAgICAgICJsZWFzZS1yZXN0b3JlZCIsCiAgICAgICAganNvbiEoewogICAgICAgICAgICAib3JpZ2luYWxfcHVibGljX2d1aWQiOiBzbmFwc2hvdC5vcmlnaW5hbF9wdWJsaWNfZ3VpZCwKICAgICAgICAgICAgIm9yaWdpbmFsX3B1YmxpY19wcm9maWxlIjogc25hcHNob3Qub3JpZ2luYWxfcHVibGljX3Byb2ZpbGUsCiAgICAgICAgICAgICJob3RzcG90X3dhc19vbiI6IHNuYXBzaG90LmhvdHNwb3Rfd2FzX29uLAogICAgICAgICAgICAic25hcHNob3RfcmVtb3ZlZCI6IHRydWUsCiAgICAgICAgICAgICJzdHJhdGVneSI6ICJ3aW5ydC1jcmVhdGUtZnJvbS1jb25uZWN0aW9uLXByb2ZpbGUiLAogICAgICAgIH0pLAogICAgKTsKICAgIE9rKCgpKQp9Cg==').decode()
-          new = b64decode('Zm4gcmVzdG9yZV9zbmFwc2hvdF91bmxvY2tlZChwYXRoOiAmUGF0aCwgc25hcHNob3Q6ICZTYXZlZFRldGhlcmluZ1N0YXRlKSAtPiBSZXN1bHQ8KCk+IHsKICAgIGxldCBfYXBhcnRtZW50ID0gV2luUnRBcGFydG1lbnQ6OmluaXQoKT87CiAgICBsZXQgaXRlbXMgPSBwcm9maWxlcygpPzsKICAgIGxldCBvcmlnaW5hbCA9IGZpbmRfcHJvZmlsZV9ieV9zYXZlZF9ndWlkKCZpdGVtcywgJnNuYXBzaG90Lm9yaWdpbmFsX3B1YmxpY19ndWlkKT8KICAgICAgICAub2tfb3JfZWxzZSh8fCBhbnlob3chKCJvcmlnaW5hbCBob3RzcG90IHB1YmxpYyBDb25uZWN0aW9uUHJvZmlsZSBpcyBubyBsb25nZXIgYXZhaWxhYmxlIikpPzsKCiAgICByZXF1aXJlX2NhcGFiaWxpdHkoJm9yaWdpbmFsKT87CiAgICBsZXQgb3JpZ2luYWxfbWFuYWdlciA9IG1hbmFnZXJfZm9yKCZvcmlnaW5hbCk/OwoKICAgIC8vIEEgbWFuYWdlciBjcmVhdGVkIGZyb20gYSBDb25uZWN0aW9uUHJvZmlsZSBpcyBwcm9maWxlLXNjb3BlZDogdGhlIHByb2ZpbGUgaXMKICAgIC8vIGl0cyBwdWJsaWMgaW50ZXJmYWNlLiBJbiB0aGUgbm9ybWFsIHJlc3RvcmUgcGF0aCwgc3RvcCB0aGUgTWlob21vLWJhY2tlZAogICAgLy8gc2Vzc2lvbiB0aHJvdWdoIHRoZSBzYW1lIHNhdmVkIFRVTiBwcm9maWxlIHRoYXQgY3JlYXRlZCBpdCwgdGhlbiByZXN0YXJ0IHdpdGgKICAgIC8vIHRoZSBzYXZlZCBwaHlzaWNhbCBwdWJsaWMgcHJvZmlsZS4gRG8gbm90IGFzc3VtZSBjcm9zcy1wcm9maWxlIFN0b3Agc2VtYW50aWNzLgogICAgaWYgbGV0IFNvbWUodHVuX3Byb2ZpbGUpID0gZmluZF9wcm9maWxlX2J5X3NhdmVkX2d1aWQoJml0ZW1zLCAmc25hcHNob3QudHVuX2d1aWQpPyB7CiAgICAgICAgbGV0IHR1bl9tYW5hZ2VyID0gbWFuYWdlcl9mb3IoJnR1bl9wcm9maWxlKT87CiAgICAgICAgc3RvcF90ZXRoZXJpbmcoJnR1bl9tYW5hZ2VyLCAicmVzdG9yZS1zdG9wLW1paG9tbyIpPzsKICAgIH0gZWxzZSB7CiAgICAgICAgLy8gQ3Jhc2gvcmVzdGFydCBjYW4gcmVtb3ZlIHRoZSBlcGhlbWVyYWwgVFVOIHByb2ZpbGUgYmVmb3JlIHJlY29uY2lsaWF0aW9uLgogICAgICAgIC8vIFRoZXJlIGlzIG5vIGxvbmdlciBhIHByb2ZpbGUtc2NvcGVkIE1paG9tbyBtYW5hZ2VyIHRvIGFkZHJlc3MuIFVzZSB0aGUKICAgICAgICAvLyBvcmlnaW5hbCBtYW5hZ2VyIG9ubHkgYXMgYSBkb2N1bWVudGVkIHJlY292ZXJ5IGZhbGxiYWNrIGFuZCBrZWVwIHRoZQogICAgICAgIC8vIHNuYXBzaG90IHVudGlsIHRoZSBwaHlzaWNhbCByZXN0YXJ0IGhhcyBiZWVuIHZlcmlmaWVkLgogICAgICAgIGRpYWdub3N0aWNzOjp3YXJuKAogICAgICAgICAgICAid2luZG93cy1ob3RzcG90LXdpbnJ0IiwKICAgICAgICAgICAgInJlc3RvcmUtc3RvcC1mYWxsYmFjay1vcmlnaW5hbC1wcm9maWxlIiwKICAgICAgICAgICAganNvbiEoewogICAgICAgICAgICAgICAgInR1bl9ndWlkIjogc25hcHNob3QudHVuX2d1aWQsCiAgICAgICAgICAgICAgICAib3JpZ2luYWxfcHVibGljX2d1aWQiOiBzbmFwc2hvdC5vcmlnaW5hbF9wdWJsaWNfZ3VpZCwKICAgICAgICAgICAgICAgICJyZWFzb24iOiAic2F2ZWQtdHVuLXByb2ZpbGUtbWlzc2luZyIsCiAgICAgICAgICAgICAgICAibm9ybWFsX3BhdGgiOiBmYWxzZSwKICAgICAgICAgICAgfSksCiAgICAgICAgKTsKICAgICAgICBzdG9wX3RldGhlcmluZygmb3JpZ2luYWxfbWFuYWdlciwgInJlc3RvcmUtc3RvcC1mYWxsYmFjay1vcmlnaW5hbCIpPzsKICAgIH0KCiAgICBpZiBzbmFwc2hvdC5ob3RzcG90X3dhc19vbiB7CiAgICAgICAgc3RhcnRfdGV0aGVyaW5nKCZvcmlnaW5hbF9tYW5hZ2VyLCAicmVzdG9yZS1vcmlnaW5hbC1wdWJsaWMiKT87CiAgICB9CgogICAgcmVtb3ZlX3NuYXBzaG90KHBhdGgpPzsKICAgIGRpYWdub3N0aWNzOjppbmZvKAogICAgICAgICJ3aW5kb3dzLWhvdHNwb3Qtd2lucnQiLAogICAgICAgICJsZWFzZS1yZXN0b3JlZCIsCiAgICAgICAganNvbiEoewogICAgICAgICAgICAib3JpZ2luYWxfcHVibGljX2d1aWQiOiBzbmFwc2hvdC5vcmlnaW5hbF9wdWJsaWNfZ3VpZCwKICAgICAgICAgICAgIm9yaWdpbmFsX3B1YmxpY19wcm9maWxlIjogc25hcHNob3Qub3JpZ2luYWxfcHVibGljX3Byb2ZpbGUsCiAgICAgICAgICAgICJob3RzcG90X3dhc19vbiI6IHNuYXBzaG90LmhvdHNwb3Rfd2FzX29uLAogICAgICAgICAgICAic25hcHNob3RfcmVtb3ZlZCI6IHRydWUsCiAgICAgICAgICAgICJzdHJhdGVneSI6ICJwcm9maWxlLXNjb3BlZC1zdG9wLXRoZW4tb3JpZ2luYWwtcHJvZmlsZS1zdGFydCIsCiAgICAgICAgfSksCiAgICApOwogICAgT2soKCkpCn0K').decode()
-          p = Path('src-tauri/src/core/windows_hotspot_ics.rs')
-          text = p.read_text(encoding='utf-8')
+
+          controller = Path('src-tauri/src/core/windows_hotspot_ics.rs')
+          text = controller.read_text(encoding='utf-8')
+          old = '''fn find_profile_by_saved_guid(items: &[ConnectionProfile], guid: &str) -> Result<Option<ConnectionProfile>> {
+    for profile in items {
+        if same_guid(guid, profile_guid(profile)?) {
+            return Ok(Some(profile.clone()));
+        }
+    }
+    Ok(None)
+}
+'''
+          new = '''fn find_profile_by_saved_guid(items: &[ConnectionProfile], guid: &str) -> Result<Option<ConnectionProfile>> {
+    let mut matches = Vec::new();
+    for profile in items {
+        if same_guid(guid, profile_guid(profile)?) {
+            matches.push(profile.clone());
+        }
+    }
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.pop()),
+        count => bail!("saved adapter GUID {guid} mapped to {count} ConnectionProfiles"),
+    }
+}
+'''
           count = text.count(old)
           if count != 1:
-              raise SystemExit(f'expected one restore function anchor, found {count}')
-          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+              raise SystemExit(f'expected one saved-GUID lookup anchor, found {count}')
+          controller.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          gate = Path('scripts/check-windows-hotspot-v22.mjs')
+          gate_text = gate.read_text(encoding='utf-8')
+          anchor = "  'original-public-profile-ambiguous',\n"
+          addition = "  'saved adapter GUID {guid} mapped to {count} ConnectionProfiles',\n"
+          if addition not in gate_text:
+              if gate_text.count(anchor) != 1:
+                  raise SystemExit('expected one static-gate marker insertion anchor')
+              gate_text = gate_text.replace(anchor, anchor + addition, 1)
+              gate.write_text(gate_text, encoding='utf-8')
           PY
           cargo fmt --manifest-path ./src-tauri/Cargo.toml --all
           node scripts/check-windows-hotspot-v22.mjs
+          grep -Fq 'saved adapter GUID {guid} mapped to {count} ConnectionProfiles' src-tauri/src/core/windows_hotspot_ics.rs
           grep -Fq 'restore-stop-mihomo' src-tauri/src/core/windows_hotspot_ics.rs
-          grep -Fq 'restore-stop-fallback-original-profile' src-tauri/src/core/windows_hotspot_ics.rs
-          ! grep -Fq 'Tethering state is system-global' src-tauri/src/core/windows_hotspot_ics.rs
-      - name: Commit source-only restore hardening
+      - name: Commit source and permanent gate hardening
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src-tauri/src/core/windows_hotspot_ics.rs
+          git add src-tauri/src/core/windows_hotspot_ics.rs scripts/check-windows-hotspot-v22.mjs
+          git diff --cached --check
           if git diff --cached --quiet; then
-            echo 'No source changes needed.'
+            echo 'No hardening changes needed.'
             exit 0
           fi
-          git commit -m 'fix(windows): stop hotspot through saved Mihomo profile'
+          git commit -m 'fix(windows): reject ambiguous saved hotspot profiles'
           git push origin HEAD:fix/karing-windows-hotspot-v22
