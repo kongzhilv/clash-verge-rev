@@ -66,6 +66,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path 'src-tauri/sidecar' | Out-Null
           New-Item -ItemType File -Force -Path 'src-tauri/sidecar/verge-mihomo-x86_64-pc-windows-msvc.exe' | Out-Null
+          New-Item -ItemType File -Force -Path 'src-tauri/sidecar/verge-mihomo-alpha-x86_64-pc-windows-msvc.exe' | Out-Null
       - name: Cargo check Windows library
         working-directory: src-tauri
         run: cargo check --lib --locked
