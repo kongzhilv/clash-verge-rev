@@ -39,11 +39,20 @@ const LEGACY_FALLBACK_ENV: &str = "CLASH_VERGE_HOTSPOT_LEGACY_ICS";
 static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 static RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum LeasePhase {
+    Prepared,
+    OriginalStopped,
+    Applied,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct TetheringLease {
     version: u8,
     created_unix_ms: u128,
     owned: bool,
+    phase: LeasePhase,
     hotspot_was_on: bool,
     mihomo_profile_guid: String,
     mihomo_profile_name: String,
@@ -279,11 +288,6 @@ fn manager_for(profile: &ConnectionProfile) -> Result<NetworkOperatorTetheringMa
         .context("NetworkOperatorTetheringManager::CreateFromConnectionProfile failed")
 }
 
-fn operation_succeeded(status: TetheringOperationStatus, target_on: bool) -> bool {
-    status == TetheringOperationStatus::Success
-        || target_on && status == TetheringOperationStatus::AlreadyOn
-}
-
 fn wait_for_state(
     manager: &NetworkOperatorTetheringManager,
     expected: TetheringOperationalState,
@@ -301,9 +305,9 @@ fn wait_for_state(
     }
 }
 
-fn stop_manager(manager: &NetworkOperatorTetheringManager, label: &str) -> Result<()> {
+fn stop_manager(manager: &NetworkOperatorTetheringManager, label: &str) -> Result<bool> {
     if manager.TetheringOperationalState()? == TetheringOperationalState::Off {
-        return Ok(());
+        return Ok(false);
     }
     let result = manager
         .StopTetheringAsync()
@@ -321,13 +325,19 @@ fn stop_manager(manager: &NetworkOperatorTetheringManager, label: &str) -> Resul
             "additional_error": message
         }),
     );
-    if !operation_succeeded(status, false) {
+    if status != TetheringOperationStatus::Success {
         bail!("StopTetheringAsync failed for {label}: {status:?}: {message}");
     }
-    wait_for_state(manager, TetheringOperationalState::Off)
+    wait_for_state(manager, TetheringOperationalState::Off)?;
+    Ok(true)
 }
 
 fn start_manager(manager: &NetworkOperatorTetheringManager, label: &str) -> Result<()> {
+    if manager.TetheringOperationalState()? != TetheringOperationalState::Off {
+        bail!(
+            "refusing to claim tethering ownership for {label}: global tethering feature is already On"
+        );
+    }
     let result = manager
         .StartTetheringAsync()
         .context("StartTetheringAsync creation failed")?
@@ -344,7 +354,7 @@ fn start_manager(manager: &NetworkOperatorTetheringManager, label: &str) -> Resu
             "additional_error": message
         }),
     );
-    if !operation_succeeded(status, true) {
+    if status != TetheringOperationStatus::Success {
         bail!("StartTetheringAsync failed for {label}: {status:?}: {message}");
     }
     wait_for_state(manager, TetheringOperationalState::On)
@@ -371,7 +381,7 @@ fn profile_logs(profiles: &[ConnectionProfile]) -> Vec<ProfileLog> {
 
 fn decide_reconcile(
     hotspot_on: bool,
-    lease_owned: bool,
+    lease_applied: bool,
     mihomo_available: bool,
     original_available: bool,
 ) -> ReconcileDecision {
@@ -379,13 +389,17 @@ fn decide_reconcile(
         ReconcileDecision::FailClosed
     } else if !hotspot_on {
         ReconcileDecision::Noop
-    } else if lease_owned {
+    } else if lease_applied {
         ReconcileDecision::AlreadyDesired
     } else if !original_available {
         ReconcileDecision::FailClosed
     } else {
         ReconcileDecision::Rehome
     }
+}
+
+fn should_restore_original(lease: &TetheringLease, global_was_on: bool) -> bool {
+    lease.hotspot_was_on && (global_was_on || lease.phase != LeasePhase::Applied)
 }
 
 fn restore_owned_lease(path: &Path, reason: &str) -> Result<bool> {
@@ -441,20 +455,38 @@ fn restore_owned_lease(path: &Path, reason: &str) -> Result<bool> {
     };
 
     let mut original_restored = false;
-    if lease.hotspot_was_on && global_was_on {
+    let restore_original = should_restore_original(&lease, global_was_on);
+    if restore_original {
         if let Some(original) = original {
             let capability =
                 NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(
                     original,
                 )?;
-            if capability != TetheringCapability::Enabled {
-                bail!(
-                    "original tethering capability is not Enabled during restore: {capability:?}"
+            if capability == TetheringCapability::Enabled {
+                let manager = manager_for(original)?;
+                match start_manager(&manager, &profile_name(original)) {
+                    Ok(()) => original_restored = true,
+                    Err(error) => diagnostics::error(
+                        "windows-hotspot-winrt",
+                        "original-restore-failed-safe-off",
+                        json!({
+                            "error": error.to_string(),
+                            "original_profile": profile_name(original),
+                            "action": "leave-hotspot-off-allow-tun-teardown",
+                        }),
+                    ),
+                }
+            } else {
+                diagnostics::warn(
+                    "windows-hotspot-winrt",
+                    "original-capability-disabled-safe-off",
+                    json!({
+                        "original_profile": profile_name(original),
+                        "capability": capability_name(capability),
+                        "action": "leave-hotspot-off-allow-tun-teardown",
+                    }),
                 );
             }
-            let manager = manager_for(original)?;
-            start_manager(&manager, &profile_name(original))?;
-            original_restored = true;
         } else {
             diagnostics::warn(
                 "windows-hotspot-winrt",
@@ -474,7 +506,9 @@ fn restore_owned_lease(path: &Path, reason: &str) -> Result<bool> {
         "lease-restored",
         json!({
             "reason": reason,
+            "phase": lease.phase,
             "global_was_on": global_was_on,
+            "restore_original": restore_original,
             "original_restored": original_restored,
         }),
     );
@@ -540,6 +574,18 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
             restore_owned_lease(path, "mihomo-guid-drift")?;
             return Ok("lease-drift-restored");
         }
+        if existing.phase != LeasePhase::Applied {
+            diagnostics::warn(
+                "windows-hotspot-winrt",
+                "incomplete-lease-recovery",
+                json!({
+                    "phase": existing.phase,
+                    "action": "restore-original-before-fresh-reconcile",
+                }),
+            );
+            restore_owned_lease(path, "incomplete-lease")?;
+            return Ok("incomplete-lease-restored");
+        }
     }
 
     if hotspot_state == TetheringOperationalState::Off {
@@ -563,8 +609,10 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
         return Ok("hotspot-transition");
     }
 
-    let lease_owned = lease.as_ref().is_some_and(|item| item.owned);
-    if decide_reconcile(true, lease_owned, true, true) == ReconcileDecision::AlreadyDesired {
+    let lease_applied = lease
+        .as_ref()
+        .is_some_and(|item| item.owned && item.phase == LeasePhase::Applied);
+    if decide_reconcile(true, lease_applied, true, true) == ReconcileDecision::AlreadyDesired {
         diagnostics::info(
             "windows-hotspot-winrt",
             "owned-hotspot-verified",
@@ -572,7 +620,7 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
                 "mihomo_guid": guid_string(tun_guid),
                 "state": state_name(hotspot_state),
                 "client_count": mihomo_manager.ClientCount().ok(),
-                "ownership_source": "persisted-v22-lease",
+                "ownership_source": "persisted-v22-applied-lease",
             }),
         );
         return Ok("already-mihomo");
@@ -615,13 +663,14 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
 
     let original_name = profile_name(&original);
     let mihomo_name = profile_name(mihomo_profile);
-    let new_lease = TetheringLease {
+    let mut new_lease = TetheringLease {
         version: 22,
         created_unix_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis(),
         owned: true,
+        phase: LeasePhase::Prepared,
         hotspot_was_on: true,
         mihomo_profile_guid: guid_string(tun_guid),
         mihomo_profile_name: mihomo_name.clone(),
@@ -640,12 +689,23 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
             "mihomo_guid": guid_string(tun_guid),
             "global_hotspot_state": state_name(hotspot_state),
             "profiles_before": profile_logs(&profiles),
-            "ownership_model": "persisted-lease-not-per-profile-operational-state",
+            "ownership_model": "persisted-v22-phase-lease-not-per-profile-operational-state",
         }),
     );
 
     let original_manager = manager_for(&original)?;
-    stop_manager(&original_manager, &original_name)?;
+    if !stop_manager(&original_manager, &original_name)? {
+        remove_lease(path)?;
+        diagnostics::info(
+            "windows-hotspot-winrt",
+            "rehome-cancelled-hotspot-off-race",
+            json!({"action": "respect-user-hotspot-off"}),
+        );
+        return Ok("hotspot-off-race");
+    }
+
+    new_lease.phase = LeasePhase::OriginalStopped;
+    save_lease(path, &new_lease)?;
 
     if let Err(start_error) = start_manager(&mihomo_manager, &mihomo_name) {
         diagnostics::error(
@@ -667,6 +727,7 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
             json!({
                 "start_error": start_error.to_string(),
                 "rollback_error": rollback.as_ref().err().map(ToString::to_string),
+                "phase": new_lease.phase,
                 "action": "leave-hotspot-off-preserve-lease-for-next-restore",
             }),
         );
@@ -681,6 +742,9 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
     if state != TetheringOperationalState::On {
         bail!("Mihomo tethering verification failed: state={state:?}");
     }
+
+    new_lease.phase = LeasePhase::Applied;
+    save_lease(path, &new_lease)?;
     diagnostics::info(
         "windows-hotspot-winrt",
         "rehome-verified",
@@ -688,6 +752,7 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
             "mihomo_guid": guid_string(tun_guid),
             "state": state_name(state),
             "client_count": clients,
+            "lease_phase": new_lease.phase,
             "control_plane": "NetworkOperatorTetheringManager",
             "public_profile_source": "NetworkInformation::GetInternetConnectionProfile snapshot -> Mihomo",
         }),
@@ -717,7 +782,7 @@ async fn monitor_loop() {
             "snapshot": path,
             "legacy_hnetcfg": false,
             "tethering_state_semantics": "global-feature-state",
-            "ownership_authority": "persisted-v22-lease",
+            "ownership_authority": "persisted-v22-phase-lease",
         }),
     );
 
@@ -872,6 +937,20 @@ pub async fn restore_now(reason: &'static str) -> Result<bool> {
 mod tests {
     use super::*;
 
+    fn lease_with_phase(phase: LeasePhase) -> TetheringLease {
+        TetheringLease {
+            version: 22,
+            created_unix_ms: 0,
+            owned: true,
+            phase,
+            hotspot_was_on: true,
+            mihomo_profile_guid: "mihomo".to_string(),
+            mihomo_profile_name: "Mihomo".to_string(),
+            original_profile_guid: "physical".to_string(),
+            original_profile_name: "WLAN".to_string(),
+        }
+    }
+
     #[test]
     fn reconcile_does_not_open_a_hotspot_the_user_left_off() {
         assert_eq!(
@@ -881,7 +960,7 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_rehomes_hotspot_on_without_an_owned_lease() {
+    fn reconcile_rehomes_hotspot_on_without_an_applied_lease() {
         assert_eq!(
             decide_reconcile(true, false, true, true),
             ReconcileDecision::Rehome
@@ -889,7 +968,7 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_keeps_an_owned_mihomo_backed_hotspot() {
+    fn reconcile_keeps_an_applied_mihomo_backed_hotspot() {
         assert_eq!(
             decide_reconcile(true, true, true, true),
             ReconcileDecision::AlreadyDesired
@@ -910,6 +989,34 @@ mod tests {
             decide_reconcile(true, false, true, false),
             ReconcileDecision::FailClosed
         );
+    }
+
+    #[test]
+    fn incomplete_lease_restores_original_even_if_hotspot_is_currently_off() {
+        assert!(should_restore_original(
+            &lease_with_phase(LeasePhase::Prepared),
+            false
+        ));
+        assert!(should_restore_original(
+            &lease_with_phase(LeasePhase::OriginalStopped),
+            false
+        ));
+    }
+
+    #[test]
+    fn applied_lease_respects_user_hotspot_off() {
+        assert!(!should_restore_original(
+            &lease_with_phase(LeasePhase::Applied),
+            false
+        ));
+    }
+
+    #[test]
+    fn applied_lease_restores_original_when_owned_hotspot_is_on() {
+        assert!(should_restore_original(
+            &lease_with_phase(LeasePhase::Applied),
+            true
+        ));
     }
 
     #[test]
