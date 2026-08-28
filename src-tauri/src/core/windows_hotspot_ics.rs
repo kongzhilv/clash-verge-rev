@@ -27,7 +27,7 @@ use windows::{
             IpHelper::{FreeMibTable, GetIfTable2, MIB_IF_ROW2, MIB_IF_TABLE2},
             Ndis::IfOperStatusUp,
         },
-        System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize},
+        System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize},
     },
     core::GUID,
 };
@@ -67,20 +67,18 @@ struct ProfileLog {
     tethering_capability: String,
 }
 
-struct ComApartment;
+struct WinRtApartment;
 
-impl ComApartment {
+impl WinRtApartment {
     fn init() -> Result<Self> {
-        unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
-            .ok()
-            .context("CoInitializeEx(COINIT_MULTITHREADED) failed")?;
+        unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.context("RoInitialize(RO_INIT_MULTITHREADED) failed")?;
         Ok(Self)
     }
 }
 
-impl Drop for ComApartment {
+impl Drop for WinRtApartment {
     fn drop(&mut self) {
-        unsafe { CoUninitialize() };
+        unsafe { RoUninitialize() };
     }
 }
 
@@ -391,7 +389,7 @@ fn start_tethering(manager: &NetworkOperatorTetheringManager, phase: &'static st
 }
 
 fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedTetheringState) -> Result<()> {
-    let _apartment = ComApartment::init()?;
+    let _apartment = WinRtApartment::init()?;
     let items = profiles()?;
     let original = find_profile_by_saved_guid(&items, &snapshot.original_public_guid)?
         .ok_or_else(|| anyhow!("original hotspot public ConnectionProfile is no longer available"))?;
@@ -422,7 +420,7 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedTetheringState) -> Res
 }
 
 fn apply_tun_unlocked(path: &Path, tun: &InterfaceIdentity) -> Result<&'static str> {
-    let _apartment = ComApartment::init()?;
+    let _apartment = WinRtApartment::init()?;
     let items = profiles()?;
     let tun_profile = find_profile_by_guid(&items, tun.guid)?
         .ok_or_else(|| anyhow!("Mihomo TUN has no matching WinRT ConnectionProfile"))?;
@@ -435,6 +433,17 @@ fn apply_tun_unlocked(path: &Path, tun: &InterfaceIdentity) -> Result<&'static s
     }
     if state == TetheringOperationalState::InTransition {
         return Ok("hotspot-transition-no-action");
+    }
+    if state != TetheringOperationalState::On {
+        diagnostics::warn(
+            "windows-hotspot-winrt",
+            "hotspot-operational-state-unknown",
+            json!({
+                "operational_state": format!("{state:?}"),
+                "action": "fail-closed-preserve-current-hotspot",
+            }),
+        );
+        return Ok("hotspot-unknown-no-action");
     }
 
     let original = find_original_public_profile(&items, tun.guid)?;
@@ -516,13 +525,13 @@ fn mutation_guard() -> Result<std::sync::MutexGuard<'static, ()>> {
         .map_err(|_| anyhow!("Windows hotspot WinRT mutation lock was poisoned"))
 }
 
-fn active_snapshot_state(snapshot: &SavedTetheringState) -> Result<TetheringOperationalState> {
-    let _apartment = ComApartment::init()?;
+fn active_snapshot_state(snapshot: &SavedTetheringState) -> Result<Option<TetheringOperationalState>> {
+    let _apartment = WinRtApartment::init()?;
     let items = profiles()?;
     let Some(tun_profile) = find_profile_by_saved_guid(&items, &snapshot.tun_guid)? else {
-        return Ok(TetheringOperationalState::Off);
+        return Ok(None);
     };
-    Ok(manager_for(&tun_profile)?.TetheringOperationalState()?)
+    Ok(Some(manager_for(&tun_profile)?.TetheringOperationalState()?))
 }
 
 fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
@@ -535,12 +544,25 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
             return Ok("lease-restored");
         }
 
-        let state = active_snapshot_state(&snapshot)?;
+        let Some(state) = active_snapshot_state(&snapshot)? else {
+            // A persisted lease can outlive the Mihomo adapter after a crash/restart.
+            // Missing TUN profile is not evidence that the user disabled Mobile Hotspot;
+            // restore the original physical source while recovery metadata is intact.
+            restore_snapshot_unlocked(path, &snapshot)?;
+            diagnostics::info(
+                "windows-hotspot-winrt",
+                "lease-restored-missing-tun-profile",
+                json!({
+                    "tun_guid": snapshot.tun_guid,
+                    "original_public_guid": snapshot.original_public_guid,
+                    "recovery_reason": "persisted-tun-profile-missing",
+                }),
+            );
+            return Ok("lease-restored-missing-tun-profile");
+        };
         if state == TetheringOperationalState::Off {
-            // Respect a user turning Mobile Hotspot off while TUN is still enabled.
-            // Clearing the snapshot prevents the monitor from immediately turning it
-            // back on. If the user later turns Hotspot on again, the next stable
-            // window will establish a fresh Mihomo-backed session.
+            // Only an explicit Off state from the saved TUN-backed manager is treated
+            // as user intent. Missing/unknown profile state keeps or restores the lease.
             remove_snapshot(path)?;
             diagnostics::info(
                 "windows-hotspot-winrt",
@@ -551,6 +573,17 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
                 }),
             );
             return Ok("lease-cleared-user-hotspot-off");
+        }
+        if state == TetheringOperationalState::Unknown {
+            diagnostics::warn(
+                "windows-hotspot-winrt",
+                "active-lease-operational-state-unknown",
+                json!({
+                    "action": "fail-closed-preserve-persistent-lease",
+                    "snapshot_file_present": true,
+                }),
+            );
+            return Ok("lease-unknown-preserved");
         }
         return Ok("lease-already-active");
     }

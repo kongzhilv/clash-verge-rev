@@ -6,6 +6,7 @@ const paths = {
   manager: 'src-tauri/src/core/manager/mod.rs',
   shutdown: 'src-tauri/src/feat/window.rs',
   manifest: 'src-tauri/Cargo.toml',
+  workflow: '.github/workflows/karing-windows-hotspot-v22.yml',
 }
 
 const source = Object.fromEntries(
@@ -42,6 +43,13 @@ for (const marker of [
   'TetheringOperationalState::Off',
   'TetheringOperationalState::InTransition',
   'TetheringOperationalState::On',
+  'fn windows_hotspot_snapshot_v22_preserves_original_public_and_user_state',
+  'fn windows_hotspot_saved_guid_matches_native_guid',
+  'fn windows_hotspot_guid_normalization_ignores_braces_case_and_space',
+  'RoUninitialize()',
+  'RoInitialize(RO_INIT_MULTITHREADED)',
+  'active-lease-operational-state-unknown',
+  'lease-restored-missing-tun-profile',
   'hotspot-operational-state-unknown',
   'hotspot-unknown-no-action',
   'TetheringOperationStatus::Success',
@@ -79,6 +87,8 @@ for (const forbidden of [
   'pwsh.exe',
   'netsh ',
   'std::process::Command',
+  'CoUninitialize',
+  'CoInitializeEx',
 ]) {
   forbidText(
     'controller',
@@ -140,6 +150,7 @@ for (const feature of [
   '"Networking_NetworkOperators"',
   '"Win32_NetworkManagement_IpHelper"',
   '"Win32_System_Com"',
+  '"Win32_System_WinRT"',
 ]) {
   requireText('manifest', feature, `windows-rs feature ${feature}`)
 }
@@ -167,4 +178,10 @@ console.log(
 )
 console.log(
   '[通过] HNetCfg EnableSharing、PowerShell/netsh 和重复临时 WinRT 控制器均不在主路径',
+)
+
+requireText(
+  'workflow',
+  'cargo test --target x86_64-pc-windows-msvc --lib windows_hotspot_ --all-features',
+  'Windows unit regression filter must execute the concrete hotspot tests',
 )

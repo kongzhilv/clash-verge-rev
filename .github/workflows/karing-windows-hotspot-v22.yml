@@ -124,4 +124,4 @@ jobs:
       - run: pnpm run prebuild x86_64-pc-windows-msvc
       - name: Test WinRT hotspot helpers
         working-directory: src-tauri
-        run: cargo test --target x86_64-pc-windows-msvc --lib physical_profile_score_prefers_real_internet_access --all-features
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_hotspot_ --all-features -- --nocapture

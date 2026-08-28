@@ -134,8 +134,8 @@ jobs:
       - name: 运行 Windows TUN/热点安全专项回归
         run: node scripts/check-windows-tun-safety.mjs
 
-      - name: 运行 Windows Mobile Hotspot v20 安全回归
-        run: node scripts/check-windows-hotspot-v20.mjs
+      - name: 运行 Windows Mobile Hotspot v22 WinRT 安全回归
+        run: node scripts/check-windows-hotspot-v22.mjs
 
       - name: 运行 Windows WFP v21 loopback 安全回归
         run: node scripts/check-windows-wfp-v21.mjs
@@ -636,12 +636,13 @@ jobs:
           WFP layer: FWPM_LAYER_ALE_AUTH_CONNECT_V6
           WFP condition: FWPM_CONDITION_FLAGS / FWP_MATCH_FLAGS_NONE_SET / FWP_CONDITION_FLAG_IS_LOOPBACK
           WFP semantics: ipv6:false blocks non-loopback IPv6 while preserving IPv6 loopback traffic
+          Windows Mobile Hotspot: WinRT NetworkOperatorTetheringManager / CreateFromConnectionProfile(Mihomo)
           EOF
 
           cat > release-assets/release-notes.md <<'EOF'
           # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
 
-          本版针对 Windows 上 `ipv6:false` + StrictRoute/TUN 场景下的 IPv6 loopback 回归做根因修复。
+          本版在保留 `.21` IPv6 loopback WFP 根因修复的基础上，把 Windows Mobile Hotspot + Mihomo TUN 的上游绑定迁移到 WinRT 原生 tethering 控制面。
 
           - 根因位于 Mihomo 使用的 `sing-tun v0.4.22`：无 IPv6 TUN 地址时，原 `Meta / block ipv6` 在 `FWPM_LAYER_ALE_AUTH_CONNECT_V6` 创建无条件 BLOCK，连 `::1` 本机 loopback 也会被阻断。
           - Windows stable 与 alpha 两套 Mihomo core 都改为固定源码构建，避免切换 alpha 后回归；stable 固定 `ac017cdd246ce8bd547653d927e7bf77d7ee73d5`，alpha 固定 `fb66af813b3e65023851e94166ec8a4f61e02634`，sing-tun 固定 `dfc71de64aed159d9a09a5df43077bab0671db1f`。
@@ -649,7 +650,9 @@ jobs:
           - 不在 GUI 外层追加高权重 PERMIT 来覆盖 core BLOCK，而是修正产生问题的原始 WFP filter 匹配域。
           - patched core 使用固定 Go 1.20.14 工具链和固定 SHA256；源码 patch 采用 exact-once/fail-closed，源代码漂移时拒绝静默套补丁。
           - 每次正式 Windows prebuild 都先运行 v21 WFP pins/语义 gate，再构建 stable+alpha core；独立 Windows x64/ARM64 workflow 还会实际编译两个架构并核验 provenance 与二进制 SHA256。
-          - `.20` 已验证的原生 ICS topology lease、Windows TUN route guard、managed physical interface lease、完整网络诊断与其他旧回归全部继续保留，本版不撤销这些防线。
+          - `.22` 移除 Mobile Hotspot 主路径对经典 HNetCfg `EnableSharing/DisableSharing` 的依赖，改为 `NetworkOperatorTetheringManager::CreateFromConnectionProfile(Mihomo)`；先持久化原 public profile，再执行 Stop → Start，失败、关闭 TUN、退出及崩溃后的缺失 TUN profile 都会恢复原热点上游。
+          - 热点关闭、profile/GUID 识别歧义和未知 operational state 都采用 fail-closed；只有明确读到 Hotspot=Off 才视为用户关闭并清 lease。
+          - `.20/.21` 已验证的 Windows TUN route guard、managed physical interface lease、完整网络诊断与 WFP loopback 修复继续保留；仅替换过时的热点 HNetCfg 写控制路径。
           - 发行观察器要求同一 source SHA 的主发行 workflow 与 WFP v21 三个 job 全成功，并对 12 个安装包做 SHA256 集合一一对应验证，避免 GitHub asset 文件名规范化造成假失败。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。Windows patched core 的固定来源与 WFP 语义同时记录在 `BUILD_INFO.txt`。
