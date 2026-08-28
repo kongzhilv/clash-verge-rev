@@ -6,7 +6,9 @@ on:
     branches:
       - feature/karing-style-diversion
     paths:
+      - 'src-tauri/src/core/windows_hotspot_winrt.rs'
       - 'src-tauri/src/core/windows_hotspot_ics.rs'
+      - 'src-tauri/src/core/mod.rs'
       - 'src-tauri/src/core/manager/mod.rs'
       - 'src-tauri/src/feat/window.rs'
       - 'src-tauri/Cargo.toml'
@@ -19,9 +21,12 @@ on:
       - '.release/karing-release-tag.txt'
   push:
     branches:
+      - fix/karing-windows-hotspot-v22
       - feature/karing-style-diversion
     paths:
+      - 'src-tauri/src/core/windows_hotspot_winrt.rs'
       - 'src-tauri/src/core/windows_hotspot_ics.rs'
+      - 'src-tauri/src/core/mod.rs'
       - 'src-tauri/src/core/manager/mod.rs'
       - 'src-tauri/src/feat/window.rs'
       - 'src-tauri/Cargo.toml'
@@ -55,10 +60,52 @@ jobs:
         run: node scripts/check-windows-hotspot-v22.mjs
 
   windows-compile:
-    name: Compile WinRT hotspot on Windows x64
+    name: Compile WinRT hotspot ${{ matrix.target }}
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
     env:
       RUSTFLAGS: '-D warnings'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build matching service for target
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+      - name: Prepare pinned Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing-hotspot-v22-v2
+          key: windows-${{ matrix.target }}
+          workspaces: |
+            . -> target
+            .ci/service-ipc-source-${{ matrix.target }} -> target
+      - name: Cargo check WinRT hotspot path
+        working-directory: src-tauri
+        run: cargo check --target ${{ matrix.target }} --workspace --all-features
+
+  windows-unit-tests:
+    name: Run WinRT hotspot unit regressions
+    needs:
+      - static-safety
+      - windows-compile
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
@@ -72,20 +119,9 @@ jobs:
         with:
           node-version: '24.18.0'
           cache: pnpm
-      - name: Install project dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Prepare pinned Mihomo and runtime resources
-        run: pnpm run prebuild x86_64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: karing-hotspot-v22
-          key: windows-x64
-          workspaces: |
-            . -> target
-            .ci/service-ipc-source-x86_64-pc-windows-msvc -> target
-      - name: Cargo check WinRT hotspot path
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/build-matching-service.mjs x86_64-pc-windows-msvc
+      - run: pnpm run prebuild x86_64-pc-windows-msvc
+      - name: Test WinRT hotspot helpers
         working-directory: src-tauri
-        run: cargo check --target x86_64-pc-windows-msvc --workspace --all-features
-      - name: Cargo test hotspot unit regressions
-        working-directory: src-tauri
-        run: cargo test --target x86_64-pc-windows-msvc --lib windows_hotspot_ --all-features
+        run: cargo test --target x86_64-pc-windows-msvc --lib physical_profile_score_prefers_real_internet_access --all-features
