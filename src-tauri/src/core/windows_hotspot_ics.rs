@@ -397,9 +397,31 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedTetheringState) -> Res
     require_capability(&original)?;
     let original_manager = manager_for(&original)?;
 
-    // Tethering state is system-global. Stop the current session first even if the
-    // original source profile is not the profile currently backing the hotspot.
-    stop_tethering(&original_manager, "restore-stop-current")?;
+    // A manager created from a ConnectionProfile is profile-scoped: the profile is
+    // its public interface. In the normal restore path, stop the Mihomo-backed
+    // session through the same saved TUN profile that created it, then restart with
+    // the saved physical public profile. Do not assume cross-profile Stop semantics.
+    if let Some(tun_profile) = find_profile_by_saved_guid(&items, &snapshot.tun_guid)? {
+        let tun_manager = manager_for(&tun_profile)?;
+        stop_tethering(&tun_manager, "restore-stop-mihomo")?;
+    } else {
+        // Crash/restart can remove the ephemeral TUN profile before reconciliation.
+        // There is no longer a profile-scoped Mihomo manager to address. Use the
+        // original manager only as a documented recovery fallback and keep the
+        // snapshot until the physical restart has been verified.
+        diagnostics::warn(
+            "windows-hotspot-winrt",
+            "restore-stop-fallback-original-profile",
+            json!({
+                "tun_guid": snapshot.tun_guid,
+                "original_public_guid": snapshot.original_public_guid,
+                "reason": "saved-tun-profile-missing",
+                "normal_path": false,
+            }),
+        );
+        stop_tethering(&original_manager, "restore-stop-fallback-original")?;
+    }
+
     if snapshot.hotspot_was_on {
         start_tethering(&original_manager, "restore-original-public")?;
     }
@@ -413,7 +435,7 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedTetheringState) -> Res
             "original_public_profile": snapshot.original_public_profile,
             "hotspot_was_on": snapshot.hotspot_was_on,
             "snapshot_removed": true,
-            "strategy": "winrt-create-from-connection-profile",
+            "strategy": "profile-scoped-stop-then-original-profile-start",
         }),
     );
     Ok(())
