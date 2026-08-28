@@ -1,8 +1,7 @@
 import { readFile } from 'node:fs/promises'
 
 const paths = {
-  winrt: 'src-tauri/src/core/windows_hotspot_winrt.rs',
-  legacy: 'src-tauri/src/core/windows_hotspot_ics.rs',
+  controller: 'src-tauri/src/core/windows_hotspot_ics.rs',
   coreMod: 'src-tauri/src/core/mod.rs',
   manager: 'src-tauri/src/core/manager/mod.rs',
   shutdown: 'src-tauri/src/feat/window.rs',
@@ -23,37 +22,42 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text))
-    failures.push(`${label}: contains forbidden ${text}`)
+  if (source[key].includes(text)) failures.push(`${label}: contains forbidden ${text}`)
 }
 
 for (const marker of [
+  'windows-hotspot-winrt-lease-v22.json',
+  'version: 3',
   'NetworkInformation::GetConnectionProfiles()',
+  'GetInternetConnectionProfile()',
   'GetTetheringCapabilityFromConnectionProfile',
-  'CreateFromConnectionProfile(&tun_profile)',
+  'CreateFromConnectionProfile',
   'StopTetheringAsync()',
   'StartTetheringAsync()',
   '.join()',
-  'RoInitialize(RO_INIT_MULTITHREADED)',
   'GetIfTable2',
   'NetworkAdapterId()',
+  'TetheringCapability::Enabled',
   'TetheringOperationalState::Off',
   'TetheringOperationalState::InTransition',
   'TetheringOperationStatus::Success',
   'TetheringOperationStatus::AlreadyOn',
-  'mihomo-start-failed',
-  'attempt-immediate-physical-fallback',
-  'physical-fallback-restored',
-  'legacy_hnetcfg_mutation',
-  'two_phase_shutdown_restore',
-  'pub async fn suspend_for_tun_teardown',
-  'pub async fn restore_after_tun_teardown',
-  'keep-hotspot-off-until-tun-is-gone',
-  'stop-then-start-from-best-physical-profile',
-  'tun-identification-ambiguous',
-  'fail-closed-no-hotspot-mutation',
+  'target-identification-ambiguous',
+  'fail-closed-no-tethering-mutation',
+  'original-public-profile-ambiguous',
+  'fail-closed-preserve-current-hotspot',
+  'restore-original-hotspot-immediately',
+  'snapshot_preserved_until_restore_succeeds',
+  'lease-cleared-user-hotspot-off',
+  'user_intent_preserved',
+  'persistent_rollback',
+  'shutdown_restore_gate',
+  'pub async fn restore_now',
+  'explicit-restore-completed',
+  'mihomo-connection-profile=public,wifi=private',
+  'hnetcfg_mutation',
 ]) {
-  requireText('winrt', marker, `WinRT hotspot invariant ${marker}`)
+  requireText('controller', marker, `persistent WinRT hotspot invariant ${marker}`)
 }
 
 for (const forbidden of [
@@ -61,102 +65,86 @@ for (const forbidden of [
   'INetSharingConfiguration',
   'EnableSharing(',
   'NetSharingManager',
+  'ICSSHARINGTYPE_PUBLIC',
+  'ICSSHARINGTYPE_PRIVATE',
   'powershell.exe',
   'pwsh.exe',
   'netsh ',
   'std::process::Command',
 ]) {
   forbidText(
-    'winrt',
+    'controller',
     forbidden,
-    'Karing .22 primary hotspot controller must stay on WinRT and native interface discovery',
+    'Karing .22 hotspot mutation path must use WinRT rather than legacy HNetCfg or shell commands',
   )
 }
 
 requireText(
   'coreMod',
+  'pub mod windows_hotspot_ics;',
+  'persistent WinRT hotspot controller is compiled on Windows',
+)
+forbidText(
+  'coreMod',
   'pub mod windows_hotspot_winrt;',
-  'WinRT hotspot controller is compiled on Windows',
-)
-requireText(
-  'manager',
-  'const ENABLE_LEGACY_HNETCFG_HOTSPOT_MONITOR: bool = false;',
-  'legacy HNetCfg mutation monitor is disabled by default',
-)
-requireText(
-  'manager',
-  'crate::core::windows_hotspot_winrt::ensure_monitor_running();',
-  'WinRT hotspot monitor starts with CoreManager',
+  'duplicate transient WinRT controller must not be compiled',
 )
 requireText(
   'manager',
   'crate::core::windows_hotspot_ics::ensure_monitor_running();',
-  'legacy v20 implementation remains compiled behind the explicit disabled gate',
+  'CoreManager starts exactly the persistent WinRT hotspot controller',
+)
+forbidText(
+  'manager',
+  'windows_hotspot_winrt::ensure_monitor_running()',
+  'CoreManager must not start the removed transient controller',
+)
+forbidText(
+  'manager',
+  'ENABLE_LEGACY_HNETCFG_HOTSPOT_MONITOR',
+  'legacy dual-controller feature gate must be removed',
 )
 requireText(
   'shutdown',
-  'windows_hotspot_winrt::suspend_for_tun_teardown("shutdown")',
-  'shutdown suspends Mihomo-backed hotspot before TUN destruction',
+  'windows_hotspot_ics::restore_now("shutdown")',
+  'shutdown restores the original physical ConnectionProfile before TUN teardown',
 )
 requireText(
   'shutdown',
-  'windows_hotspot_winrt::restore_after_tun_teardown("shutdown")',
-  'shutdown restarts hotspot from a physical profile after TUN destruction',
+  'windows-winrt-hotspot-restore-failed',
+  'WinRT restore failures remain observable',
 )
 requireText(
   'shutdown',
-  'abort-explicit-tun-core-teardown-preserve-working-topology',
-  'failed WinRT suspend aborts destructive teardown',
+  'abort-explicit-tun-core-teardown-preserve-snapshot',
+  'failed restore preserves recovery state and blocks destructive teardown',
 )
-requireText(
+forbidText(
   'shutdown',
-  'leave-hotspot-off-instead-of-binding-to-destroyed-tun',
-  'failed physical restore fails safe instead of rebinding dead TUN',
+  'windows_hotspot_winrt::',
+  'shutdown must not reference the removed transient controller',
 )
+
 for (const feature of [
   '"Foundation"',
   '"Foundation_Collections"',
   '"Networking_Connectivity"',
   '"Networking_NetworkOperators"',
   '"Win32_NetworkManagement_IpHelper"',
-  '"Win32_System_WinRT"',
+  '"Win32_System_Com"',
 ]) {
   requireText('manifest', feature, `windows-rs feature ${feature}`)
 }
 
-for (const legacyMarker of [
-  'windows-hotspot-ics-lease-v20.json',
-  'restore-original-ics-immediately',
-  'fail-closed-preserve-unrelated-private-ics',
-]) {
-  requireText(
-    'legacy',
-    legacyMarker,
-    `legacy HNetCfg rollback reference remains available: ${legacyMarker}`,
-  )
-}
-
 if (failures.length > 0) {
-  console.error('Windows Mobile Hotspot v22 WinRT safety gate failed:')
+  console.error('Windows Mobile Hotspot v22 persistent WinRT safety gate failed:')
   for (const failure of failures) console.error(`- ${failure}`)
   process.exit(1)
 }
 
-console.log(
-  '[通过] Karing .22 主热点控制器使用 NetworkOperatorTetheringManager，而非 HNetCfg EnableSharing',
-)
-console.log(
-  '[通过] Mihomo ConnectionProfile 通过 IP Helper adapter GUID 对齐，不依赖本地化 ProfileName',
-)
-console.log(
-  '[通过] WinRT !Send/!Sync 对象仅在单个阻塞线程内创建、Stop/Start、join 与读回',
-)
-console.log(
-  '[通过] Start 失败会尝试立即恢复物理热点上游，不把热点静默留在关闭状态',
-)
-console.log(
-  '[通过] 退出采用 Stop hotspot → teardown TUN → physical profile Start 的两阶段恢复',
-)
-console.log(
-  '[通过] v20 HNetCfg 代码保留为回滚/诊断参考，但默认 mutation monitor 已关闭',
-)
+console.log('[通过] Karing .22 只有一个持久化 WinRT Mobile Hotspot 控制器')
+console.log('[通过] Mihomo TUN 通过 IP Helper adapter GUID 对齐 WinRT ConnectionProfile')
+console.log('[通过] 热点重绑严格执行 StopTetheringAsync → StartTetheringAsync 并等待真实结果')
+console.log('[通过] 原物理 public profile 在变更前持久化，失败/退出均可恢复且恢复失败会 fail-closed')
+console.log('[通过] 用户主动关闭热点会清理 lease，不会被后台 monitor 强行重新开启')
+console.log('[通过] HNetCfg EnableSharing、PowerShell/netsh 和重复临时 WinRT 控制器均不在主路径')
