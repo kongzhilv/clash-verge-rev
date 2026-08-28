@@ -711,7 +711,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Windows IPv6 Loopback WFP Fix" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · WinRT Hotspot + IPv6 Loopback WFP" \
             --notes-file release-assets/release-notes.md \
             --latest
 
