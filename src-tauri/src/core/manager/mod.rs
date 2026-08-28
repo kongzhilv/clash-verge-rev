@@ -20,6 +20,9 @@ use crate::singleton;
 #[cfg(target_os = "windows")]
 use std::os::windows::io::OwnedHandle;
 
+#[cfg(target_os = "windows")]
+const ENABLE_LEGACY_HNETCFG_HOTSPOT_MONITOR: bool = false;
+
 pub(crate) static CLASH_LOGGER: Lazy<Arc<AsyncLogger>> = Lazy::new(|| Arc::new(AsyncLogger::new()));
 
 #[derive(Debug, serde::Serialize, PartialEq, Eq)]
@@ -146,7 +149,15 @@ impl CoreManager {
         #[cfg(target_os = "windows")]
         crate::core::windows_deep_network_diagnostics::ensure_monitor_running();
         #[cfg(target_os = "windows")]
-        crate::core::windows_hotspot_ics::ensure_monitor_running();
+        {
+            // Karing .22 uses the modern Windows tethering control plane. Keep the
+            // v20 HNetCfg implementation compiled as a diagnostic/rollback reference,
+            // but do not let both controllers mutate the same global hotspot state.
+            if ENABLE_LEGACY_HNETCFG_HOTSPOT_MONITOR {
+                crate::core::windows_hotspot_ics::ensure_monitor_running();
+            }
+            crate::core::windows_hotspot_winrt::ensure_monitor_running();
+        }
         logging!(
             info,
             Type::Core,
