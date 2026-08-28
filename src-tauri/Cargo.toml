@@ -141,6 +141,9 @@ deelevate = { workspace = true }
 runas = "=1.2.0"
 winreg = "0.56.0"
 windows = { version = "0.62.2", features = [
+  "Networking",
+  "Networking_Connectivity",
+  "Networking_NetworkOperators",
   "Win32_Globalization",
   "Win32_Foundation",
   "Win32_NetworkManagement_IpHelper",
