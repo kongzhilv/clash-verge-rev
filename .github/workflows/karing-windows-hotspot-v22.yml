@@ -1,0 +1,62 @@
+name: Karing Windows 热点 v22 门禁
+run-name: Karing Windows WinRT Mobile Hotspot v22 回归
+
+on:
+  pull_request:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - 'src-tauri/src/core/windows_hotspot_tethering.rs'
+      - 'src-tauri/src/core/windows_hotspot_ics.rs'
+      - 'src-tauri/src/core/mod.rs'
+      - 'src-tauri/src/core/manager/mod.rs'
+      - 'src-tauri/src/feat/window.rs'
+      - 'src-tauri/Cargo.toml'
+      - 'scripts/check-windows-hotspot-v22.mjs'
+      - '.github/workflows/karing-windows-hotspot-v22.yml'
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - 'src-tauri/src/core/windows_hotspot_tethering.rs'
+      - 'src-tauri/src/core/windows_hotspot_ics.rs'
+      - 'src-tauri/src/core/mod.rs'
+      - 'src-tauri/src/core/manager/mod.rs'
+      - 'src-tauri/src/feat/window.rs'
+      - 'src-tauri/Cargo.toml'
+      - 'scripts/check-windows-hotspot-v22.mjs'
+      - '.github/workflows/karing-windows-hotspot-v22.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semantics:
+    name: 验证 WinRT ownership / rollback / fail-closed
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+      - name: 运行 Windows Hotspot v22 静态安全门禁
+        run: node scripts/check-windows-hotspot-v22.mjs
+
+  windows-compile:
+    name: Windows x64 编译 WinRT 热点路径
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+      - name: 安装 Rust 1.95
+        uses: dtolnay/rust-toolchain@1.95.0
+      - name: 缓存 Rust 构建
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+      - name: Cargo check Windows library
+        working-directory: src-tauri
+        run: cargo check --lib --locked
