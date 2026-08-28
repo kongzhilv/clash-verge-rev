@@ -32,94 +32,12 @@ jobs:
         run: |
           set -euo pipefail
           python <<'PY'
+          from base64 import b64decode
           from pathlib import Path
-
+          old = b64decode('Zm4gcmVzdG9yZV9zbmFwc2hvdF91bmxvY2tlZChwYXRoOiAmUGF0aCwgc25hcHNob3Q6ICZTYXZlZFRldGhlcmluZ1N0YXRlKSAtPiBSZXN1bHQ8KCk+IHsKICAgIGxldCBfYXBhcnRtZW50ID0gV2luUnRBcGFydG1lbnQ6OmluaXQoKT87CiAgICBsZXQgaXRlbXMgPSBwcm9maWxlcygpPzsKICAgIGxldCBvcmlnaW5hbCA9IGZpbmRfcHJvZmlsZV9ieV9zYXZlZF9ndWlkKCZpdGVtcywgJnNuYXBzaG90Lm9yaWdpbmFsX3B1YmxpY19ndWlkKT8KICAgICAgICAub2tfb3JfZWxzZSh8fCBhbnlob3chKCJvcmlnaW5hbCBob3RzcG90IHB1YmxpYyBDb25uZWN0aW9uUHJvZmlsZSBpcyBubyBsb25nZXIgYXZhaWxhYmxlIikpPzsKCiAgICByZXF1aXJlX2NhcGFiaWxpdHkoJm9yaWdpbmFsKT87CiAgICBsZXQgb3JpZ2luYWxfbWFuYWdlciA9IG1hbmFnZXJfZm9yKCZvcmlnaW5hbCk/OwoKICAgIC8vIFRldGhlcmluZyBzdGF0ZSBpcyBzeXN0ZW0tZ2xvYmFsLiBTdG9wIHRoZSBjdXJyZW50IHNlc3Npb24gZmlyc3QgZXZlbiBpZiB0aGUKICAgIC8vIG9yaWdpbmFsIHNvdXJjZSBwcm9maWxlIGlzIG5vdCB0aGUgcHJvZmlsZSBjdXJyZW50bHkgYmFja2luZyB0aGUgaG90c3BvdC4KICAgIHN0b3BfdGV0aGVyaW5nKCZvcmlnaW5hbF9tYW5hZ2VyLCAicmVzdG9yZS1zdG9wLWN1cnJlbnQiKT87CiAgICBpZiBzbmFwc2hvdC5ob3RzcG90X3dhc19vbiB7CiAgICAgICAgc3RhcnRfdGV0aGVyaW5nKCZvcmlnaW5hbF9tYW5hZ2VyLCAicmVzdG9yZS1vcmlnaW5hbC1wdWJsaWMiKT87CiAgICB9CgogICAgcmVtb3ZlX3NuYXBzaG90KHBhdGgpPzsKICAgIGRpYWdub3N0aWNzOjppbmZvKAogICAgICAgICJ3aW5kb3dzLWhvdHNwb3Qtd2lucnQiLAogICAgICAgICJsZWFzZS1yZXN0b3JlZCIsCiAgICAgICAganNvbiEoewogICAgICAgICAgICAib3JpZ2luYWxfcHVibGljX2d1aWQiOiBzbmFwc2hvdC5vcmlnaW5hbF9wdWJsaWNfZ3VpZCwKICAgICAgICAgICAgIm9yaWdpbmFsX3B1YmxpY19wcm9maWxlIjogc25hcHNob3Qub3JpZ2luYWxfcHVibGljX3Byb2ZpbGUsCiAgICAgICAgICAgICJob3RzcG90X3dhc19vbiI6IHNuYXBzaG90LmhvdHNwb3Rfd2FzX29uLAogICAgICAgICAgICAic25hcHNob3RfcmVtb3ZlZCI6IHRydWUsCiAgICAgICAgICAgICJzdHJhdGVneSI6ICJ3aW5ydC1jcmVhdGUtZnJvbS1jb25uZWN0aW9uLXByb2ZpbGUiLAogICAgICAgIH0pLAogICAgKTsKICAgIE9rKCgpKQp9Cg==').decode()
+          new = b64decode('Zm4gcmVzdG9yZV9zbmFwc2hvdF91bmxvY2tlZChwYXRoOiAmUGF0aCwgc25hcHNob3Q6ICZTYXZlZFRldGhlcmluZ1N0YXRlKSAtPiBSZXN1bHQ8KCk+IHsKICAgIGxldCBfYXBhcnRtZW50ID0gV2luUnRBcGFydG1lbnQ6OmluaXQoKT87CiAgICBsZXQgaXRlbXMgPSBwcm9maWxlcygpPzsKICAgIGxldCBvcmlnaW5hbCA9IGZpbmRfcHJvZmlsZV9ieV9zYXZlZF9ndWlkKCZpdGVtcywgJnNuYXBzaG90Lm9yaWdpbmFsX3B1YmxpY19ndWlkKT8KICAgICAgICAub2tfb3JfZWxzZSh8fCBhbnlob3chKCJvcmlnaW5hbCBob3RzcG90IHB1YmxpYyBDb25uZWN0aW9uUHJvZmlsZSBpcyBubyBsb25nZXIgYXZhaWxhYmxlIikpPzsKCiAgICByZXF1aXJlX2NhcGFiaWxpdHkoJm9yaWdpbmFsKT87CiAgICBsZXQgb3JpZ2luYWxfbWFuYWdlciA9IG1hbmFnZXJfZm9yKCZvcmlnaW5hbCk/OwoKICAgIC8vIEEgbWFuYWdlciBjcmVhdGVkIGZyb20gYSBDb25uZWN0aW9uUHJvZmlsZSBpcyBwcm9maWxlLXNjb3BlZDogdGhlIHByb2ZpbGUgaXMKICAgIC8vIGl0cyBwdWJsaWMgaW50ZXJmYWNlLiBJbiB0aGUgbm9ybWFsIHJlc3RvcmUgcGF0aCwgc3RvcCB0aGUgTWlob21vLWJhY2tlZAogICAgLy8gc2Vzc2lvbiB0aHJvdWdoIHRoZSBzYW1lIHNhdmVkIFRVTiBwcm9maWxlIHRoYXQgY3JlYXRlZCBpdCwgdGhlbiByZXN0YXJ0IHdpdGgKICAgIC8vIHRoZSBzYXZlZCBwaHlzaWNhbCBwdWJsaWMgcHJvZmlsZS4gRG8gbm90IGFzc3VtZSBjcm9zcy1wcm9maWxlIFN0b3Agc2VtYW50aWNzLgogICAgaWYgbGV0IFNvbWUodHVuX3Byb2ZpbGUpID0gZmluZF9wcm9maWxlX2J5X3NhdmVkX2d1aWQoJml0ZW1zLCAmc25hcHNob3QudHVuX2d1aWQpPyB7CiAgICAgICAgbGV0IHR1bl9tYW5hZ2VyID0gbWFuYWdlcl9mb3IoJnR1bl9wcm9maWxlKT87CiAgICAgICAgc3RvcF90ZXRoZXJpbmcoJnR1bl9tYW5hZ2VyLCAicmVzdG9yZS1zdG9wLW1paG9tbyIpPzsKICAgIH0gZWxzZSB7CiAgICAgICAgLy8gQ3Jhc2gvcmVzdGFydCBjYW4gcmVtb3ZlIHRoZSBlcGhlbWVyYWwgVFVOIHByb2ZpbGUgYmVmb3JlIHJlY29uY2lsaWF0aW9uLgogICAgICAgIC8vIFRoZXJlIGlzIG5vIGxvbmdlciBhIHByb2ZpbGUtc2NvcGVkIE1paG9tbyBtYW5hZ2VyIHRvIGFkZHJlc3MuIFVzZSB0aGUKICAgICAgICAvLyBvcmlnaW5hbCBtYW5hZ2VyIG9ubHkgYXMgYSBkb2N1bWVudGVkIHJlY292ZXJ5IGZhbGxiYWNrIGFuZCBrZWVwIHRoZQogICAgICAgIC8vIHNuYXBzaG90IHVudGlsIHRoZSBwaHlzaWNhbCByZXN0YXJ0IGhhcyBiZWVuIHZlcmlmaWVkLgogICAgICAgIGRpYWdub3N0aWNzOjp3YXJuKAogICAgICAgICAgICAid2luZG93cy1ob3RzcG90LXdpbnJ0IiwKICAgICAgICAgICAgInJlc3RvcmUtc3RvcC1mYWxsYmFjay1vcmlnaW5hbC1wcm9maWxlIiwKICAgICAgICAgICAganNvbiEoewogICAgICAgICAgICAgICAgInR1bl9ndWlkIjogc25hcHNob3QudHVuX2d1aWQsCiAgICAgICAgICAgICAgICAib3JpZ2luYWxfcHVibGljX2d1aWQiOiBzbmFwc2hvdC5vcmlnaW5hbF9wdWJsaWNfZ3VpZCwKICAgICAgICAgICAgICAgICJyZWFzb24iOiAic2F2ZWQtdHVuLXByb2ZpbGUtbWlzc2luZyIsCiAgICAgICAgICAgICAgICAibm9ybWFsX3BhdGgiOiBmYWxzZSwKICAgICAgICAgICAgfSksCiAgICAgICAgKTsKICAgICAgICBzdG9wX3RldGhlcmluZygmb3JpZ2luYWxfbWFuYWdlciwgInJlc3RvcmUtc3RvcC1mYWxsYmFjay1vcmlnaW5hbCIpPzsKICAgIH0KCiAgICBpZiBzbmFwc2hvdC5ob3RzcG90X3dhc19vbiB7CiAgICAgICAgc3RhcnRfdGV0aGVyaW5nKCZvcmlnaW5hbF9tYW5hZ2VyLCAicmVzdG9yZS1vcmlnaW5hbC1wdWJsaWMiKT87CiAgICB9CgogICAgcmVtb3ZlX3NuYXBzaG90KHBhdGgpPzsKICAgIGRpYWdub3N0aWNzOjppbmZvKAogICAgICAgICJ3aW5kb3dzLWhvdHNwb3Qtd2lucnQiLAogICAgICAgICJsZWFzZS1yZXN0b3JlZCIsCiAgICAgICAganNvbiEoewogICAgICAgICAgICAib3JpZ2luYWxfcHVibGljX2d1aWQiOiBzbmFwc2hvdC5vcmlnaW5hbF9wdWJsaWNfZ3VpZCwKICAgICAgICAgICAgIm9yaWdpbmFsX3B1YmxpY19wcm9maWxlIjogc25hcHNob3Qub3JpZ2luYWxfcHVibGljX3Byb2ZpbGUsCiAgICAgICAgICAgICJob3RzcG90X3dhc19vbiI6IHNuYXBzaG90LmhvdHNwb3Rfd2FzX29uLAogICAgICAgICAgICAic25hcHNob3RfcmVtb3ZlZCI6IHRydWUsCiAgICAgICAgICAgICJzdHJhdGVneSI6ICJwcm9maWxlLXNjb3BlZC1zdG9wLXRoZW4tb3JpZ2luYWwtcHJvZmlsZS1zdGFydCIsCiAgICAgICAgfSksCiAgICApOwogICAgT2soKCkpCn0K').decode()
           p = Path('src-tauri/src/core/windows_hotspot_ics.rs')
           text = p.read_text(encoding='utf-8')
-          old = '''fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedTetheringState) -> Result<()> {
-    let _apartment = WinRtApartment::init()?;
-    let items = profiles()?;
-    let original = find_profile_by_saved_guid(&items, &snapshot.original_public_guid)?
-        .ok_or_else(|| anyhow!("original hotspot public ConnectionProfile is no longer available"))?;
-
-    require_capability(&original)?;
-    let original_manager = manager_for(&original)?;
-
-    // Tethering state is system-global. Stop the current session first even if the
-    // original source profile is not the profile currently backing the hotspot.
-    stop_tethering(&original_manager, "restore-stop-current")?;
-    if snapshot.hotspot_was_on {
-        start_tethering(&original_manager, "restore-original-public")?;
-    }
-
-    remove_snapshot(path)?;
-    diagnostics::info(
-        "windows-hotspot-winrt",
-        "lease-restored",
-        json!({
-            "original_public_guid": snapshot.original_public_guid,
-            "original_public_profile": snapshot.original_public_profile,
-            "hotspot_was_on": snapshot.hotspot_was_on,
-            "snapshot_removed": true,
-            "strategy": "winrt-create-from-connection-profile",
-        }),
-    );
-    Ok(())
-}
-'''
-          new = '''fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedTetheringState) -> Result<()> {
-    let _apartment = WinRtApartment::init()?;
-    let items = profiles()?;
-    let original = find_profile_by_saved_guid(&items, &snapshot.original_public_guid)?
-        .ok_or_else(|| anyhow!("original hotspot public ConnectionProfile is no longer available"))?;
-
-    require_capability(&original)?;
-    let original_manager = manager_for(&original)?;
-
-    // A manager created from a ConnectionProfile is profile-scoped: the profile is
-    // its public interface. In the normal restore path, stop the Mihomo-backed
-    // session through the same saved TUN profile that created it, then restart with
-    // the saved physical public profile. Do not assume cross-profile Stop semantics.
-    if let Some(tun_profile) = find_profile_by_saved_guid(&items, &snapshot.tun_guid)? {
-        let tun_manager = manager_for(&tun_profile)?;
-        stop_tethering(&tun_manager, "restore-stop-mihomo")?;
-    } else {
-        // Crash/restart can remove the ephemeral TUN profile before reconciliation.
-        // There is no longer a profile-scoped Mihomo manager to address. Use the
-        // original manager only as a documented recovery fallback and keep the
-        // snapshot until the physical restart has been verified.
-        diagnostics::warn(
-            "windows-hotspot-winrt",
-            "restore-stop-fallback-original-profile",
-            json!({
-                "tun_guid": snapshot.tun_guid,
-                "original_public_guid": snapshot.original_public_guid,
-                "reason": "saved-tun-profile-missing",
-                "normal_path": false,
-            }),
-        );
-        stop_tethering(&original_manager, "restore-stop-fallback-original")?;
-    }
-
-    if snapshot.hotspot_was_on {
-        start_tethering(&original_manager, "restore-original-public")?;
-    }
-
-    remove_snapshot(path)?;
-    diagnostics::info(
-        "windows-hotspot-winrt",
-        "lease-restored",
-        json!({
-            "original_public_guid": snapshot.original_public_guid,
-            "original_public_profile": snapshot.original_public_profile,
-            "hotspot_was_on": snapshot.hotspot_was_on,
-            "snapshot_removed": true,
-            "strategy": "profile-scoped-stop-then-original-profile-start",
-        }),
-    );
-    Ok(())
-}
-'''
           count = text.count(old)
           if count != 1:
               raise SystemExit(f'expected one restore function anchor, found {count}')
