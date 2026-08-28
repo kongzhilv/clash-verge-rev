@@ -12,6 +12,7 @@ on:
       - 'src-tauri/src/core/manager/mod.rs'
       - 'src-tauri/src/feat/window.rs'
       - 'src-tauri/Cargo.toml'
+      - 'scripts/check-windows-hotspot-v20.mjs'
       - 'scripts/check-windows-hotspot-v22.mjs'
       - '.github/workflows/karing-windows-hotspot-v22.yml'
   push:
@@ -24,6 +25,7 @@ on:
       - 'src-tauri/src/core/manager/mod.rs'
       - 'src-tauri/src/feat/window.rs'
       - 'src-tauri/Cargo.toml'
+      - 'scripts/check-windows-hotspot-v20.mjs'
       - 'scripts/check-windows-hotspot-v22.mjs'
       - '.github/workflows/karing-windows-hotspot-v22.yml'
   workflow_dispatch:
@@ -42,8 +44,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
-      - name: 运行 Windows Hotspot v22 静态安全门禁
-        run: node scripts/check-windows-hotspot-v22.mjs
+      - name: 运行 Windows Hotspot v20/v22 静态安全门禁
+        run: |
+          node scripts/check-windows-hotspot-v20.mjs
+          node scripts/check-windows-hotspot-v22.mjs
 
   windows-compile:
     name: Windows x64 编译 WinRT 热点路径
@@ -57,6 +61,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+      - name: 准备 cargo check 的 Tauri sidecar 占位
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path 'src-tauri/sidecar' | Out-Null
+          New-Item -ItemType File -Force -Path 'src-tauri/sidecar/verge-mihomo-x86_64-pc-windows-msvc.exe' | Out-Null
       - name: Cargo check Windows library
         working-directory: src-tauri
         run: cargo check --lib --locked
