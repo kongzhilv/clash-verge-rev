@@ -495,21 +495,22 @@ async fn capture_snapshot() -> Result<WindowsTopologySnapshot> {
 }
 
 fn physical_upstream_identity(snapshot: &WindowsTopologySnapshot) -> Option<PhysicalUpstreamIdentity> {
-    snapshot.physical_upstream.as_ref().map(|upstream| PhysicalUpstreamIdentity {
-        interface_index: upstream.interface_index,
-        interface_alias: upstream.interface_alias.clone(),
-        source_address: upstream.source_address.clone(),
-        gateway: upstream.gateway.clone(),
-    })
+    snapshot
+        .physical_upstream
+        .as_ref()
+        .map(|upstream| PhysicalUpstreamIdentity {
+            interface_index: upstream.interface_index,
+            interface_alias: upstream.interface_alias.clone(),
+            source_address: upstream.source_address.clone(),
+            gateway: upstream.gateway.clone(),
+        })
 }
 
 fn hotspot_topology_changed(previous: &WindowsTopologySnapshot, current: &WindowsTopologySnapshot) -> bool {
     previous.hotspot_present != current.hotspot_present || previous.hotspot_subnets != current.hotspot_subnets
 }
 
-async fn confirm_physical_upstream(
-    expected: &PhysicalUpstreamIdentity,
-) -> Result<Option<WindowsTopologySnapshot>> {
+async fn confirm_physical_upstream(expected: &PhysicalUpstreamIdentity) -> Result<Option<WindowsTopologySnapshot>> {
     let mut latest = None;
     for sample in 0..UPSTREAM_CONFIRM_SAMPLES {
         if sample > 0 {
