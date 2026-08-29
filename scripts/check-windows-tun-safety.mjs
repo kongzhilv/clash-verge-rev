@@ -542,7 +542,11 @@ const physicalIdentityBlock = source.windowsTopologyDiagnostics.match(
 if (!physicalIdentityBlock) {
   failures.push('PhysicalUpstreamIdentity block missing')
 } else {
-  for (const metric of ['route_metric', 'interface_metric', 'effective_metric']) {
+  for (const metric of [
+    'route_metric',
+    'interface_metric',
+    'effective_metric',
+  ]) {
     if (physicalIdentityBlock.includes(metric)) {
       failures.push(`PhysicalUpstreamIdentity must ignore transient ${metric}`)
     }
@@ -611,9 +615,15 @@ if (failures.length > 0) {
 
 console.log('Windows TUN/self-capture regression passed.')
 console.log('[通过] Wi-Fi 上游与 Wi-Fi Direct/ICS 热点下游保持角色分离')
-console.log('[通过] Mobile Hotspot 只有 WinRT NetworkOperatorTetheringManager 一个 mutation owner')
-console.log('[通过] 热点 On/Off、Wi-Fi Direct、ICS 子网变化只观测，不触发 Core/TUN refresh')
-console.log('[通过] 物理上游身份忽略 route/interface metric 抖动，并经 3 次稳定确认后才迁移 lease')
+console.log(
+  '[通过] Mobile Hotspot 只有 WinRT NetworkOperatorTetheringManager 一个 mutation owner',
+)
+console.log(
+  '[通过] 热点 On/Off、Wi-Fi Direct、ICS 子网变化只观测，不触发 Core/TUN refresh',
+)
+console.log(
+  '[通过] 物理上游身份忽略 route/interface metric 抖动，并经 3 次稳定确认后才迁移 lease',
+)
 console.log(
   '[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound',
 )

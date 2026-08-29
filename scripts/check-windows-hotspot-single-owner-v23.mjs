@@ -8,7 +8,10 @@ const paths = {
 
 const source = Object.fromEntries(
   await Promise.all(
-    Object.entries(paths).map(async ([key, path]) => [key, await readFile(path, 'utf8')]),
+    Object.entries(paths).map(async ([key, path]) => [
+      key,
+      await readFile(path, 'utf8'),
+    ]),
   ),
 )
 
@@ -17,7 +20,8 @@ const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
 const forbidText = (key, text, label) => {
-  if (source[key].includes(text)) failures.push(`${label}: contains forbidden ${text}`)
+  if (source[key].includes(text))
+    failures.push(`${label}: contains forbidden ${text}`)
 }
 
 for (const marker of [
@@ -29,7 +33,11 @@ for (const marker of [
   'restore_snapshot_unlocked',
   'lease-cleared-user-hotspot-off',
 ]) {
-  requireText('hotspot', marker, `single WinRT hotspot owner invariant ${marker}`)
+  requireText(
+    'hotspot',
+    marker,
+    `single WinRT hotspot owner invariant ${marker}`,
+  )
 }
 
 for (const forbidden of [
@@ -66,10 +74,15 @@ for (const forbidden of [
   'GUARD_CONFIRM_',
   'last_applied_guard',
 ]) {
-  forbidText('network', forbidden, 'hotspot topology must never own core refresh')
+  forbidText(
+    'network',
+    forbidden,
+    'hotspot topology must never own core refresh',
+  )
 }
 
-const forcedRefreshCount = source.network.match(/update_config_forced\(\)\.await/g)?.length ?? 0
+const forcedRefreshCount =
+  source.network.match(/update_config_forced\(\)\.await/g)?.length ?? 0
 if (forcedRefreshCount !== 1) {
   failures.push(
     `network watcher must have exactly one forced refresh call, found ${forcedRefreshCount}`,
@@ -82,7 +95,11 @@ const physicalIdentityBlock = source.network.match(
 if (!physicalIdentityBlock) {
   failures.push('PhysicalUpstreamIdentity block missing')
 } else {
-  for (const metric of ['route_metric', 'interface_metric', 'effective_metric']) {
+  for (const metric of [
+    'route_metric',
+    'interface_metric',
+    'effective_metric',
+  ]) {
     if (physicalIdentityBlock.includes(metric)) {
       failures.push(`PhysicalUpstreamIdentity must ignore transient ${metric}`)
     }
@@ -105,8 +122,18 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('[通过] Mobile Hotspot mutation 只有 windows-hotspot-winrt 一个 owner')
-console.log('[通过] 热点 On/Off、Wi-Fi Direct 与 ICS 子网变化只记录，不触发 Core/TUN refresh')
-console.log('[通过] Core refresh 只保留真实物理上游变化路径，并要求 3 次稳定确认')
-console.log('[通过] 物理上游身份忽略 route/interface metric 抖动，避免热点启动噪声误触发')
-console.log('[通过] v22 WinRT 安全门禁继续保留，v23 只收窄控制权而不回退到 HNetCfg/shell')
+console.log(
+  '[通过] Mobile Hotspot mutation 只有 windows-hotspot-winrt 一个 owner',
+)
+console.log(
+  '[通过] 热点 On/Off、Wi-Fi Direct 与 ICS 子网变化只记录，不触发 Core/TUN refresh',
+)
+console.log(
+  '[通过] Core refresh 只保留真实物理上游变化路径，并要求 3 次稳定确认',
+)
+console.log(
+  '[通过] 物理上游身份忽略 route/interface metric 抖动，避免热点启动噪声误触发',
+)
+console.log(
+  '[通过] v22 WinRT 安全门禁继续保留，v23 只收窄控制权而不回退到 HNetCfg/shell',
+)
