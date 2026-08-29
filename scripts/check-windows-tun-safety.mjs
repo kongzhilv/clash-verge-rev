@@ -116,11 +116,6 @@ requireText(
 )
 requireText(
   'windowsNetwork',
-  'Do not discard them merely because Windows marks SkipAsSource.',
-  'ICS private-side route guards retain valid private addresses',
-)
-requireText(
-  'windowsNetwork',
   'is_filter_component',
   'Wi-Fi Direct filter components are separated from the base adapter',
 )
