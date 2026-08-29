@@ -7,6 +7,7 @@ const files = {
   windowsManagedInterface: 'src-tauri/src/utils/windows_managed_interface.rs',
   windowsTopologyDiagnostics:
     'src-tauri/src/core/windows_network_diagnostics.rs',
+  windowsHotspotOwner: 'src-tauri/src/core/windows_hotspot_ics.rs',
   outboundDiagnostics: 'src-tauri/src/core/outbound_diagnostics.rs',
   coreMod: 'src-tauri/src/core/mod.rs',
   coreManager: 'src-tauri/src/core/manager/mod.rs',
@@ -180,7 +181,7 @@ for (const forbidden of [
   )
 }
 
-// v2.5.4-karing.17: proxy/provider binding remains as defense in depth.
+// Proxy/provider binding remains defense in depth, not a second topology owner.
 requireText(
   'windowsNetwork',
   'ManagedProxyBindingStats',
@@ -227,7 +228,7 @@ requireText(
   'Rust regression keeps the route-guard layer dynamic and LAN/hotspot-safe',
 )
 
-// v2.5.4-karing.18: strict-route compatibility stays Runtime-only and ICS-ready.
+// strict-route compatibility remains Runtime-only and ICS-derived.
 requireText(
   'windowsNetwork',
   'apply_hotspot_strict_route_compat',
@@ -294,8 +295,7 @@ forbidText(
   'production hotspot compatibility must not hardcode the common ICS subnet',
 )
 
-// v2.5.4-karing.19: all Mihomo outbound receives one Runtime-managed physical
-// interface lease, mirroring the mature default-interface/bind-interface model.
+// All Mihomo outbound receives one Runtime-managed physical interface lease.
 requireText(
   'utils',
   'pub mod windows_managed_interface;',
@@ -352,7 +352,37 @@ requireText(
   'managed lease failover behavior is explicit in diagnostics',
 )
 
-// Single topology watcher with an ICS-ready state machine.
+// Mobile Hotspot has one mutation owner: the WinRT tethering manager.
+for (const marker of [
+  'NetworkOperatorTetheringManager',
+  'CreateFromConnectionProfile',
+  'StopTetheringAsync()',
+  'StartTetheringAsync()',
+  'MUTATION_LOCK',
+  'restore_snapshot_unlocked',
+  'lease-cleared-user-hotspot-off',
+]) {
+  requireText(
+    'windowsHotspotOwner',
+    marker,
+    `WinRT single-owner invariant ${marker}`,
+  )
+}
+for (const forbidden of [
+  'INetSharingManager',
+  'EnableSharing(',
+  'powershell.exe',
+  'pwsh.exe',
+  'netsh ',
+]) {
+  forbidText(
+    'windowsHotspotOwner',
+    forbidden,
+    'hotspot mutation owner must remain WinRT-only',
+  )
+}
+
+// One IP Helper watcher observes all topology, but hotspot state is observability-only.
 requireText(
   'coreMod',
   'pub mod windows_network_diagnostics;',
@@ -392,27 +422,29 @@ for (const marker of [
   'hotspot_subnets',
   'physical_upstream',
   'default_routes_changed',
-  'physical_upstream_changed',
+  'physical_upstream_identity_changed',
+  'hotspot-observed-no-core-refresh',
+  'prevent-hotspot-tun-reload-feedback-loop',
+  'refresh-deferred-during-hotspot-transition',
+  'refresh-deferred-upstream-still-settling',
   'refresh-requested',
   'refresh-succeeded',
   'refresh-failed',
-  'refresh-deferred-hotspot-starting',
-  'guard-state-confirmed',
-  'refresh-deferred-topology-still-settling',
-  'runtime_managed_physical_interface_lease',
-  'physical_interface_pin_scope',
-  'mihomo_auto_detect_interface',
+  'hotspot_events_can_trigger_core_refresh',
+  'hotspot_owner',
+  'confirm_physical_upstream',
+  'struct PhysicalUpstreamIdentity',
 ]) {
   requireText(
     'windowsTopologyDiagnostics',
     marker,
-    `runtime topology/state-machine marker ${marker} is present`,
+    `v23 single-owner topology marker ${marker} is present`,
   )
 }
 requireText(
   'windowsTopologyDiagnostics',
-  'const GUARD_CONFIRM_SAMPLES: usize = 3;',
-  'hotspot Ready/Off transitions need multiple confirming snapshots',
+  'const UPSTREAM_CONFIRM_SAMPLES: usize = 3;',
+  'real physical upstream transitions require multiple confirming snapshots',
 )
 requireText(
   'windowsTopologyDiagnostics',
@@ -426,28 +458,13 @@ requireText(
 )
 requireText(
   'windowsTopologyDiagnostics',
-  'hotspot-adapter-up-without-private-subnet',
-  'adapter Up without an ICS subnet is explicitly Starting, not Ready',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'wait-for-ics-private-address-before-any-topology-reload',
-  'half-initialized hotspot state suppresses all topology-driven reloads',
-)
-requireText(
-  'windowsTopologyDiagnostics',
   'manager.update_config_forced().await',
-  'confirmed topology regenerates authoritative Runtime before apply',
+  'physical upstream change can regenerate authoritative Runtime',
 )
 requireText(
   'windowsTopologyDiagnostics',
-  '"physical-upstream-changed"',
-  'managed all-outbound lease follows real physical upstream changes',
-)
-requireText(
-  'windowsTopologyDiagnostics',
-  'physical_interface_pinned": true',
-  'runtime diagnostics report the managed physical pin truthfully',
+  'refresh_runtime_network_state("physical-upstream-changed"',
+  'only the physical upstream path calls the Runtime refresh helper',
 )
 requireText(
   'windowsTopologyDiagnostics',
@@ -461,19 +478,39 @@ requireText(
 )
 requireText(
   'windowsTopologyDiagnostics',
-  'hotspot_guard_waits_for_ics_private_address',
-  'Rust regression covers the Off -> Starting -> Ready boundary',
+  'hotspot_state_change_does_not_change_runtime_upstream_identity',
+  'Rust regression proves hotspot On/Off does not alter the Runtime upstream identity',
 )
 requireText(
   'windowsTopologyDiagnostics',
-  'hotspot_guard_off_state_is_actionable_for_cleanup',
-  'Rust regression covers stable hotspot shutdown cleanup',
+  'route_metric_churn_does_not_change_runtime_upstream_identity',
+  'Rust regression proves route metric churn cannot trigger a Runtime lease move',
+)
+requireText(
+  'windowsTopologyDiagnostics',
+  'real_physical_upstream_change_changes_runtime_identity',
+  'Rust regression preserves real physical failover',
 )
 requireText(
   'windowsTopologyDiagnostics',
   'hotspot_subnets_do_not_short_circuit_on_first_active_adapter',
   'Rust regression retains the hotspot subnet collection fix',
 )
+for (const forbidden of [
+  'hotspot-guard-state-changed',
+  'confirm_guard_signature',
+  'GUARD_CONFIRM_',
+  'last_applied_guard',
+  'guard-state-confirmed',
+  'refresh-deferred-hotspot-starting',
+  'wait-for-ics-private-address-before-any-topology-reload',
+]) {
+  forbidText(
+    'windowsTopologyDiagnostics',
+    forbidden,
+    'hotspot topology must never own Runtime/Core refresh',
+  )
+}
 forbidText(
   'windowsTopologyDiagnostics',
   'interfaces.iter().any(|interface|',
@@ -489,6 +526,28 @@ requireText(
   'tokio::task::spawn_blocking(capture_topology)',
   'Win32 topology snapshots do not block the async executor',
 )
+
+const forcedRefreshCount =
+  source.windowsTopologyDiagnostics.match(/update_config_forced\(\)\.await/g)
+    ?.length ?? 0
+if (forcedRefreshCount !== 1) {
+  failures.push(
+    `topology watcher must contain exactly one forced Runtime refresh call, found ${forcedRefreshCount}`,
+  )
+}
+
+const physicalIdentityBlock = source.windowsTopologyDiagnostics.match(
+  /struct PhysicalUpstreamIdentity \{[\s\S]*?\n\}/,
+)?.[0]
+if (!physicalIdentityBlock) {
+  failures.push('PhysicalUpstreamIdentity block missing')
+} else {
+  for (const metric of ['route_metric', 'interface_metric', 'effective_metric']) {
+    if (physicalIdentityBlock.includes(metric)) {
+      failures.push(`PhysicalUpstreamIdentity must ignore transient ${metric}`)
+    }
+  }
+}
 
 // Existing outbound diagnostics remain available for post-fix evidence.
 requireText(
@@ -552,17 +611,14 @@ if (failures.length > 0) {
 
 console.log('Windows TUN/self-capture regression passed.')
 console.log('[通过] Wi-Fi 上游与 Wi-Fi Direct/ICS 热点下游保持角色分离')
-console.log('[通过] 热点 Adapter Up 但无 ICS 私网地址时不 reload')
-console.log('[通过] Starting 期间任何 topology-driven reload 都被抑制')
-console.log('[通过] Ready/Off 热点状态需多次稳定采样后才刷新 Runtime')
+console.log('[通过] Mobile Hotspot 只有 WinRT NetworkOperatorTetheringManager 一个 mutation owner')
+console.log('[通过] 热点 On/Off、Wi-Fi Direct、ICS 子网变化只观测，不触发 Core/TUN refresh')
+console.log('[通过] 物理上游身份忽略 route/interface metric 抖动，并经 3 次稳定确认后才迁移 lease')
 console.log(
   '[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound',
 )
 console.log(
   '[通过] Mihomo auto-detect-interface 在 managed lease 下关闭，避免双 selector 竞争',
-)
-console.log(
-  '[通过] 物理上游变化由单一 IP Helper watcher 触发 Runtime 重生成与 lease 迁移',
 )
 console.log('[通过] proxy/provider interface-name 继续作为 defense-in-depth')
 console.log(
