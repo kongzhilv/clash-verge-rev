@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 const paths = {
   hotspot: 'src-tauri/src/core/windows_hotspot_ics.rs',
   network: 'src-tauri/src/core/windows_network_diagnostics.rs',
+  runtime: 'src-tauri/src/utils/windows_network.rs',
   workflow: '.github/workflows/karing-windows-hotspot-v23.yml',
 }
 
@@ -66,6 +67,31 @@ for (const marker of [
   'fn real_physical_upstream_change_changes_runtime_identity',
 ]) {
   requireText('network', marker, `v23 topology invariant ${marker}`)
+}
+
+for (const marker of [
+  'managed_physical_route_guards',
+  'managed_upstream_uses_physical_only_runtime_guards',
+  'managed_upstream_preserves_user_strict_route',
+  'route_signature_ignores_metric_churn_and_runtime_guards',
+]) {
+  requireText(
+    'runtime',
+    marker,
+    `hotspot-independent Runtime invariant ${marker}`,
+  )
+}
+for (const forbidden of [
+  'apply_hotspot_strict_route_compat',
+  'hotspot_ready',
+  'managed_route_guards(',
+  'merge_string_sequence(tun, "exclude-interface"',
+]) {
+  forbidText(
+    'runtime',
+    forbidden,
+    'Mihomo Runtime must not depend on Mobile Hotspot state',
+  )
 }
 
 for (const forbidden of [

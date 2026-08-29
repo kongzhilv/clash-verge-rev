@@ -134,28 +134,30 @@ for (const marker of [
 requireText(
   'windowsNetwork',
   'route-exclude-address',
-  'LAN/hotspot CIDRs are excluded from TUN auto-route',
+  'stable physical LAN CIDR remains outside TUN auto-route',
 )
 requireText(
   'windowsNetwork',
-  'exclude-interface',
-  'hotspot-side base interface can be excluded',
+  'managed_physical_route_guards',
+  'Runtime route guards are derived only from the stable physical upstream',
 )
 requireText(
   'windowsNetwork',
-  'include-interface',
-  'explicit include-interface is respected',
+  'route_signature_ignores_metric_churn_and_runtime_guards',
+  'Rust regression keeps route stability independent from hotspot/metric churn',
 )
-requireText(
-  'windowsNetwork',
-  'Value::from("auto-detect-interface"), Value::from(true)',
-  'route guard leaves upstream selection available before the managed lease is applied',
-)
-requireText(
-  'windowsNetwork',
-  'route_exclude_addresses.join(",")',
-  'route stability signature includes dynamic LAN/hotspot exclusions',
-)
+for (const forbidden of [
+  'apply_hotspot_strict_route_compat',
+  'hotspot_ready',
+  'managed_route_guards(',
+  'merge_string_sequence(tun, "exclude-interface"',
+]) {
+  forbidText(
+    'windowsNetwork',
+    forbidden,
+    'Mihomo Runtime must not derive lifecycle behavior from Mobile Hotspot state',
+  )
+}
 forbidText(
   'windowsNetwork',
   'config.insert(\n        Value::from("interface-name")',
@@ -219,61 +221,41 @@ requireText(
 )
 requireText(
   'windowsNetwork',
-  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',
-  'Rust regression keeps the route-guard layer dynamic and LAN/hotspot-safe',
+  'managed_upstream_uses_physical_only_runtime_guards',
+  'Rust regression keeps Runtime guards physical-upstream-only',
 )
 
-// strict-route compatibility remains Runtime-only and ICS-derived.
+// User TUN semantics are preserved; hotspot state never rewrites strict-route.
 requireText(
   'windowsNetwork',
-  'apply_hotspot_strict_route_compat',
-  'Windows hotspot strict-route compatibility lease is implemented',
-)
-requireText(
-  'windowsNetwork',
-  'Windows Mobile Hotspot/ICS plus strict-route has an upstream self-capture',
-  'compatibility lease documents the upstream failure class it mitigates',
-)
-requireText(
-  'windowsNetwork',
-  'tun.insert(key, Value::from(false));',
-  'hotspot Runtime can relax strict-route without changing saved config',
-)
-requireText(
-  'windowsNetwork',
-  'if !route.hotspot_ready',
-  'strict-route relaxation waits for a real ICS private subnet',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_ready = true;',
-  'native route guard records the ICS-ready boundary from a real private CIDR',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_runtime_relaxes_strict_route_only_while_hotspot_is_managed',
-  'Rust regression covers hotspot-only strict-route relaxation and restoration boundary',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_runtime_preserves_an_existing_strict_route_false',
-  'Rust regression preserves an already-disabled strict-route setting',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_adapter_without_private_address_is_not_ready',
-  'Rust regression prevents strict-route compatibility during hotspot Starting state',
-)
-requireText(
-  'windowsNetwork',
-  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
-  'Rust regression retains ICS SkipAsSource coverage',
+  'managed_upstream_preserves_user_strict_route',
+  'Rust regression preserves the user strict-route value',
 )
 requireText(
   'windowsNetwork',
   'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
-  'Rust regression rejects derived Wi-Fi Direct filter interfaces',
+  'Wi-Fi Direct filter components are still rejected as physical upstreams',
 )
+for (const forbidden of [
+  'apply_hotspot_strict_route_compat',
+  'hotspot_ready',
+  'hotspot_runtime_relaxes_strict_route_only_while_hotspot_is_managed',
+  'hotspot_runtime_preserves_an_existing_strict_route_false',
+  'hotspot_adapter_without_private_address_is_not_ready',
+  'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
+]) {
+  forbidText(
+    'windowsNetwork',
+    forbidden,
+    'legacy hotspot-dependent Runtime lease must be removed',
+  )
+}
+requireText(
+  'manager',
+  '"hotspot_runtime_dependency": false',
+  'Runtime diagnostics explicitly report hotspot independence',
+)
+
 forbidText(
   'windowsNetwork',
   '211.20.18.215',
