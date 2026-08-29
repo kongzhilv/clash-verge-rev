@@ -1,4 +1,4 @@
-name: Karing .22 发行核验
+name: Karing .23 发行核验
 
 on:
   push:
@@ -19,15 +19,16 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.22 正式发行
+    name: 核验 v2.5.4-karing.23 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       WFP_WORKFLOW: karing-windows-wfp-v21.yml
+      HOTSPOT_V23_WORKFLOW: karing-windows-hotspot-v23.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '15'
-      STATUS_MARKER: '<!-- karing-v254-karing22-release-audit -->'
+      PR_NUMBER: '16'
+      STATUS_MARKER: '<!-- karing-v254-karing23-release-audit -->'
     steps:
       - name: 检出发行分支
         uses: actions/checkout@v7
@@ -41,7 +42,7 @@ jobs:
 
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.22'
+          test "$release_tag" = 'v2.5.4-karing.23'
 
           post_failure() {
             local reason="$1"
@@ -92,10 +93,13 @@ jobs:
 
           main_run_id=$(wait_for_run "$MAIN_WORKFLOW")
           wfp_run_id=$(wait_for_run "$WFP_WORKFLOW")
+          hotspot_v23_run_id=$(wait_for_run "$HOTSPOT_V23_WORKFLOW")
           test -n "$main_run_id"
           test -n "$wfp_run_id"
+          test -n "$hotspot_v23_run_id"
           wait_for_success "$main_run_id"
           wait_for_success "$wfp_run_id"
+          wait_for_success "$hotspot_v23_run_id"
 
           jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/jobs?per_page=100")
           failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
@@ -124,6 +128,18 @@ jobs:
             'Build patched Mihomo x86_64-pc-windows-msvc' \
             'Build patched Mihomo aarch64-pc-windows-msvc'; do
             count=$(jq --arg name "$required_wfp_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$wfp_jobs_json")
+            test "$count" -eq 1
+          done
+
+          hotspot_jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_v23_run_id}/jobs?per_page=100")
+          hotspot_failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$hotspot_jobs_json")
+          test -z "$hotspot_failed_jobs"
+          for required_hotspot_job in \
+            'Validate hotspot single-owner invariants' \
+            'Compile v23 network path x86_64-pc-windows-msvc' \
+            'Compile v23 network path aarch64-pc-windows-msvc' \
+            'Run v22 owner + v23 topology regressions'; do
+            count=$(jq --arg name "$required_hotspot_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs_json")
             test "$count" -eq 1
           done
 
@@ -187,8 +203,10 @@ jobs:
           ### ✅ ${release_tag} 正式发行核验通过
           - main run: \`${main_run_id}\` / success
           - WFP v21 run: \`${wfp_run_id}\` / success
+          - Hotspot v23 run: \`${hotspot_v23_run_id}\` / success
           - source/tag target: \`${source_sha}\`
           - WFP policy: \`${policy}\`；loopback=\`${loopback}\`；non-loopback IPv6=\`${non_loopback}\`
+          - Hotspot control plane: **WinRT single-owner / hotspot topology observability-only**
           - public assets: **${asset_count}**（12 个安装文件 + SHA256SUMS + BUILD_INFO）
           - Latest: \`${latest_tag}\`
           - draft: \`${draft}\`；prerelease: \`${prerelease}\`
