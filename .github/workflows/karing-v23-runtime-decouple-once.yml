@@ -1,0 +1,458 @@
+name: Karing v23 one-shot Runtime decoupling finalizer
+
+on:
+  push:
+    branches:
+      - fix/karing-windows-hotspot-v23-single-owner
+    paths:
+      - '.github/workflows/karing-v23-runtime-decouple-once.yml'
+
+permissions:
+  contents: write
+
+env:
+  HUSKY: 0
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/karing-windows-hotspot-v23-single-owner
+          fetch-depth: 1
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Decouple Mihomo Runtime from hotspot topology
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          network = Path('src-tauri/src/utils/windows_network.rs')
+          s = network.read_text()
+
+          s = s.replace(
+              '    pub excluded_interfaces: Vec<String>,\n    pub route_exclude_addresses: Vec<String>,\n    pub hotspot_ready: bool,\n',
+              '    pub route_exclude_addresses: Vec<String>,\n',
+          )
+
+          old_signature = '''impl WindowsUpstreamRoute {
+              fn signature(&self) -> String {
+                  format!(
+                      "{}|{}|{}|{}|{}|{}",
+                      self.interface_index,
+                      self.source_address,
+                      self.gateway,
+                      self.excluded_interfaces.join(","),
+                      self.route_exclude_addresses.join(","),
+                      self.hotspot_ready
+                  )
+              }
+          }
+          '''
+          new_signature = '''impl WindowsUpstreamRoute {
+              fn signature(&self) -> String {
+                  format!(
+                      "{}|{}|{}|{}",
+                      self.interface_index, self.interface_alias, self.source_address, self.gateway
+                  )
+              }
+          }
+          '''
+          if old_signature not in s:
+              raise SystemExit('WindowsUpstreamRoute signature anchor missing')
+          s = s.replace(old_signature, new_signature)
+
+          pattern = re.compile(r'fn managed_route_guards\([\s\S]*?\n\}\n\nfn query_upstream_route\(\)')
+          replacement = '''fn managed_physical_route_guards(upstream_address: &WindowsIpv4Address) -> Vec<String> {
+              let mut excluded_cidrs = BTreeSet::new();
+              if let Some(cidr) = ipv4_cidr(upstream_address.address, upstream_address.prefix_length)
+                  && upstream_address.prefix_length >= 8
+              {
+                  excluded_cidrs.insert(cidr);
+              }
+              excluded_cidrs.into_iter().collect()
+          }
+
+          fn query_upstream_route()'''
+          s, count = pattern.subn(replacement, s, count=1)
+          if count != 1:
+              raise SystemExit(f'managed_route_guards replacement count={count}')
+
+          old_query = '''        let effective_metric = route.Metric.saturating_add(interface_metric);
+                  let (excluded_interfaces, route_exclude_addresses, hotspot_ready) =
+                      managed_route_guards(&interfaces, &addresses, source);
+
+                  candidates.push(WindowsUpstreamRoute {
+                      interface_index: route.InterfaceIndex,
+                      interface_alias: interface.alias.clone(),
+                      interface_description: interface.description.clone(),
+                      source_address: source.address.to_string(),
+                      gateway: gateway.to_string(),
+                      route_metric: route.Metric,
+                      interface_metric,
+                      effective_metric,
+                      excluded_interfaces,
+                      route_exclude_addresses,
+                      hotspot_ready,
+                  });
+          '''
+          new_query = '''        let effective_metric = route.Metric.saturating_add(interface_metric);
+                  let route_exclude_addresses = managed_physical_route_guards(source);
+
+                  candidates.push(WindowsUpstreamRoute {
+                      interface_index: route.InterfaceIndex,
+                      interface_alias: interface.alias.clone(),
+                      interface_description: interface.description.clone(),
+                      source_address: source.address.to_string(),
+                      gateway: gateway.to_string(),
+                      route_metric: route.Metric,
+                      interface_metric,
+                      effective_metric,
+                      route_exclude_addresses,
+                  });
+          '''
+          if old_query not in s:
+              raise SystemExit('query_upstream_route anchor missing')
+          s = s.replace(old_query, new_query)
+          s = s.replace(
+              'Windows default route/hotspot topology did not stay stable long enough',
+              'Windows physical default route did not stay stable long enough',
+          )
+
+          s, count = re.subn(
+              r'fn has_configured_values\([\s\S]*?\n\}\n\n(?=fn merge_string_sequence)',
+              '',
+              s,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'has_configured_values removal count={count}')
+
+          s, count = re.subn(
+              r'fn apply_hotspot_strict_route_compat\([\s\S]*?\n\}\n\n(?=pub fn apply_managed_upstream)',
+              '',
+              s,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'apply_hotspot_strict_route_compat removal count={count}')
+
+          pattern = re.compile(r'pub fn apply_managed_upstream\([\s\S]*?\n\}\n\n#\[cfg\(test\)\]')
+          replacement = '''pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute) -> ManagedProxyBindingStats {
+              if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
+                  // Runtime routing is intentionally independent from Mobile Hotspot state.
+                  // Only the stable physical LAN guard is merged here. Hotspot lifecycle,
+                  // Wi-Fi Direct churn and ICS private subnets belong exclusively to WinRT.
+                  merge_string_sequence(tun, "route-exclude-address", &route.route_exclude_addresses);
+              }
+
+              // Bind Mihomo-owned proxy/provider sockets to the stable physical NIC. The
+              // top-level all-outbound lease is applied separately by windows_managed_interface.
+              apply_managed_proxy_bindings(config, route.interface_alias.as_str())
+          }
+
+          #[cfg(test)]'''
+          s, count = pattern.subn(replacement, s, count=1)
+          if count != 1:
+              raise SystemExit(f'apply_managed_upstream replacement count={count}')
+
+          s = s.replace(
+              '        ManagedProxyBindingStats, WindowsInterface, WindowsIpv4Address, WindowsUpstreamRoute, apply_managed_upstream,\n        ipv4_cidr, is_hotspot_side, managed_route_guards, tun_needs_managed_upstream,\n',
+              '        ManagedProxyBindingStats, WindowsInterface, WindowsIpv4Address, WindowsUpstreamRoute, apply_managed_upstream,\n        ipv4_cidr, is_hotspot_side, managed_physical_route_guards, tun_needs_managed_upstream,\n',
+          )
+          s = s.replace('    use std::{collections::BTreeMap, net::Ipv4Addr};\n', '    use std::net::Ipv4Addr;\n')
+          s = s.replace(
+              '            excluded_interfaces: vec!["Local Area Connection* 12".into()],\n            route_exclude_addresses: vec!["192.168.1.0/24".into(), "172.22.44.0/24".into()],\n            hotspot_ready: true,\n',
+              '            route_exclude_addresses: vec!["192.168.1.0/24".into()],\n',
+          )
+
+          s, count = re.subn(
+              r'    #\[test\]\n    fn managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes\(\) \{[\s\S]*?\n    \}\n\n',
+              '''    #[test]
+              fn managed_upstream_uses_physical_only_runtime_guards() {
+                  let mut config = mapping("{tun: {enable: true, auto-route: true, auto-detect-interface: true}}");
+                  apply_managed_upstream(&mut config, &route());
+
+                  assert!(config.get("interface-name").is_none());
+                  let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
+                  assert_eq!(tun.get("auto-detect-interface").and_then(Value::as_bool), Some(true));
+                  assert!(tun.get("exclude-interface").is_none());
+                  let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
+                  assert!(routes.iter().any(|value| value.as_str() == Some("192.168.1.0/24")));
+                  assert!(!routes.iter().any(|value| value.as_str() == Some("172.22.44.0/24")));
+              }
+
+              ''',
+              s,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'managed_upstream test replacement count={count}')
+
+          s, count = re.subn(
+              r'    #\[test\]\n    fn hotspot_runtime_relaxes_strict_route_only_while_hotspot_is_managed\(\) \{[\s\S]*?\n    \}\n\n    #\[test\]\n    fn hotspot_runtime_preserves_an_existing_strict_route_false\(\) \{[\s\S]*?\n    \}\n\n',
+              '''    #[test]
+              fn managed_upstream_preserves_user_strict_route() {
+                  let mut enabled = mapping("{tun: {enable: true, auto-route: true, strict-route: true}}");
+                  apply_managed_upstream(&mut enabled, &route());
+                  let enabled_tun = enabled.get("tun").and_then(Value::as_mapping).unwrap();
+                  assert_eq!(enabled_tun.get("strict-route").and_then(Value::as_bool), Some(true));
+
+                  let mut disabled = mapping("{tun: {enable: true, auto-route: true, strict-route: false}}");
+                  apply_managed_upstream(&mut disabled, &route());
+                  let disabled_tun = disabled.get("tun").and_then(Value::as_mapping).unwrap();
+                  assert_eq!(disabled_tun.get("strict-route").and_then(Value::as_bool), Some(false));
+              }
+
+              ''',
+              s,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'strict-route tests replacement count={count}')
+
+          s, count = re.subn(
+              r'    #\[test\]\n    fn explicit_include_interface_is_preserved_without_conflicting_exclude_interface\(\) \{[\s\S]*?\n    \}\n\n',
+              '''    #[test]
+              fn existing_route_excludes_are_preserved_without_hotspot_interface_mutation() {
+                  let mut config = mapping(
+                      "{tun: {enable: true, auto-route: true, include-interface: [Ethernet], route-exclude-address: [10.0.0.0/8]}}",
+                  );
+                  apply_managed_upstream(&mut config, &route());
+
+                  let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
+                  assert!(tun.get("exclude-interface").is_none());
+                  let routes = tun.get("route-exclude-address").and_then(Value::as_sequence).unwrap();
+                  assert!(routes.iter().any(|value| value.as_str() == Some("10.0.0.0/8")));
+                  assert!(routes.iter().any(|value| value.as_str() == Some("192.168.1.0/24")));
+              }
+
+              ''',
+              s,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'include-interface test replacement count={count}')
+
+          s, count = re.subn(
+              r'    #\[test\]\n    fn hotspot_route_guards_keep_preferred_skip_as_source_addresses\(\) \{[\s\S]*?\n    \}\n\n    #\[test\]\n    fn hotspot_adapter_without_private_address_is_not_ready\(\) \{[\s\S]*?\n    \}\n\n',
+              '''    #[test]
+              fn physical_route_guards_only_track_physical_lan() {
+                  let upstream = WindowsIpv4Address {
+                      interface_index: 28,
+                      address: Ipv4Addr::new(192, 168, 1, 13),
+                      prefix_length: 24,
+                      skip_as_source: false,
+                  };
+                  assert_eq!(managed_physical_route_guards(&upstream), vec!["192.168.1.0/24"]);
+              }
+
+              #[test]
+              fn route_signature_ignores_metric_churn_and_runtime_guards() {
+                  let before = route();
+                  let mut after = before.clone();
+                  after.route_metric = 50;
+                  after.interface_metric = 75;
+                  after.effective_metric = 125;
+                  after.route_exclude_addresses = vec!["10.0.0.0/8".into()];
+                  assert_eq!(before.signature(), after.signature());
+              }
+
+              ''',
+              s,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit(f'hotspot route tests replacement count={count}')
+
+          for forbidden in ['hotspot_ready', 'apply_hotspot_strict_route_compat', 'managed_route_guards(']:
+              if forbidden in s:
+                  raise SystemExit(f'forbidden runtime hotspot dependency remains: {forbidden}')
+          network.write_text(s)
+
+          manager = Path('src-tauri/src/core/manager/config.rs')
+          s = manager.read_text()
+          for line in [
+              '                "hotspot_ready": route.hotspot_ready,\n',
+              '                "excluded_interfaces": &route.excluded_interfaces,\n',
+              '                "hotspot_interfaces": &route.excluded_interfaces,\n',
+          ]:
+              s = s.replace(line, '')
+          s = s.replace(
+              '                "route_exclude_addresses": &route.route_exclude_addresses,\n                "tun_auto_detect_interface": lease.auto_detect_interface,\n',
+              '                "route_exclude_addresses": &route.route_exclude_addresses,\n                "hotspot_runtime_dependency": false,\n                "hotspot_owner": "windows-hotspot-winrt",\n                "tun_auto_detect_interface": lease.auto_detect_interface,\n',
+          )
+          s = s.replace(
+              '                "observed_gateway": route.gateway.as_str(),\n                "hotspot_ready": route.hotspot_ready,\n                "auto_detect_interface": lease.auto_detect_interface,\n',
+              '                "observed_gateway": route.gateway.as_str(),\n                "hotspot_runtime_dependency": false,\n                "hotspot_owner": "windows-hotspot-winrt",\n                "auto_detect_interface": lease.auto_detect_interface,\n',
+          )
+          if 'route.hotspot_ready' in s or 'route.excluded_interfaces' in s:
+              raise SystemExit('manager still depends on hotspot-derived route fields')
+          manager.write_text(s)
+
+          gate = Path('scripts/check-windows-hotspot-single-owner-v23.mjs')
+          s = gate.read_text()
+          s = s.replace(
+              "  network: 'src-tauri/src/core/windows_network_diagnostics.rs',\n",
+              "  network: 'src-tauri/src/core/windows_network_diagnostics.rs',\n  runtime: 'src-tauri/src/utils/windows_network.rs',\n",
+          )
+          anchor = "for (const forbidden of [\n  'hotspot-guard-state-changed',"
+          insert = '''for (const marker of [
+            'managed_physical_route_guards',
+            'managed_upstream_uses_physical_only_runtime_guards',
+            'managed_upstream_preserves_user_strict_route',
+            'route_signature_ignores_metric_churn_and_runtime_guards',
+          ]) {
+            requireText('runtime', marker, `hotspot-independent Runtime invariant ${marker}`)
+          }
+          for (const forbidden of [
+            'apply_hotspot_strict_route_compat',
+            'hotspot_ready',
+            'managed_route_guards(',
+            'merge_string_sequence(tun, "exclude-interface"',
+          ]) {
+            forbidText('runtime', forbidden, 'Mihomo Runtime must not depend on Mobile Hotspot state')
+          }
+
+          '''
+          if anchor not in s:
+              raise SystemExit('v23 gate insertion anchor missing')
+          s = s.replace(anchor, insert + anchor)
+          gate.write_text(s)
+
+          safety = Path('scripts/check-windows-tun-safety.mjs')
+          s = safety.read_text()
+          start = s.index("requireText(\n  'windowsNetwork',\n  'route-exclude-address',")
+          end = s.index('// Proxy/provider binding remains defense in depth', start)
+          replacement = '''requireText(
+            'windowsNetwork',
+            'route-exclude-address',
+            'stable physical LAN CIDR remains outside TUN auto-route',
+          )
+          requireText(
+            'windowsNetwork',
+            'managed_physical_route_guards',
+            'Runtime route guards are derived only from the stable physical upstream',
+          )
+          requireText(
+            'windowsNetwork',
+            'route_signature_ignores_metric_churn_and_runtime_guards',
+            'Rust regression keeps route stability independent from hotspot/metric churn',
+          )
+          for (const forbidden of [
+            'apply_hotspot_strict_route_compat',
+            'hotspot_ready',
+            'managed_route_guards(',
+            'merge_string_sequence(tun, "exclude-interface"',
+          ]) {
+            forbidText(
+              'windowsNetwork',
+              forbidden,
+              'Mihomo Runtime must not derive lifecycle behavior from Mobile Hotspot state',
+            )
+          }
+          forbidText(
+            'windowsNetwork',
+            'config.insert(\\n        Value::from("interface-name")',
+            'route guard module itself must not own the top-level outbound lease',
+          )
+          for (const forbidden of [
+            'powershell.exe',
+            'POWERSHELL_ROUTE_QUERY',
+            'ExecutionPolicy',
+            'Get-NetRoute',
+            'Get-NetAdapter',
+            'std::process::Command',
+          ]) {
+            forbidText(
+              'windowsNetwork',
+              forbidden,
+              'Windows TUN safety does not depend on shell commands',
+            )
+          }
+
+          '''
+          s = s[:start] + replacement + s[end:]
+          s = s.replace(
+              "  'managed_upstream_keeps_dynamic_interface_and_protects_lan_and_hotspot_routes',\n  'Rust regression keeps the route-guard layer dynamic and LAN/hotspot-safe',",
+              "  'managed_upstream_uses_physical_only_runtime_guards',\n  'Rust regression keeps Runtime guards physical-upstream-only',",
+          )
+          start = s.index('// strict-route compatibility remains Runtime-only and ICS-derived.')
+          end = s.index("forbidText(\n  'windowsNetwork',\n  '211.20.18.215',", start)
+          replacement = '''// User TUN semantics are preserved; hotspot state never rewrites strict-route.
+          requireText(
+            'windowsNetwork',
+            'managed_upstream_preserves_user_strict_route',
+            'Rust regression preserves the user strict-route value',
+          )
+          requireText(
+            'windowsNetwork',
+            'wifi_direct_filter_components_are_not_managed_as_hotspot_interfaces',
+            'Wi-Fi Direct filter components are still rejected as physical upstreams',
+          )
+          for (const forbidden of [
+            'apply_hotspot_strict_route_compat',
+            'hotspot_ready',
+            'hotspot_runtime_relaxes_strict_route_only_while_hotspot_is_managed',
+            'hotspot_runtime_preserves_an_existing_strict_route_false',
+            'hotspot_adapter_without_private_address_is_not_ready',
+            'hotspot_route_guards_keep_preferred_skip_as_source_addresses',
+          ]) {
+            forbidText(
+              'windowsNetwork',
+              forbidden,
+              'legacy hotspot-dependent Runtime lease must be removed',
+            )
+          }
+          requireText(
+            'manager',
+            '"hotspot_runtime_dependency": false',
+            'Runtime diagnostics explicitly report hotspot independence',
+          )
+
+          '''
+          s = s[:start] + replacement + s[end:]
+          safety.write_text(s)
+          PY
+
+      - name: Format changed source and gates
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all
+          pnpm exec biome format --write \
+            scripts/check-windows-hotspot-single-owner-v23.mjs \
+            scripts/check-windows-tun-safety.mjs
+          pnpm exec biome format \
+            scripts/check-windows-hotspot-single-owner-v23.mjs \
+            scripts/check-windows-tun-safety.mjs
+      - name: Run permanent static gates
+        run: |
+          node scripts/check-windows-hotspot-v22.mjs
+          node scripts/check-windows-hotspot-single-owner-v23.mjs
+          node scripts/check-windows-tun-safety.mjs
+          git diff --check
+      - name: Commit Runtime decoupling
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src-tauri/src/utils/windows_network.rs \
+            src-tauri/src/core/manager/config.rs \
+            scripts/check-windows-hotspot-single-owner-v23.mjs \
+            scripts/check-windows-tun-safety.mjs
+          git diff --cached --quiet && { echo 'No changes'; exit 1; }
+          git commit -m 'fix(windows): make TUN Runtime independent from hotspot state'
+          git push origin HEAD:fix/karing-windows-hotspot-v23-single-owner
