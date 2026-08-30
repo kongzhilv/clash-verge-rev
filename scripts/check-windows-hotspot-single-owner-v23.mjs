@@ -36,7 +36,11 @@ for (const marker of [
   'restore_snapshot_unlocked',
   'lease-cleared-user-hotspot-off',
 ]) {
-  requireText('hotspot', marker, `single WinRT hotspot owner invariant ${marker}`)
+  requireText(
+    'hotspot',
+    marker,
+    `single WinRT hotspot owner invariant ${marker}`,
+  )
 }
 
 for (const forbidden of [
@@ -73,7 +77,11 @@ for (const marker of [
   'managed_upstream_preserves_user_strict_route',
   'route_signature_ignores_metric_churn_and_runtime_guards',
 ]) {
-  requireText('runtime', marker, `hotspot-independent Runtime invariant ${marker}`)
+  requireText(
+    'runtime',
+    marker,
+    `hotspot-independent Runtime invariant ${marker}`,
+  )
 }
 for (const forbidden of [
   'apply_hotspot_strict_route_compat',
@@ -81,7 +89,11 @@ for (const forbidden of [
   'managed_route_guards(',
   'merge_string_sequence(tun, "exclude-interface"',
 ]) {
-  forbidText('runtime', forbidden, 'Mihomo Runtime must not depend on Mobile Hotspot state')
+  forbidText(
+    'runtime',
+    forbidden,
+    'Mihomo Runtime must not depend on Mobile Hotspot state',
+  )
 }
 
 for (const forbidden of [
@@ -90,19 +102,32 @@ for (const forbidden of [
   'GUARD_CONFIRM_',
   'last_applied_guard',
 ]) {
-  forbidText('network', forbidden, 'hotspot topology must never own core refresh')
+  forbidText(
+    'network',
+    forbidden,
+    'hotspot topology must never own core refresh',
+  )
 }
 
-const forcedRefreshCount = source.network.match(/update_config_forced\(\)\.await/g)?.length ?? 0
+const forcedRefreshCount =
+  source.network.match(/update_config_forced\(\)\.await/g)?.length ?? 0
 if (forcedRefreshCount !== 1) {
-  failures.push(`network watcher must have exactly one forced refresh call, found ${forcedRefreshCount}`)
+  failures.push(
+    `network watcher must have exactly one forced refresh call, found ${forcedRefreshCount}`,
+  )
 }
 
-const physicalIdentityBlock = source.network.match(/struct PhysicalUpstreamIdentity \{[\s\S]*?\n\}/)?.[0]
+const physicalIdentityBlock = source.network.match(
+  /struct PhysicalUpstreamIdentity \{[\s\S]*?\n\}/,
+)?.[0]
 if (!physicalIdentityBlock) {
   failures.push('PhysicalUpstreamIdentity block missing')
 } else {
-  for (const metric of ['route_metric', 'interface_metric', 'effective_metric']) {
+  for (const metric of [
+    'route_metric',
+    'interface_metric',
+    'effective_metric',
+  ]) {
     if (physicalIdentityBlock.includes(metric)) {
       failures.push(`PhysicalUpstreamIdentity must ignore transient ${metric}`)
     }
@@ -121,25 +146,39 @@ for (const marker of [
 
 const releaseTagPath = '.release/karing-release-tag.txt'
 const releasePushBlock = (key) =>
-  source[key].match(/\n  push:\n[\s\S]*?(?=\n  workflow_dispatch:|\npermissions:)/)?.[0]
+  source[key].match(
+    /\n  push:\n[\s\S]*?(?=\n  workflow_dispatch:|\npermissions:)/,
+  )?.[0]
 
 for (const key of ['workflow', 'wfpWorkflow', 'observerWorkflow']) {
   const pushBlock = releasePushBlock(key)
   if (!pushBlock) {
     failures.push(`${key} release-branch push trigger block missing`)
   } else if (!pushBlock.includes(releaseTagPath)) {
-    failures.push(`${key} release-branch push trigger must include ${releaseTagPath}`)
+    failures.push(
+      `${key} release-branch push trigger must include ${releaseTagPath}`,
+    )
   }
 }
 
 for (const marker of [
-  ".github/workflows/karing-release-observer.yml",
-  "scripts/check-windows-hotspot-single-owner-v23.mjs",
+  '.github/workflows/karing-release-observer.yml',
+  'scripts/check-windows-hotspot-single-owner-v23.mjs',
 ]) {
   const wfpPushBlock = releasePushBlock('wfpWorkflow')
   if (!wfpPushBlock?.includes(marker)) {
     failures.push(`WFP release synchronization trigger missing ${marker}`)
   }
+}
+const observerPushBlock = releasePushBlock('observerWorkflow')
+if (
+  !observerPushBlock?.includes(
+    'scripts/check-windows-hotspot-single-owner-v23.mjs',
+  )
+) {
+  failures.push(
+    'observer release synchronization trigger missing scripts/check-windows-hotspot-single-owner-v23.mjs',
+  )
 }
 requireText(
   'observerWorkflow',
@@ -153,10 +192,24 @@ if (failures.length > 0) {
   process.exit(1)
 }
 
-console.log('[通过] Mobile Hotspot mutation 只有 windows-hotspot-winrt 一个 owner')
-console.log('[通过] 热点 On/Off、Wi-Fi Direct 与 ICS 子网变化只记录，不触发 Core/TUN refresh')
-console.log('[通过] Core refresh 只保留真实物理上游变化路径，并要求 3 次稳定确认')
-console.log('[通过] 物理上游身份忽略 route/interface metric 抖动，避免热点启动噪声误触发')
-console.log('[通过] v22 WinRT 安全门禁继续保留，v23 只收窄控制权而不回退到 HNetCfg/shell')
-console.log('[通过] 主发行、WFP、v23 与 observer 通过 release tag 变更共享同一发行 SHA 触发契约')
-console.log('[通过] 新发行源会取消旧 observer 审计，WFP 同步跟随 release-contract 变更')
+console.log(
+  '[通过] Mobile Hotspot mutation 只有 windows-hotspot-winrt 一个 owner',
+)
+console.log(
+  '[通过] 热点 On/Off、Wi-Fi Direct 与 ICS 子网变化只记录，不触发 Core/TUN refresh',
+)
+console.log(
+  '[通过] Core refresh 只保留真实物理上游变化路径，并要求 3 次稳定确认',
+)
+console.log(
+  '[通过] 物理上游身份忽略 route/interface metric 抖动，避免热点启动噪声误触发',
+)
+console.log(
+  '[通过] v22 WinRT 安全门禁继续保留，v23 只收窄控制权而不回退到 HNetCfg/shell',
+)
+console.log(
+  '[通过] 主发行、WFP、v23 与 observer 通过 release tag 变更共享同一发行 SHA 触发契约',
+)
+console.log(
+  '[通过] 新发行源会取消旧 observer 审计，WFP 同步跟随 release-contract 变更',
+)

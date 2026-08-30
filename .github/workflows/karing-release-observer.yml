@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/karing-release-observer.yml'
       - '.release/karing-release-tag.txt'
+      - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
 
 permissions:
   actions: read
