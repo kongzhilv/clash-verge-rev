@@ -5,6 +5,8 @@ const paths = {
   network: 'src-tauri/src/core/windows_network_diagnostics.rs',
   runtime: 'src-tauri/src/utils/windows_network.rs',
   workflow: '.github/workflows/karing-windows-hotspot-v23.yml',
+  wfpWorkflow: '.github/workflows/karing-windows-wfp-v21.yml',
+  observerWorkflow: '.github/workflows/karing-release-observer.yml',
 }
 
 const source = Object.fromEntries(
@@ -142,6 +144,21 @@ for (const marker of [
   requireText('workflow', marker, `v23 CI invariant ${marker}`)
 }
 
+const releaseTagPath = ".release/karing-release-tag.txt"
+const releasePushBlock = (key) =>
+  source[key].match(/\n  push:\n[\s\S]*?(?=\n  workflow_dispatch:|\npermissions:)/)?.[0]
+
+for (const key of ['workflow', 'wfpWorkflow', 'observerWorkflow']) {
+  const pushBlock = releasePushBlock(key)
+  if (!pushBlock) {
+    failures.push(`${key} release-branch push trigger block missing`)
+  } else if (!pushBlock.includes(releaseTagPath)) {
+    failures.push(
+      `${key} release-branch push trigger must include ${releaseTagPath}`,
+    )
+  }
+}
+
 if (failures.length > 0) {
   console.error('Windows Mobile Hotspot v23 single-owner safety gate failed:')
   for (const failure of failures) console.error(`- ${failure}`)
@@ -162,4 +179,7 @@ console.log(
 )
 console.log(
   '[通过] v22 WinRT 安全门禁继续保留，v23 只收窄控制权而不回退到 HNetCfg/shell',
+)
+console.log(
+  '[通过] 主发行、WFP、v23 与 observer 通过 release tag 变更共享同一发行 SHA 触发契约',
 )

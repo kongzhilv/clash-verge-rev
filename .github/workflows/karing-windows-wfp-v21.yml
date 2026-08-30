@@ -17,6 +17,7 @@ on:
     paths:
       - '.github/workflows/karing-windows-wfp-v21.yml'
       - '.release/karing-windows-mihomo-v21.json'
+      - '.release/karing-release-tag.txt'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'scripts/build-karing-mihomo-windows-v21.mjs'

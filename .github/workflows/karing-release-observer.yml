@@ -6,6 +6,7 @@ on:
       - feature/karing-style-diversion
     paths:
       - '.github/workflows/karing-release-observer.yml'
+      - '.release/karing-release-tag.txt'
 
 permissions:
   actions: read
