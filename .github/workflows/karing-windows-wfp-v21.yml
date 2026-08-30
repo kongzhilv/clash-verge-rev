@@ -16,6 +16,7 @@ on:
       - feature/karing-style-diversion
     paths:
       - '.github/workflows/karing-windows-wfp-v21.yml'
+      - '.github/workflows/karing-release-observer.yml'
       - '.release/karing-windows-mihomo-v21.json'
       - '.release/karing-release-tag.txt'
       - 'package.json'
@@ -23,6 +24,7 @@ on:
       - 'scripts/build-karing-mihomo-windows-v21.mjs'
       - 'scripts/prebuild-karing-v21.mjs'
       - 'scripts/check-windows-wfp-v21.mjs'
+      - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
   workflow_dispatch:
 
 permissions:
