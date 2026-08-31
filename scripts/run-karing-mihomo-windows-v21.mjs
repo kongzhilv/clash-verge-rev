@@ -82,7 +82,8 @@ export function runPatchedMihomoBuilder(buildTarget) {
 }
 
 const invokedAsScript =
-  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (invokedAsScript) {
   runPatchedMihomoBuilder(process.argv[2])
 }
