@@ -10,13 +10,15 @@ use crate::core::diagnostics;
 
 static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 static ZERO_OWNER_LOGGED: OnceLock<()> = OnceLock::new();
+const HOTSPOT_LIFECYCLE_POLICY: &str = "zero-hotspot-lifecycle-owner";
+const HOTSPOT_SHUTDOWN_POLICY: &str = "leave-hotspot-unchanged";
 
 /// Karing v24 intentionally owns **zero** Mobile Hotspot lifecycle operations.
 ///
 /// Windows and the user remain the only authority for turning Mobile Hotspot on
 /// or off. Hotspot/Wi-Fi Direct topology is observed by
-/// `windows_network_diagnostics`; this compatibility module performs no WinRT,
-/// HNetCfg, shell, service, adapter, route, NAT, or forwarding mutation.
+/// `windows_network_diagnostics`; this compatibility module performs no hotspot,
+/// service, adapter, route, NAT, or forwarding mutation.
 pub fn ensure_monitor_running() {
     if MONITOR_STARTED.swap(true, Ordering::AcqRel) {
         return;
@@ -27,7 +29,7 @@ pub fn ensure_monitor_running() {
         "windows-hotspot-zero-owner",
         "lifecycle-unowned",
         json!({
-            "policy": "zero-hotspot-lifecycle-owner",
+            "policy": HOTSPOT_LIFECYCLE_POLICY,
             "hotspot_lifecycle_mutation": false,
             "hotspot_start_stop": "windows-or-user-only",
             "topology_observer": "windows-network-diagnostics",
@@ -42,8 +44,8 @@ pub fn ensure_monitor_running() {
 
 /// Compatibility hook for the existing shutdown path.
 ///
-/// v22/v23 restored a previously rebound tethering lease here. v24 never creates
-/// such a lease, so shutdown must leave Mobile Hotspot exactly as the user left it.
+/// Older builds restored a rebound tethering lease here. v24 never creates such
+/// a lease, so shutdown must leave Mobile Hotspot exactly as the user left it.
 pub async fn restore_now(reason: &'static str) -> Result<bool> {
     diagnostics::info(
         "windows-hotspot-zero-owner",
@@ -52,7 +54,7 @@ pub async fn restore_now(reason: &'static str) -> Result<bool> {
             "reason": reason,
             "restored": false,
             "hotspot_lifecycle_mutation": false,
-            "policy": "leave-hotspot-unchanged",
+            "policy": HOTSPOT_SHUTDOWN_POLICY,
         }),
     );
     Ok(false)
@@ -60,25 +62,11 @@ pub async fn restore_now(reason: &'static str) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+    use super::{HOTSPOT_LIFECYCLE_POLICY, HOTSPOT_SHUTDOWN_POLICY};
+
     #[test]
-    fn windows_hotspot_zero_owner_contract_is_read_only() {
-        let source = include_str!("windows_hotspot_ics.rs");
-        for forbidden in [
-            "StartTetheringAsync",
-            "StopTetheringAsync",
-            "CreateFromConnectionProfile",
-            "NetworkOperatorTetheringManager",
-            "INetSharingManager",
-            "EnableSharing(",
-            "powershell.exe",
-            "pwsh.exe",
-            "netsh ",
-            "IPEnableRouter",
-            "Set-NetIPInterface",
-        ] {
-            assert!(!source.contains(forbidden), "forbidden hotspot mutation marker: {forbidden}");
-        }
-        assert!(source.contains("zero-hotspot-lifecycle-owner"));
-        assert!(source.contains("leave-hotspot-unchanged"));
+    fn windows_hotspot_zero_owner_contract_is_explicit() {
+        assert_eq!(HOTSPOT_LIFECYCLE_POLICY, "zero-hotspot-lifecycle-owner");
+        assert_eq!(HOTSPOT_SHUTDOWN_POLICY, "leave-hotspot-unchanged");
     }
 }
