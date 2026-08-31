@@ -95,7 +95,7 @@ jobs:
         run: pnpm run prebuild ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-hotspot-v24-v2
+          prefix-key: karing-hotspot-v24-v3
           key: windows-${{ matrix.target }}
           workspaces: |
             . -> target
@@ -132,3 +132,6 @@ jobs:
       - name: Prove native ICS role verification test is executed
         working-directory: src-tauri
         run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_active_lease_requires_both_expected_roles --all-features -- --exact --nocapture
+      - name: Prove unchanged hotspot PRIVATE role is never bounced
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_minimal_diff_preserves_existing_hotspot_private_role --all-features -- --exact --nocapture
