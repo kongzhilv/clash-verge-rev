@@ -100,11 +100,23 @@ for (const api of [
   )
 }
 for (const [marker, label] of [
-  ['const STABLE_SAMPLES: usize = 6;', 'physical upstream requires stable samples'],
-  ['const MAX_SAMPLES: usize = 24;', 'physical upstream stability check is bounded'],
-  ['skip_as_source: row.SkipAsSource', 'address inventory retains SkipAsSource'],
+  [
+    'const STABLE_SAMPLES: usize = 6;',
+    'physical upstream requires stable samples',
+  ],
+  [
+    'const MAX_SAMPLES: usize = 24;',
+    'physical upstream stability check is bounded',
+  ],
+  [
+    'skip_as_source: row.SkipAsSource',
+    'address inventory retains SkipAsSource',
+  ],
   ['!address.skip_as_source', 'physical source rejects SkipAsSource addresses'],
-  ['is_filter_component', 'derived Wi-Fi Direct/filter components are classified'],
+  [
+    'is_filter_component',
+    'derived Wi-Fi Direct/filter components are classified',
+  ],
   ['route-exclude-address', 'physical LAN CIDR stays outside TUN auto-route'],
   [
     'managed_physical_route_guards',
@@ -398,13 +410,25 @@ if (failures.length > 0) {
 }
 
 console.log('Windows TUN/self-capture v24 regression passed.')
-console.log('[通过] Mobile Hotspot 生命周期由 Windows/用户所有；Karing Start/Stop mutation = 0')
-console.log('[通过] Hotspot VPN 数据面由 v24 原生 HNetCfg ICS minimal-diff gate 独占验证')
+console.log(
+  '[通过] Mobile Hotspot 生命周期由 Windows/用户所有；Karing Start/Stop mutation = 0',
+)
+console.log(
+  '[通过] Hotspot VPN 数据面由 v24 原生 HNetCfg ICS minimal-diff gate 独占验证',
+)
 console.log('[通过] Wi-Fi 物理上游与 Wi-Fi Direct/ICS 热点下游保持角色分离')
-console.log('[通过] 热点 On/Off、Wi-Fi Direct、ICS 子网变化只观测，不触发 Core/TUN refresh')
-console.log('[通过] 物理上游身份忽略 route/interface metric 抖动，经稳定确认后才迁移 lease')
-console.log('[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound')
-console.log('[通过] Mihomo auto-detect-interface 在 managed lease 下关闭，避免双 selector 竞争')
+console.log(
+  '[通过] 热点 On/Off、Wi-Fi Direct、ICS 子网变化只观测，不触发 Core/TUN refresh',
+)
+console.log(
+  '[通过] 物理上游身份忽略 route/interface metric 抖动，经稳定确认后才迁移 lease',
+)
+console.log(
+  '[通过] Runtime 顶层 interface-name 动态绑定稳定物理 NIC，覆盖全部 Mihomo outbound',
+)
+console.log(
+  '[通过] Mihomo auto-detect-interface 在 managed lease 下关闭，避免双 selector 竞争',
+)
 console.log('[通过] proxy/provider interface-name 继续作为 defense-in-depth')
 console.log('[通过] 用户显式 node/provider/top-level interface 配置保持优先')
 console.log('[通过] 热点 CIDR、热点接口、物理 NIC、代理 endpoint 均不写死')
