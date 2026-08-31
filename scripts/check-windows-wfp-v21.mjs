@@ -38,8 +38,16 @@ for (const [label, token] of [
   mustContain(build, token, label)
 }
 
-mustContain(wrapper, 'check-windows-wfp-v21.mjs', 'prebuild safety gate')
-mustContain(wrapper, 'build-karing-mihomo-windows-v21.mjs', 'prebuild wrapper')
+for (const [label, token] of [
+  ['prebuild safety gate', 'check-windows-wfp-v21.mjs'],
+  ['prebuild wrapper', 'build-karing-mihomo-windows-v21.mjs'],
+  ['bounded transient retry delays', 'MIHOMO_NETWORK_RETRY_DELAYS_MS'],
+  ['transient Go network classifier', 'TRANSIENT_GO_NETWORK_PATTERNS'],
+  ['HTTP/2 fallback after transient failure', 'http2client=0'],
+  ['builder retry loop', 'runPatchedMihomoBuilder'],
+]) {
+  mustContain(wrapper, token, label)
+}
 mustContain(wrapper, "await import('./prebuild.mjs')", 'prebuild fallback')
 if (pkg.scripts.prebuild !== 'node scripts/prebuild-karing-v21.mjs') {
   throw new Error(
