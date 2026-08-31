@@ -9,6 +9,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'scripts/build-karing-mihomo-windows-v21.mjs'
+      - 'scripts/run-karing-mihomo-windows-v21.mjs'
       - 'scripts/prebuild-karing-v21.mjs'
       - 'scripts/check-windows-wfp-v21.mjs'
   push:
@@ -72,7 +73,7 @@ jobs:
       - name: Install project dependencies
         run: pnpm install --frozen-lockfile
       - name: Build pinned stable and alpha cores with patched sing-tun
-        run: node scripts/build-karing-mihomo-windows-v21.mjs ${{ matrix.target }}
+        run: node scripts/run-karing-mihomo-windows-v21.mjs ${{ matrix.target }}
       - name: Verify patched core outputs and provenance
         shell: pwsh
         run: |

@@ -32,6 +32,10 @@ const build = fs.readFileSync(
   'scripts/build-karing-mihomo-windows-v21.mjs',
   'utf8',
 )
+const runner = fs.readFileSync(
+  'scripts/run-karing-mihomo-windows-v21.mjs',
+  'utf8',
+)
 const wrapper = fs.readFileSync('scripts/prebuild-karing-v21.mjs', 'utf8')
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
 const provenance = JSON.parse(
@@ -59,8 +63,6 @@ for (const [label, token] of [
 }
 
 for (const [label, token] of [
-  ['prebuild safety gate', 'check-windows-wfp-v21.mjs'],
-  ['prebuild wrapper', 'build-karing-mihomo-windows-v21.mjs'],
   ['bounded transient retry delays', 'MIHOMO_NETWORK_RETRY_DELAYS_MS'],
   ['transient Go network classifier', 'TRANSIENT_GO_NETWORK_PATTERNS'],
   ['HTTP/2 fallback after transient failure', 'http2client=0'],
@@ -68,10 +70,24 @@ for (const [label, token] of [
     'proxy any-error fallback after transient failure',
     'https://proxy.golang.org|direct',
   ],
-  ['builder retry loop', 'runPatchedMihomoBuilder'],
+  ['shared builder retry entrypoint', 'runPatchedMihomoBuilder'],
+  ['actual pinned builder invocation', 'build-karing-mihomo-windows-v21.mjs'],
+]) {
+  mustContain(runner, token, label)
+}
+
+for (const [label, token] of [
+  ['prebuild safety gate', 'check-windows-wfp-v21.mjs'],
+  ['shared retry runner', 'run-karing-mihomo-windows-v21.mjs'],
+  ['shared retry call', 'runPatchedMihomoBuilder(target)'],
 ]) {
   mustContain(wrapper, token, label)
 }
+mustNotContain(
+  wrapper,
+  'MIHOMO_NETWORK_RETRY_DELAYS_MS',
+  'prebuild retry policy duplication',
+)
 mustContain(wrapper, "await import('./prebuild.mjs')", 'prebuild fallback')
 if (pkg.scripts.prebuild !== 'node scripts/prebuild-karing-v21.mjs') {
   throw new Error(
@@ -103,6 +119,21 @@ for (const [label, workflow] of [
     mustContain(pushBlock, `- '${releaseInput}'`, `${label} release input`)
   }
 }
+
+const wfpWorkflow = fs.readFileSync(
+  '.github/workflows/karing-windows-wfp-v21.yml',
+  'utf8',
+)
+mustContain(
+  wfpWorkflow,
+  'node scripts/run-karing-mihomo-windows-v21.mjs ${{ matrix.target }}',
+  'WFP workflow shared retry runner',
+)
+mustNotContain(
+  wfpWorkflow,
+  'run: node scripts/build-karing-mihomo-windows-v21.mjs ${{ matrix.target }}',
+  'WFP workflow direct builder bypass',
+)
 
 mustNotContain(build, 'FWP_MATCH_FLAGS_ALL_SET', 'v21 block semantics')
 if (provenance.policy !== 'block-non-loopback-ipv6') {
