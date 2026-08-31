@@ -5,7 +5,8 @@ const paths = {
   network: 'src-tauri/src/core/windows_network_diagnostics.rs',
   runtime: 'src-tauri/src/utils/windows_network.rs',
   shutdown: 'src-tauri/src/feat/window.rs',
-  mainWorkflow: '.github/workflows/karing-diagnostics-once.yml',
+  v22Compat: 'scripts/check-windows-hotspot-v22.mjs',
+  v23Compat: 'scripts/check-windows-hotspot-single-owner-v23.mjs',
   hotspotWorkflow: '.github/workflows/karing-windows-hotspot-v24.yml',
 }
 
@@ -91,19 +92,20 @@ requireText(
   'windows_hotspot_ics::restore_now("shutdown")',
   'shutdown compatibility hook remains explicit',
 )
-requireText(
-  'hotspot',
-  'restore-skipped-no-ownership',
-  'shutdown compatibility hook is a no-op',
-)
+requireText('hotspot', 'restore-skipped-no-ownership', 'shutdown compatibility hook is a no-op')
 
-for (const key of ['mainWorkflow', 'hotspotWorkflow']) {
+for (const key of ['v22Compat', 'v23Compat']) {
   requireText(
     key,
-    'check-windows-hotspot-zero-owner-v24.mjs',
-    `${key} must execute the v24 zero-owner gate`,
+    "await import('./check-windows-hotspot-zero-owner-v24.mjs')",
+    `${key} must delegate to the v24 zero-owner gate`,
   )
 }
+requireText(
+  'hotspotWorkflow',
+  'check-windows-hotspot-zero-owner-v24.mjs',
+  'v24 workflow must execute the zero-owner gate',
+)
 for (const marker of [
   'cargo check --target ${{ matrix.target }} --workspace --all-features',
   'cargo test --target x86_64-pc-windows-msvc --lib windows_network --all-features',
@@ -122,4 +124,5 @@ console.log('[通过] Karing 对 Windows Mobile Hotspot 生命周期拥有 0 个
 console.log('[通过] 应用启动、TUN 开关、Core reload 与退出均不得 Start/Stop/重绑热点')
 console.log('[通过] 热点/Wi-Fi Direct/ICS 子网变化仅观测，不拥有 Core refresh')
 console.log('[通过] TUN Runtime 继续只绑定稳定物理上游，不开启物理/全局 IP forwarding')
+console.log('[通过] 旧 v22/v23 入口已退役并统一委托 v24 zero-owner 门禁')
 console.log('[通过] Windows x64/ARM64 编译与热点/网络回归被 v24 专项工作流强制执行')
