@@ -102,13 +102,29 @@ jobs:
 
           hotspot_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_run_id}/jobs?per_page=100")
           for required in \
-            'Validate hotspot zero-owner invariants' \
+            'Validate hotspot lifecycle + native ICS invariants' \
             'Compile v24 network path x86_64-pc-windows-msvc' \
             'Compile v24 network path aarch64-pc-windows-msvc' \
-            'Run v24 zero-owner + topology regressions'; do
+            'Run v24 lifecycle + ICS + topology regressions'; do
             count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs")
             test "$count" -eq 1
           done
+
+          wfp_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${wfp_run_id}/jobs?per_page=100")
+          for required in \
+            'Validate non-loopback IPv6 block policy' \
+            'Build patched Mihomo x86_64-pc-windows-msvc' \
+            'Build patched Mihomo aarch64-pc-windows-msvc'; do
+            count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$wfp_jobs")
+            test "$count" -eq 1
+          done
+
+          policy=$(jq -r '.policy' .release/karing-windows-mihomo-v21.json)
+          loopback=$(jq -r '.wfp.loopback' .release/karing-windows-mihomo-v21.json)
+          non_loopback=$(jq -r '.wfp.nonLoopbackIPv6' .release/karing-windows-mihomo-v21.json)
+          test "$policy" = 'block-non-loopback-ipv6'
+          test "$loopback" = 'permit'
+          test "$non_loopback" = 'block-when-ipv6-disabled'
 
           main_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/jobs?per_page=100")
           failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$main_jobs")
@@ -129,6 +145,10 @@ jobs:
             count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$main_jobs")
             test "$count" -eq 1
           done
+
+          artifact_count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name == "karing-release-assets" and .expired == false)] | length')
+          test "$artifact_count" -eq 1
 
           release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}")
           target=$(jq -r '.target_commitish' <<<"$release_json")
@@ -160,6 +180,8 @@ jobs:
 
           awk 'NF {print tolower($1)}' release-audit/SHA256SUMS.txt | sort > release-audit/expected.txt
           find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) -print0 | sort -z | xargs -0 sha256sum | awk '{print tolower($1)}' | sort > release-audit/actual.txt
+          test "$(wc -l < release-audit/expected.txt)" -eq 12
+          test "$(wc -l < release-audit/actual.txt)" -eq 12
           cmp -s release-audit/expected.txt release-audit/actual.txt
 
           release_url=$(jq -r '.html_url' <<<"$release_json")
@@ -168,8 +190,10 @@ jobs:
           - source/tag/release target: \`${source_sha}\`
           - main run: \`${main_run_id}\` / success
           - WFP run: \`${wfp_run_id}\` / success
-          - Hotspot v24 zero-owner run: \`${hotspot_run_id}\` / success
-          - Mobile Hotspot lifecycle: **Windows/user-owned; Karing mutation paths = 0**
+          - Hotspot v24 lifecycle/data-plane run: \`${hotspot_run_id}\` / success
+          - Mobile Hotspot lifecycle: **Windows/user-owned; Karing Start/Stop paths = 0**
+          - VPN sharing data plane: **native HNetCfg ICS · Mihomo TUN PUBLIC -> Hotspot PRIVATE**
+          - WFP policy: \`${policy}\`; loopback=\`${loopback}\`; non-loopback IPv6=\`${non_loopback}\`
           - public assets: **${asset_count}**（12 installers + SHA256SUMS + BUILD_INFO）
           - SHA256: **12/12 matched**
           - Release: ${release_url}
