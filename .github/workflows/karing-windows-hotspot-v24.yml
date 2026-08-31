@@ -1,5 +1,5 @@
-name: Karing Windows Hotspot v24 zero-owner safety
-run-name: Karing Windows Mobile Hotspot v24 零接管审查
+name: Karing Windows Hotspot v24 lifecycle/data-plane safety
+run-name: Karing Windows Mobile Hotspot v24 生命周期/数据面审查
 
 on:
   pull_request:
@@ -41,7 +41,7 @@ env:
 
 jobs:
   static-safety:
-    name: Validate hotspot zero-owner invariants
+    name: Validate hotspot lifecycle + native ICS invariants
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
-      - name: Run v24 zero-owner safety gate
+      - name: Run v24 lifecycle/data-plane safety gate
         run: node scripts/check-windows-hotspot-zero-owner-v24.mjs
       - name: Reject whitespace errors
         run: git diff --check HEAD^
@@ -87,7 +87,7 @@ jobs:
         run: pnpm run prebuild ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: karing-hotspot-v24-v1
+          prefix-key: karing-hotspot-v24-v2
           key: windows-${{ matrix.target }}
           workspaces: |
             . -> target
@@ -97,7 +97,7 @@ jobs:
         run: cargo check --target ${{ matrix.target }} --workspace --all-features
 
   windows-unit-tests:
-    name: Run v24 zero-owner + topology regressions
+    name: Run v24 lifecycle + ICS + topology regressions
     needs:
       - static-safety
       - windows-compile
@@ -118,9 +118,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/build-matching-service.mjs x86_64-pc-windows-msvc
       - run: pnpm run prebuild x86_64-pc-windows-msvc
-      - name: Test physical-upstream-only network watcher
+      - name: Test physical-upstream watcher and native ICS lease suite
         working-directory: src-tauri
-        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network --all-features -- --nocapture
-      - name: Test hotspot zero-owner compatibility module
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_ --all-features -- --nocapture
+      - name: Prove native ICS role verification test is executed
         working-directory: src-tauri
-        run: cargo test --target x86_64-pc-windows-msvc --lib windows_hotspot_ --all-features -- --nocapture
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_active_lease_requires_both_expected_roles --all-features -- --exact --nocapture
