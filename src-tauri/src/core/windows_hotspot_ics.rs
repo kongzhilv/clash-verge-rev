@@ -15,19 +15,20 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use windows::{
-    Networking::{
-        Connectivity::{ConnectionProfile, NetworkConnectivityLevel, NetworkInformation},
-        NetworkOperators::{
-            NetworkOperatorTetheringManager, NetworkOperatorTetheringOperationResult, TetheringCapability,
-            TetheringOperationStatus, TetheringOperationalState,
-        },
-    },
     Win32::{
         NetworkManagement::{
-            IpHelper::{FreeMibTable, GetIfTable2, MIB_IF_ROW2, MIB_IF_TABLE2},
+            IpHelper::{
+                FreeMibTable, GetIfTable2, GetUnicastIpAddressTable, MIB_IF_ROW2, MIB_IF_TABLE2,
+                MIB_UNICASTIPADDRESS_ROW, MIB_UNICASTIPADDRESS_TABLE,
+            },
             Ndis::IfOperStatusUp,
+            WindowsFirewall::{
+                ICSSHARINGTYPE_PRIVATE, ICSSHARINGTYPE_PUBLIC, INetConnection, INetConnectionManager,
+                INetSharingConfiguration, INetSharingManager, NCME_DEFAULT, NetSharingManager,
+            },
         },
-        System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize, RoUninitialize},
+        Networking::WinSock::{AF_INET, IpDadStatePreferred, SOCKADDR_INET},
+        System::Com::{CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize},
     },
     core::GUID,
 };
@@ -36,7 +37,8 @@ use crate::{config::Config, core::diagnostics, process::AsyncHandler, utils::dir
 
 const LOOP_INTERVAL: Duration = Duration::from_secs(2);
 const STABLE_SAMPLES: u8 = 3;
-const SNAPSHOT_FILE: &str = "windows-hotspot-winrt-lease-v22.json";
+const SNAPSHOT_FILE: &str = "windows-hotspot-ics-lease-v20.json";
+const CONNECTION_MANAGER: GUID = GUID::from_u128(0xba126ad1_2166_11d1_b1d0_00805fc1270e);
 
 static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 static RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -49,36 +51,64 @@ struct InterfaceIdentity {
     description: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TargetPair {
+    tun: InterfaceIdentity,
+    hotspot: InterfaceIdentity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum SharingRole {
+    Public,
+    Private,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RoleMutation {
+    None,
+    Enable(SharingRole),
+    Disable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct SavedTetheringState {
+struct SavedRole {
+    guid: String,
+    role: SharingRole,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct SavedSharingState {
     version: u8,
     created_unix_ms: u128,
     tun_guid: String,
-    original_public_guid: String,
-    original_public_profile: String,
-    hotspot_was_on: bool,
+    hotspot_guid: String,
+    originally_shared: Vec<SavedRole>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct ProfileLog {
+struct SharingStateLog {
     guid: String,
     name: String,
-    connectivity: String,
-    tethering_capability: String,
+    device_name: String,
+    sharing_enabled: bool,
+    sharing_role: Option<SharingRole>,
 }
 
-struct WinRtApartment;
+struct ComApartment;
 
-impl WinRtApartment {
+impl ComApartment {
     fn init() -> Result<Self> {
-        unsafe { RoInitialize(RO_INIT_MULTITHREADED) }.context("RoInitialize(RO_INIT_MULTITHREADED) failed")?;
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+            .ok()
+            .context("CoInitializeEx(COINIT_APARTMENTTHREADED) failed")?;
         Ok(Self)
     }
 }
 
-impl Drop for WinRtApartment {
+impl Drop for ComApartment {
     fn drop(&mut self) {
-        unsafe { RoUninitialize() };
+        unsafe { CoUninitialize() };
     }
 }
 
@@ -87,11 +117,34 @@ fn utf16z(value: &[u16]) -> String {
     String::from_utf16_lossy(&value[..len])
 }
 
+fn ipv4_from_sockaddr(value: &SOCKADDR_INET) -> Option<std::net::Ipv4Addr> {
+    let family = unsafe { value.si_family };
+    if family != AF_INET {
+        return None;
+    }
+    let raw = unsafe { value.Ipv4.sin_addr.S_un.S_addr };
+    Some(std::net::Ipv4Addr::from(raw.to_ne_bytes()))
+}
+
 fn load_interfaces() -> Result<Vec<MIB_IF_ROW2>> {
     let mut table: *mut MIB_IF_TABLE2 = null_mut();
     let status = unsafe { GetIfTable2(&mut table) };
     if status.0 != 0 || table.is_null() {
         bail!("GetIfTable2 failed with Windows error {}", status.0);
+    }
+    let rows = unsafe {
+        let table_ref = &*table;
+        slice::from_raw_parts(table_ref.Table.as_ptr(), table_ref.NumEntries as usize).to_vec()
+    };
+    unsafe { FreeMibTable(table.cast::<c_void>()) };
+    Ok(rows)
+}
+
+fn load_addresses() -> Result<Vec<MIB_UNICASTIPADDRESS_ROW>> {
+    let mut table: *mut MIB_UNICASTIPADDRESS_TABLE = null_mut();
+    let status = unsafe { GetUnicastIpAddressTable(AF_INET, &mut table) };
+    if status.0 != 0 || table.is_null() {
+        bail!("GetUnicastIpAddressTable failed with Windows error {}", status.0);
     }
     let rows = unsafe {
         let table_ref = &*table;
@@ -129,8 +182,37 @@ fn is_mihomo_tun(row: &MIB_IF_ROW2) -> bool {
             || identity.contains("wintun") && identity.contains("clash"))
 }
 
-fn target_tun() -> Result<Option<InterfaceIdentity>> {
-    let mut candidates = load_interfaces()?
+fn is_hotspot_adapter(row: &MIB_IF_ROW2) -> bool {
+    if row.OperStatus != IfOperStatusUp {
+        return false;
+    }
+    let identity = interface_identity(row);
+    !is_filter_component(&identity)
+        && [
+            "wi-fi direct virtual adapter",
+            "wifi direct virtual adapter",
+            "microsoft hosted network",
+            "hosted network virtual",
+            "mobile hotspot",
+        ]
+        .iter()
+        .any(|marker| identity.contains(marker))
+}
+
+fn has_private_ipv4(interface_index: u32, addresses: &[MIB_UNICASTIPADDRESS_ROW]) -> bool {
+    addresses.iter().any(|row| {
+        row.InterfaceIndex == interface_index
+            && row.DadState == IpDadStatePreferred
+            && ipv4_from_sockaddr(&row.Address).is_some_and(|address| address.is_private())
+            && (8..=30).contains(&row.OnLinkPrefixLength)
+    })
+}
+
+fn target_pair() -> Result<Option<TargetPair>> {
+    let interfaces = load_interfaces()?;
+    let addresses = load_addresses()?;
+
+    let mut tun_candidates = interfaces
         .iter()
         .filter(|row| is_mihomo_tun(row))
         .map(|row| InterfaceIdentity {
@@ -139,26 +221,44 @@ fn target_tun() -> Result<Option<InterfaceIdentity>> {
             description: utf16z(&row.Description),
         })
         .collect::<Vec<_>>();
+    let mut hotspot_candidates = interfaces
+        .iter()
+        .filter(|row| is_hotspot_adapter(row) && has_private_ipv4(row.InterfaceIndex, &addresses))
+        .map(|row| InterfaceIdentity {
+            guid: row.InterfaceGuid,
+            alias: utf16z(&row.Alias),
+            description: utf16z(&row.Description),
+        })
+        .collect::<Vec<_>>();
 
-    if candidates.is_empty() {
+    if tun_candidates.is_empty() || hotspot_candidates.is_empty() {
         return Ok(None);
     }
-    if candidates.len() != 1 {
+    if tun_candidates.len() != 1 || hotspot_candidates.len() != 1 {
         diagnostics::warn(
-            "windows-hotspot-winrt",
+            "windows-hotspot-ics",
             "target-identification-ambiguous",
             json!({
-                "tun_candidates": candidates.iter().map(|item| json!({
+                "tun_candidates": tun_candidates.iter().map(|item| json!({
                     "guid": guid_string(item.guid),
                     "alias": item.alias,
                     "description": item.description,
                 })).collect::<Vec<_>>(),
-                "action": "fail-closed-no-tethering-mutation",
+                "hotspot_candidates": hotspot_candidates.iter().map(|item| json!({
+                    "guid": guid_string(item.guid),
+                    "alias": item.alias,
+                    "description": item.description,
+                })).collect::<Vec<_>>(),
+                "action": "fail-closed-no-ics-mutation",
             }),
         );
         return Ok(None);
     }
-    Ok(Some(candidates.remove(0)))
+
+    Ok(Some(TargetPair {
+        tun: tun_candidates.remove(0),
+        hotspot: hotspot_candidates.remove(0),
+    }))
 }
 
 fn guid_string(guid: GUID) -> String {
@@ -173,11 +273,27 @@ fn same_guid(left: &str, right: GUID) -> bool {
     normalize_guid(left) == normalize_guid(&guid_string(right))
 }
 
+fn role_of_saved_guid(roles: &[SavedRole], guid: &str) -> Option<SharingRole> {
+    roles
+        .iter()
+        .find(|item| normalize_guid(&item.guid) == normalize_guid(guid))
+        .map(|item| item.role)
+}
+
+fn role_mutation(current: Option<SharingRole>, desired: Option<SharingRole>) -> RoleMutation {
+    match (current, desired) {
+        (current, desired) if current == desired => RoleMutation::None,
+        (_, Some(role)) => RoleMutation::Enable(role),
+        (Some(_), None) => RoleMutation::Disable,
+        (None, None) => RoleMutation::None,
+    }
+}
+
 fn snapshot_path() -> Result<PathBuf> {
     Ok(dirs::app_home_dir()?.join(SNAPSHOT_FILE))
 }
 
-fn save_snapshot(path: &Path, snapshot: &SavedTetheringState) -> Result<()> {
+fn save_snapshot(path: &Path, snapshot: &SavedSharingState) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -188,15 +304,12 @@ fn save_snapshot(path: &Path, snapshot: &SavedTetheringState) -> Result<()> {
     Ok(())
 }
 
-fn load_snapshot(path: &Path) -> Result<Option<SavedTetheringState>> {
+fn load_snapshot(path: &Path) -> Result<Option<SavedSharingState>> {
     match fs::read(path) {
         Ok(bytes) => {
-            let snapshot: SavedTetheringState = serde_json::from_slice(&bytes)?;
-            if snapshot.version != 3 {
-                bail!(
-                    "unsupported Windows hotspot WinRT snapshot version {}",
-                    snapshot.version
-                );
+            let snapshot: SavedSharingState = serde_json::from_slice(&bytes)?;
+            if snapshot.version != 2 {
+                bail!("unsupported Windows hotspot ICS snapshot version {}", snapshot.version);
             }
             Ok(Some(snapshot))
         }
@@ -213,418 +326,469 @@ fn remove_snapshot(path: &Path) -> Result<()> {
     }
 }
 
-fn profile_guid(profile: &ConnectionProfile) -> Result<GUID> {
-    profile
-        .NetworkAdapter()
-        .context("ConnectionProfile::NetworkAdapter failed")?
-        .NetworkAdapterId()
-        .context("NetworkAdapter::NetworkAdapterId failed")
-}
-
-fn profile_name(profile: &ConnectionProfile) -> String {
-    profile
-        .ProfileName()
-        .map(|value| value.to_string())
-        .unwrap_or_else(|_| "<unknown>".to_owned())
-}
-
-fn profiles() -> Result<Vec<ConnectionProfile>> {
-    let view = NetworkInformation::GetConnectionProfiles().context("GetConnectionProfiles failed")?;
-    let size = view.Size()?;
-    let mut result = Vec::with_capacity(size as usize);
-    for index in 0..size {
-        result.push(view.GetAt(index)?);
+fn enumerate_connections(connection_manager: &INetConnectionManager) -> Result<Vec<INetConnection>> {
+    let enumerator = unsafe { connection_manager.EnumConnections(NCME_DEFAULT) }
+        .context("INetConnectionManager::EnumConnections failed")?;
+    let mut result = Vec::new();
+    loop {
+        let mut slot: [Option<INetConnection>; 1] = [None];
+        let mut fetched = 0u32;
+        unsafe { enumerator.Next(&mut slot, &mut fetched) }.context("IEnumNetConnection::Next failed")?;
+        if fetched == 0 {
+            break;
+        }
+        if let Some(connection) = slot[0].take() {
+            result.push(connection);
+        }
     }
     Ok(result)
 }
 
-fn find_profile_by_guid(items: &[ConnectionProfile], guid: GUID) -> Result<Option<ConnectionProfile>> {
-    let mut matches = Vec::new();
-    for profile in items {
-        if profile_guid(profile)? == guid {
-            matches.push(profile.clone());
+fn connection_log(manager: &INetSharingManager, connection: &INetConnection) -> Result<SharingStateLog> {
+    let props = unsafe { manager.get_NetConnectionProps(connection) }.context("get_NetConnectionProps failed")?;
+    let guid = unsafe { props.Guid() }.context("INetConnectionProps::Guid failed")?;
+    let name = unsafe { props.Name() }.context("INetConnectionProps::Name failed")?;
+    let device_name = unsafe { props.DeviceName() }.context("INetConnectionProps::DeviceName failed")?;
+    let sharing = unsafe { manager.get_INetSharingConfigurationForINetConnection(connection) }
+        .context("get_INetSharingConfigurationForINetConnection failed")?;
+    let enabled = unsafe { sharing.SharingEnabled() }
+        .context("INetSharingConfiguration::SharingEnabled failed")?
+        .0
+        != 0;
+    let role = if enabled {
+        let raw = unsafe { sharing.SharingConnectionType() }
+            .context("INetSharingConfiguration::SharingConnectionType failed")?;
+        if raw == ICSSHARINGTYPE_PUBLIC {
+            Some(SharingRole::Public)
+        } else if raw == ICSSHARINGTYPE_PRIVATE {
+            Some(SharingRole::Private)
+        } else {
+            None
         }
-    }
-    match matches.len() {
-        0 => Ok(None),
-        1 => Ok(matches.pop()),
-        count => bail!("adapter GUID {guid:?} mapped to {count} ConnectionProfiles"),
-    }
-}
-
-fn find_profile_by_saved_guid(items: &[ConnectionProfile], guid: &str) -> Result<Option<ConnectionProfile>> {
-    let mut matches = Vec::new();
-    for profile in items {
-        if same_guid(guid, profile_guid(profile)?) {
-            matches.push(profile.clone());
-        }
-    }
-    match matches.len() {
-        0 => Ok(None),
-        1 => Ok(matches.pop()),
-        count => bail!("saved adapter GUID {guid} mapped to {count} ConnectionProfiles"),
-    }
-}
-
-fn profile_log(profile: &ConnectionProfile) -> Result<ProfileLog> {
-    let capability = NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(profile)
-        .map(|value| format!("{value:?}"))
-        .unwrap_or_else(|error| format!("error:{error}"));
-    Ok(ProfileLog {
-        guid: guid_string(profile_guid(profile)?),
-        name: profile_name(profile),
-        connectivity: format!("{:?}", profile.GetNetworkConnectivityLevel()?),
-        tethering_capability: capability,
+    } else {
+        None
+    };
+    Ok(SharingStateLog {
+        guid: guid.to_string(),
+        name: name.to_string(),
+        device_name: device_name.to_string(),
+        sharing_enabled: enabled,
+        sharing_role: role,
     })
 }
 
-fn find_original_public_profile(items: &[ConnectionProfile], tun_guid: GUID) -> Result<ConnectionProfile> {
-    if let Ok(profile) = NetworkInformation::GetInternetConnectionProfile()
-        && profile_guid(&profile)? != tun_guid
-        && profile.GetNetworkConnectivityLevel()? == NetworkConnectivityLevel::InternetAccess
+fn sharing_configuration(
+    manager: &INetSharingManager,
+    connection: &INetConnection,
+) -> Result<INetSharingConfiguration> {
+    unsafe { manager.get_INetSharingConfigurationForINetConnection(connection) }
+        .context("get_INetSharingConfigurationForINetConnection failed")
+}
+
+fn reconcile_connection_role(
+    manager: &INetSharingManager,
+    connection: &INetConnection,
+    desired: Option<SharingRole>,
+    context: &'static str,
+) -> Result<bool> {
+    let state = connection_log(manager, connection)?;
+    let mutation = role_mutation(state.sharing_role, desired);
+    let configuration = sharing_configuration(manager, connection)?;
+
+    match mutation {
+        RoleMutation::None => Ok(false),
+        RoleMutation::Enable(role) => {
+            set_role(&configuration, role).with_context(|| context)?;
+            Ok(true)
+        }
+        RoleMutation::Disable => {
+            unsafe { configuration.DisableSharing() }.with_context(|| context)?;
+            Ok(true)
+        }
+    }
+}
+
+fn find_connection(
+    manager: &INetSharingManager,
+    connections: &[INetConnection],
+    guid: GUID,
+) -> Result<Option<INetConnection>> {
+    for connection in connections {
+        let props = unsafe { manager.get_NetConnectionProps(connection) }
+            .context("get_NetConnectionProps failed while matching GUID")?;
+        let candidate = unsafe { props.Guid() }.context("INetConnectionProps::Guid failed while matching GUID")?;
+        if same_guid(&candidate.to_string(), guid) {
+            return Ok(Some(connection.clone()));
+        }
+    }
+    Ok(None)
+}
+
+fn find_connection_by_saved_guid(
+    manager: &INetSharingManager,
+    connections: &[INetConnection],
+    guid: &str,
+) -> Result<Option<INetConnection>> {
+    for connection in connections {
+        let props = unsafe { manager.get_NetConnectionProps(connection) }
+            .context("get_NetConnectionProps failed while matching saved GUID")?;
+        let candidate =
+            unsafe { props.Guid() }.context("INetConnectionProps::Guid failed while matching saved GUID")?;
+        if normalize_guid(&candidate.to_string()) == normalize_guid(guid) {
+            return Ok(Some(connection.clone()));
+        }
+    }
+    Ok(None)
+}
+
+fn current_shared_roles(manager: &INetSharingManager, connections: &[INetConnection]) -> Result<Vec<SavedRole>> {
+    let mut roles = Vec::new();
+    for connection in connections {
+        let state = connection_log(manager, connection)?;
+        if let Some(role) = state.sharing_role {
+            roles.push(SavedRole { guid: state.guid, role });
+        }
+    }
+    roles.sort_by(|left, right| left.guid.cmp(&right.guid));
+    Ok(roles)
+}
+
+fn log_all_sharing_state(manager: &INetSharingManager, connections: &[INetConnection], event: &'static str) {
+    let states = connections
+        .iter()
+        .filter_map(|connection| connection_log(manager, connection).ok())
+        .collect::<Vec<_>>();
+    diagnostics::info("windows-hotspot-ics", event, json!({"connections": states}));
+}
+
+fn role_of_guid(roles: &[SavedRole], guid: GUID) -> Option<SharingRole> {
+    roles
+        .iter()
+        .find(|item| same_guid(&item.guid, guid))
+        .map(|item| item.role)
+}
+
+fn lease_roles_are_desired(roles: &[SavedRole], pair: &TargetPair) -> bool {
+    role_of_guid(roles, pair.tun.guid) == Some(SharingRole::Public)
+        && role_of_guid(roles, pair.hotspot.guid) == Some(SharingRole::Private)
+}
+
+fn has_unrelated_private_role(original: &[SavedRole], pair: &TargetPair) -> bool {
+    original.iter().any(|item| {
+        item.role == SharingRole::Private
+            && !same_guid(&item.guid, pair.tun.guid)
+            && !same_guid(&item.guid, pair.hotspot.guid)
+    })
+}
+
+fn lease_owned_original_roles(original: &[SavedRole], pair: &TargetPair) -> Vec<SavedRole> {
+    original
+        .iter()
+        .filter(|item| {
+            item.role == SharingRole::Public
+                || same_guid(&item.guid, pair.tun.guid)
+                || same_guid(&item.guid, pair.hotspot.guid)
+        })
+        .cloned()
+        .collect()
+}
+
+fn set_role(configuration: &INetSharingConfiguration, role: SharingRole) -> Result<()> {
+    unsafe {
+        match role {
+            SharingRole::Public => configuration.EnableSharing(ICSSHARINGTYPE_PUBLIC),
+            SharingRole::Private => configuration.EnableSharing(ICSSHARINGTYPE_PRIVATE),
+        }
+    }
+    .context("INetSharingConfiguration::EnableSharing failed")
+}
+
+fn create_managers() -> Result<(ComApartment, INetSharingManager, INetConnectionManager)> {
+    let apartment = ComApartment::init()?;
+    let sharing_manager: INetSharingManager =
+        unsafe { CoCreateInstance(&NetSharingManager, None, CLSCTX_ALL) }.context("create NetSharingManager failed")?;
+    let connection_manager: INetConnectionManager = unsafe { CoCreateInstance(&CONNECTION_MANAGER, None, CLSCTX_ALL) }
+        .context("create Network Connection Manager failed")?;
+    Ok((apartment, sharing_manager, connection_manager))
+}
+
+fn read_lease_roles(pair: &TargetPair) -> Result<Vec<SavedRole>> {
+    let (_apartment, sharing_manager, connection_manager) = create_managers()?;
+    let connections = enumerate_connections(&connection_manager)?;
+    let roles = current_shared_roles(&sharing_manager, &connections)?;
+    diagnostics::info(
+        "windows-hotspot-ics",
+        "lease-readback",
+        json!({
+            "tun_guid": guid_string(pair.tun.guid),
+            "hotspot_guid": guid_string(pair.hotspot.guid),
+            "roles": &roles,
+            "desired": lease_roles_are_desired(&roles, pair),
+        }),
+    );
+    Ok(roles)
+}
+
+fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Result<()> {
+    let (_apartment, sharing_manager, connection_manager) = create_managers()?;
+    let connections = enumerate_connections(&connection_manager)?;
+    log_all_sharing_state(&sharing_manager, &connections, "restore-before");
+
+    let mut mutations = 0u8;
+
+    // Restore the original PUBLIC first. Windows ICS automatically disables the
+    // previously shared PUBLIC connection when another connection becomes PUBLIC,
+    // so this avoids explicitly bouncing the hotspot PRIVATE side.
+    for saved in snapshot
+        .originally_shared
+        .iter()
+        .filter(|item| item.role == SharingRole::Public)
     {
-        return Ok(profile);
+        match find_connection_by_saved_guid(&sharing_manager, &connections, &saved.guid)? {
+            Some(connection) => {
+                if reconcile_connection_role(
+                    &sharing_manager,
+                    &connection,
+                    Some(SharingRole::Public),
+                    "restore original PUBLIC ICS role",
+                )? {
+                    mutations = mutations.saturating_add(1);
+                }
+            }
+            None => bail!("cannot restore original PUBLIC ICS connection {}", saved.guid),
+        }
     }
 
-    let mut candidates = Vec::new();
-    for profile in items {
-        let guid = profile_guid(profile)?;
-        if guid == tun_guid {
+    // Restore PRIVATE roles only when they actually drifted. In the normal Mobile
+    // Hotspot case the hotspot was already PRIVATE before the VPN lease, so this is
+    // deliberately a no-op and avoids an unnecessary Disable/Enable cycle.
+    for saved in snapshot
+        .originally_shared
+        .iter()
+        .filter(|item| item.role == SharingRole::Private)
+    {
+        match find_connection_by_saved_guid(&sharing_manager, &connections, &saved.guid)? {
+            Some(connection) => {
+                if reconcile_connection_role(
+                    &sharing_manager,
+                    &connection,
+                    Some(SharingRole::Private),
+                    "restore original PRIVATE ICS role",
+                )? {
+                    mutations = mutations.saturating_add(1);
+                }
+            }
+            None => diagnostics::info(
+                "windows-hotspot-ics",
+                "restore-private-target-missing",
+                json!({
+                    "guid": saved.guid,
+                    "action": "skip-ephemeral-private-adapter",
+                }),
+            ),
+        }
+    }
+
+    // If a lease target was originally unshared, remove only that lease-owned role.
+    // Targets that already had their desired original role are left untouched.
+    for guid in [&snapshot.tun_guid, &snapshot.hotspot_guid] {
+        if role_of_saved_guid(&snapshot.originally_shared, guid).is_some() {
             continue;
         }
-        if profile.GetNetworkConnectivityLevel()? == NetworkConnectivityLevel::InternetAccess {
-            candidates.push(profile.clone());
+        if let Some(connection) = find_connection_by_saved_guid(&sharing_manager, &connections, guid)?
+            && reconcile_connection_role(
+                &sharing_manager,
+                &connection,
+                None,
+                "remove lease-owned ICS role during restore",
+            )?
+        {
+            mutations = mutations.saturating_add(1);
         }
     }
 
-    if candidates.len() != 1 {
-        diagnostics::warn(
-            "windows-hotspot-winrt",
-            "original-public-profile-ambiguous",
-            json!({
-                "tun_guid": guid_string(tun_guid),
-                "candidates": candidates.iter().filter_map(|profile| profile_log(profile).ok()).collect::<Vec<_>>(),
-                "action": "fail-closed-preserve-current-hotspot",
-            }),
-        );
-        bail!(
-            "expected exactly one non-TUN InternetAccess ConnectionProfile, found {}",
-            candidates.len()
-        );
+    let after = current_shared_roles(&sharing_manager, &connections)?;
+    for saved in &snapshot.originally_shared {
+        if find_connection_by_saved_guid(&sharing_manager, &connections, &saved.guid)?.is_some()
+            && role_of_saved_guid(&after, &saved.guid) != Some(saved.role)
+        {
+            bail!("original ICS role was not restored for {}", saved.guid);
+        }
     }
-    Ok(candidates.remove(0))
-}
-
-fn manager_for(profile: &ConnectionProfile) -> Result<NetworkOperatorTetheringManager> {
-    NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile).context("CreateFromConnectionProfile failed")
-}
-
-fn require_capability(profile: &ConnectionProfile) -> Result<()> {
-    let capability = NetworkOperatorTetheringManager::GetTetheringCapabilityFromConnectionProfile(profile)
-        .context("GetTetheringCapabilityFromConnectionProfile failed")?;
-    if capability != TetheringCapability::Enabled {
-        bail!(
-            "ConnectionProfile {} is not tethering-capable: {capability:?}",
-            profile_name(profile)
-        );
-    }
-    Ok(())
-}
-
-fn operation_details(result: &NetworkOperatorTetheringOperationResult) -> (TetheringOperationStatus, String) {
-    let status = result.Status().unwrap_or(TetheringOperationStatus::Unknown);
-    let message = result
-        .AdditionalErrorMessage()
-        .map(|value| value.to_string())
-        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
-    (status, message)
-}
-
-fn stop_tethering(manager: &NetworkOperatorTetheringManager, phase: &'static str) -> Result<()> {
-    if manager.TetheringOperationalState()? == TetheringOperationalState::Off {
-        return Ok(());
-    }
-    let result = manager
-        .StopTetheringAsync()
-        .context("StopTetheringAsync creation failed")?
-        .join()
-        .context("StopTetheringAsync execution failed")?;
-    let (status, additional_error) = operation_details(&result);
-    diagnostics::info(
-        "windows-hotspot-winrt",
-        "tethering-stop-result",
-        json!({
-            "phase": phase,
-            "status": format!("{status:?}"),
-            "additional_error": additional_error,
-        }),
-    );
-    if status != TetheringOperationStatus::Success {
-        bail!("StopTetheringAsync returned {status:?}: {additional_error}");
-    }
-    if manager.TetheringOperationalState()? != TetheringOperationalState::Off {
-        bail!("tethering did not reach Off after StopTetheringAsync");
-    }
-    Ok(())
-}
-
-fn start_tethering(manager: &NetworkOperatorTetheringManager, phase: &'static str) -> Result<()> {
-    let result = manager
-        .StartTetheringAsync()
-        .context("StartTetheringAsync creation failed")?
-        .join()
-        .context("StartTetheringAsync execution failed")?;
-    let (status, additional_error) = operation_details(&result);
-    diagnostics::info(
-        "windows-hotspot-winrt",
-        "tethering-start-result",
-        json!({
-            "phase": phase,
-            "status": format!("{status:?}"),
-            "additional_error": additional_error,
-        }),
-    );
-    if status != TetheringOperationStatus::Success && status != TetheringOperationStatus::AlreadyOn {
-        bail!("StartTetheringAsync returned {status:?}: {additional_error}");
-    }
-    if manager.TetheringOperationalState()? != TetheringOperationalState::On {
-        bail!("tethering did not reach On after StartTetheringAsync");
-    }
-    Ok(())
-}
-
-fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedTetheringState) -> Result<()> {
-    let _apartment = WinRtApartment::init()?;
-    let items = profiles()?;
-    let original = find_profile_by_saved_guid(&items, &snapshot.original_public_guid)?
-        .ok_or_else(|| anyhow!("original hotspot public ConnectionProfile is no longer available"))?;
-
-    require_capability(&original)?;
-    let original_manager = manager_for(&original)?;
-
-    // A manager created from a ConnectionProfile is profile-scoped: the profile is
-    // its public interface. In the normal restore path, stop the Mihomo-backed
-    // session through the same saved TUN profile that created it, then restart with
-    // the saved physical public profile. Do not assume cross-profile Stop semantics.
-    if let Some(tun_profile) = find_profile_by_saved_guid(&items, &snapshot.tun_guid)? {
-        let tun_manager = manager_for(&tun_profile)?;
-        stop_tethering(&tun_manager, "restore-stop-mihomo")?;
-    } else {
-        // Crash/restart can remove the ephemeral TUN profile before reconciliation.
-        // There is no longer a profile-scoped Mihomo manager to address. Use the
-        // original manager only as a documented recovery fallback and keep the
-        // snapshot until the physical restart has been verified.
-        diagnostics::warn(
-            "windows-hotspot-winrt",
-            "restore-stop-fallback-original-profile",
-            json!({
-                "tun_guid": snapshot.tun_guid,
-                "original_public_guid": snapshot.original_public_guid,
-                "reason": "saved-tun-profile-missing",
-                "normal_path": false,
-            }),
-        );
-        stop_tethering(&original_manager, "restore-stop-fallback-original")?;
+    for guid in [&snapshot.tun_guid, &snapshot.hotspot_guid] {
+        if role_of_saved_guid(&snapshot.originally_shared, guid).is_none()
+            && find_connection_by_saved_guid(&sharing_manager, &connections, guid)?.is_some()
+            && role_of_saved_guid(&after, guid).is_some()
+        {
+            bail!("lease-owned ICS role remained after restore for {guid}");
+        }
     }
 
-    if snapshot.hotspot_was_on {
-        start_tethering(&original_manager, "restore-original-public")?;
-    }
-
+    log_all_sharing_state(&sharing_manager, &connections, "restore-after");
     remove_snapshot(path)?;
     diagnostics::info(
-        "windows-hotspot-winrt",
+        "windows-hotspot-ics",
         "lease-restored",
         json!({
-            "original_public_guid": snapshot.original_public_guid,
-            "original_public_profile": snapshot.original_public_profile,
-            "hotspot_was_on": snapshot.hotspot_was_on,
+            "rollback_scope": "minimal-diff-original-public+lease-targets-only",
+            "mutations": mutations,
+            "hotspot_private_preserved_when_unchanged": true,
             "snapshot_removed": true,
-            "strategy": "profile-scoped-stop-then-original-profile-start",
         }),
     );
     Ok(())
 }
 
-fn apply_tun_unlocked(path: &Path, tun: &InterfaceIdentity) -> Result<&'static str> {
-    let _apartment = WinRtApartment::init()?;
-    let items = profiles()?;
-    let tun_profile = find_profile_by_guid(&items, tun.guid)?
-        .ok_or_else(|| anyhow!("Mihomo TUN has no matching WinRT ConnectionProfile"))?;
-    require_capability(&tun_profile)?;
+fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
+    let (_apartment, sharing_manager, connection_manager) = create_managers()?;
+    let connections = enumerate_connections(&connection_manager)?;
+    log_all_sharing_state(&sharing_manager, &connections, "apply-before");
 
-    let tun_manager = manager_for(&tun_profile)?;
-    let state = tun_manager.TetheringOperationalState()?;
-    if state == TetheringOperationalState::Off {
-        return Ok("hotspot-off-no-action");
-    }
-    if state == TetheringOperationalState::InTransition {
-        return Ok("hotspot-transition-no-action");
-    }
-    if state != TetheringOperationalState::On {
+    let original = current_shared_roles(&sharing_manager, &connections)?;
+    if has_unrelated_private_role(&original, pair) {
         diagnostics::warn(
-            "windows-hotspot-winrt",
-            "hotspot-operational-state-unknown",
+            "windows-hotspot-ics",
+            "lease-refused-unrelated-private-sharing",
             json!({
-                "operational_state": format!("{state:?}"),
-                "action": "fail-closed-preserve-current-hotspot",
+                "originally_shared": &original,
+                "action": "fail-closed-preserve-unrelated-private-ics",
             }),
         );
-        return Ok("hotspot-unknown-no-action");
+        bail!("refusing to replace an unrelated existing PRIVATE ICS connection");
     }
 
-    let original = find_original_public_profile(&items, tun.guid)?;
-    require_capability(&original)?;
-    let _original_manager_preflight = manager_for(&original)?;
-    let original_guid = profile_guid(&original)?;
-    if original_guid == tun.guid {
-        bail!("refusing to snapshot Mihomo TUN as original hotspot public profile");
-    }
+    // Resolve both COM connections before persisting rollback state. If either target
+    // vanished during the stability window, no mutation has happened and no stale
+    // snapshot is left behind for the next reconcile pass to misinterpret.
+    let tun = find_connection(&sharing_manager, &connections, pair.tun.guid)?
+        .ok_or_else(|| anyhow!("Mihomo TUN connection disappeared before ICS apply"))?;
+    let hotspot = find_connection(&sharing_manager, &connections, pair.hotspot.guid)?
+        .ok_or_else(|| anyhow!("Mobile Hotspot connection disappeared before ICS apply"))?;
 
-    let snapshot = SavedTetheringState {
-        version: 3,
+    let snapshot = SavedSharingState {
+        version: 2,
         created_unix_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis(),
-        tun_guid: guid_string(tun.guid),
-        original_public_guid: guid_string(original_guid),
-        original_public_profile: profile_name(&original),
-        hotspot_was_on: true,
+        tun_guid: guid_string(pair.tun.guid),
+        hotspot_guid: guid_string(pair.hotspot.guid),
+        originally_shared: lease_owned_original_roles(&original, pair),
     };
     save_snapshot(path, &snapshot)?;
 
-    diagnostics::info(
-        "windows-hotspot-winrt",
-        "apply-before",
-        json!({
-            "tun": profile_log(&tun_profile).ok(),
-            "original_public": profile_log(&original).ok(),
-            "operational_state": format!("{state:?}"),
-            "snapshot_file_present": true,
-            "mutation_api": "NetworkOperatorTetheringManager",
-        }),
-    );
+    let apply_result = (|| -> Result<(bool, bool)> {
+        let tun_changed = reconcile_connection_role(
+            &sharing_manager,
+            &tun,
+            Some(SharingRole::Public),
+            "apply Mihomo TUN PUBLIC ICS role",
+        )?;
+        let hotspot_changed = reconcile_connection_role(
+            &sharing_manager,
+            &hotspot,
+            Some(SharingRole::Private),
+            "apply Mobile Hotspot PRIVATE ICS role",
+        )?;
 
-    let apply_result = (|| -> Result<()> {
-        // Creating a manager while Mobile Hotspot is already On does not prove that
-        // Windows rebound the existing session. Force a clean Stop -> Start so the
-        // new CreateFromConnectionProfile(Mihomo) public source owns the session.
-        stop_tethering(&tun_manager, "rebind-stop-existing")?;
-        start_tethering(&tun_manager, "rebind-start-mihomo")?;
-        Ok(())
+        let after = current_shared_roles(&sharing_manager, &connections)?;
+        if !lease_roles_are_desired(&after, pair) {
+            bail!("ICS role verification failed after minimal-diff apply");
+        }
+        Ok((tun_changed, hotspot_changed))
     })();
 
-    if let Err(error) = apply_result {
-        diagnostics::error(
-            "windows-hotspot-winrt",
-            "apply-failed",
-            json!({
-                "error": error.to_string(),
-                "action": "restore-original-hotspot-immediately",
-                "snapshot_preserved_until_restore_succeeds": true,
-            }),
-        );
-        restore_snapshot_unlocked(path, &snapshot).context("WinRT apply failed and rollback also failed")?;
-        return Err(error);
-    }
+    let (tun_changed, hotspot_changed) = match apply_result {
+        Ok(changed) => changed,
+        Err(error) => {
+            diagnostics::error(
+                "windows-hotspot-ics",
+                "apply-verification-failed",
+                json!({
+                    "error": error.to_string(),
+                    "action": "restore-original-ics-immediately",
+                }),
+            );
+            restore_snapshot_unlocked(path, &snapshot).context("apply failed and rollback also failed")?;
+            return Err(error);
+        }
+    };
 
+    log_all_sharing_state(&sharing_manager, &connections, "apply-after");
     diagnostics::info(
-        "windows-hotspot-winrt",
+        "windows-hotspot-ics",
         "lease-applied",
         json!({
-            "tun_guid": guid_string(tun.guid),
-            "tun_alias": tun.alias,
-            "tun_description": tun.description,
-            "tun_profile": profile_name(&tun_profile),
-            "original_public_guid": guid_string(original_guid),
-            "original_public_profile": profile_name(&original),
-            "desired_topology": "mihomo-connection-profile=public,wifi=private",
-            "strategy": "winrt-stop-then-createfromconnectionprofile-start",
-            "powershell": false,
-            "hnetcfg_mutation": false,
+            "tun": {
+                "guid": guid_string(pair.tun.guid),
+                "alias": pair.tun.alias,
+                "description": pair.tun.description,
+                "role": "public",
+                "mutated": tun_changed,
+            },
+            "hotspot": {
+                "guid": guid_string(pair.hotspot.guid),
+                "alias": pair.hotspot.alias,
+                "description": pair.hotspot.description,
+                "role": "private",
+                "mutated": hotspot_changed,
+            },
+            "originally_shared": original,
+            "snapshot_file_present": true,
+            "rollback_scope": "minimal-diff-original-public+lease-targets-only",
+            "strategy": "mihomo-tun-as-ics-public-with-minimal-diff-persistent-rollback",
         }),
     );
-    Ok("lease-applied")
+    Ok(())
 }
 
 fn mutation_guard() -> Result<std::sync::MutexGuard<'static, ()>> {
     MUTATION_LOCK
         .lock()
-        .map_err(|_| anyhow!("Windows hotspot WinRT mutation lock was poisoned"))
-}
-
-fn active_snapshot_state(snapshot: &SavedTetheringState) -> Result<Option<TetheringOperationalState>> {
-    let _apartment = WinRtApartment::init()?;
-    let items = profiles()?;
-    let Some(tun_profile) = find_profile_by_saved_guid(&items, &snapshot.tun_guid)? else {
-        return Ok(None);
-    };
-    Ok(Some(manager_for(&tun_profile)?.TetheringOperationalState()?))
+        .map_err(|_| anyhow!("Windows hotspot ICS mutation lock was poisoned"))
 }
 
 fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
     let _guard = mutation_guard()?;
     let saved = load_snapshot(path)?;
-
-    if let Some(snapshot) = saved {
-        if !tun_enabled || RESTORE_REQUESTED.load(Ordering::Acquire) {
-            restore_snapshot_unlocked(path, &snapshot)?;
-            return Ok("lease-restored");
-        }
-
-        let Some(state) = active_snapshot_state(&snapshot)? else {
-            // A persisted lease can outlive the Mihomo adapter after a crash/restart.
-            // Missing TUN profile is not evidence that the user disabled Mobile Hotspot;
-            // restore the original physical source while recovery metadata is intact.
-            restore_snapshot_unlocked(path, &snapshot)?;
-            diagnostics::info(
-                "windows-hotspot-winrt",
-                "lease-restored-missing-tun-profile",
-                json!({
-                    "tun_guid": snapshot.tun_guid,
-                    "original_public_guid": snapshot.original_public_guid,
-                    "recovery_reason": "persisted-tun-profile-missing",
-                }),
-            );
-            return Ok("lease-restored-missing-tun-profile");
-        };
-        if state == TetheringOperationalState::Off {
-            // Only an explicit Off state from the saved TUN-backed manager is treated
-            // as user intent. Missing/unknown profile state keeps or restores the lease.
-            remove_snapshot(path)?;
-            diagnostics::info(
-                "windows-hotspot-winrt",
-                "lease-cleared-user-hotspot-off",
-                json!({
-                    "hotspot_restarted": false,
-                    "user_intent_preserved": true,
-                }),
-            );
-            return Ok("lease-cleared-user-hotspot-off");
-        }
-        if state == TetheringOperationalState::Unknown {
-            diagnostics::warn(
-                "windows-hotspot-winrt",
-                "active-lease-operational-state-unknown",
-                json!({
-                    "action": "fail-closed-preserve-persistent-lease",
-                    "snapshot_file_present": true,
-                }),
-            );
-            return Ok("lease-unknown-preserved");
-        }
-        return Ok("lease-already-active");
-    }
-
-    if !tun_enabled || RESTORE_REQUESTED.load(Ordering::Acquire) {
-        return Ok("no-action");
-    }
-
-    let Some(tun) = target_tun()? else {
-        return Ok("no-action");
+    let pair = if tun_enabled && !RESTORE_REQUESTED.load(Ordering::Acquire) {
+        target_pair()?
+    } else {
+        None
     };
-    apply_tun_unlocked(path, &tun)
+
+    match (saved, pair) {
+        (Some(snapshot), Some(pair))
+            if same_guid(&snapshot.tun_guid, pair.tun.guid) && same_guid(&snapshot.hotspot_guid, pair.hotspot.guid) =>
+        {
+            let roles = read_lease_roles(&pair)?;
+            if lease_roles_are_desired(&roles, &pair) {
+                Ok("lease-already-active")
+            } else {
+                diagnostics::warn(
+                    "windows-hotspot-ics",
+                    "lease-drift-detected",
+                    json!({
+                        "tun_guid": guid_string(pair.tun.guid),
+                        "hotspot_guid": guid_string(pair.hotspot.guid),
+                        "observed_roles": roles,
+                        "action": "restore-before-next-reapply",
+                    }),
+                );
+                restore_snapshot_unlocked(path, &snapshot)?;
+                Ok("lease-drift-restored")
+            }
+        }
+        (Some(snapshot), _) => {
+            restore_snapshot_unlocked(path, &snapshot)?;
+            Ok("lease-restored")
+        }
+        (None, Some(pair)) => {
+            apply_pair_unlocked(path, &pair)?;
+            Ok("lease-applied")
+        }
+        (None, None) => Ok("no-action"),
+    }
 }
 
 pub async fn restore_now(reason: &'static str) -> Result<bool> {
@@ -640,10 +804,10 @@ pub async fn restore_now(reason: &'static str) -> Result<bool> {
         Ok(true)
     })
     .await
-    .context("Windows WinRT hotspot explicit restore task failed")??;
+    .context("Windows ICS explicit restore task failed")??;
 
     diagnostics::info(
-        "windows-hotspot-winrt",
+        "windows-hotspot-ics",
         "explicit-restore-completed",
         json!({
             "reason": reason,
@@ -657,21 +821,21 @@ pub async fn restore_now(reason: &'static str) -> Result<bool> {
 
 async fn monitor_loop() {
     diagnostics::info(
-        "windows-hotspot-winrt",
+        "windows-hotspot-ics",
         "monitor-started",
         json!({
             "poll_interval_ms": LOOP_INTERVAL.as_millis(),
             "stable_samples": STABLE_SAMPLES,
-            "target_identification": "ip-helper-tun-guid-to-winrt-connection-profile",
-            "mutation_api": "NetworkOperatorTetheringManager",
-            "public_source_factory": "CreateFromConnectionProfile",
-            "operation_wait": "IAsyncOperation::join",
+            "target_identification": "ip-helper-interface-guid+device-classification",
+            "mutation_api": "native-hnetcfg-com",
             "powershell": false,
-            "hnetcfg_mutation": false,
             "persistent_rollback": true,
+            "rollback_scope": "minimal-diff-original-public+lease-targets-only",
+            "unrelated_private_ics_policy": "fail-closed",
             "shutdown_restore_gate": true,
-            "user_hotspot_off_policy": "respect-and-clear-lease",
-            "desired_topology": "mihomo-connection-profile=public,wifi=private",
+            "active_lease_readback": true,
+            "hotspot_private_preserved_when_unchanged": true,
+            "desired_topology": "mihomo-tun=public,windows-mobile-hotspot=private",
         }),
     );
 
@@ -679,7 +843,7 @@ async fn monitor_loop() {
         Ok(path) => path,
         Err(error) => {
             diagnostics::error(
-                "windows-hotspot-winrt",
+                "windows-hotspot-ics",
                 "snapshot-path-failed",
                 json!({"error": error.to_string()}),
             );
@@ -697,46 +861,55 @@ async fn monitor_loop() {
         interval.tick().await;
         let tun_enabled = Config::verge().await.latest_arc().enable_tun_mode.unwrap_or(false);
         let restore_requested = RESTORE_REQUESTED.load(Ordering::Acquire);
-        let snapshot_present = path.exists();
 
-        let signature = if !tun_enabled || restore_requested {
-            format!("inactive:{snapshot_present}")
-        } else {
-            let discovery = tokio::task::spawn_blocking(target_tun).await;
-            match discovery {
-                Ok(Ok(Some(tun))) => format!("tun:{}:{snapshot_present}", normalize_guid(&guid_string(tun.guid))),
-                Ok(Ok(None)) => format!("tun:none:{snapshot_present}"),
-                Ok(Err(error)) => {
-                    let message = format!("discovery: {error}");
-                    if message != last_error {
-                        diagnostics::warn(
-                            "windows-hotspot-winrt",
-                            "target-discovery-failed",
-                            json!({"error": error.to_string(), "error_kind": "discovery"}),
-                        );
-                        last_error = message;
-                    }
-                    continue;
+        let signature = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+            if !tun_enabled || restore_requested {
+                return Ok(None);
+            }
+            let pair = target_pair()?;
+            Ok(pair.map(|pair| {
+                format!(
+                    "{}:{}",
+                    normalize_guid(&guid_string(pair.tun.guid)),
+                    normalize_guid(&guid_string(pair.hotspot.guid))
+                )
+            }))
+        })
+        .await;
+
+        let signature = match signature {
+            Ok(Ok(signature)) => signature,
+            Ok(Err(error)) => {
+                let message = format!("discovery: {error}");
+                if message != last_error {
+                    diagnostics::warn(
+                        "windows-hotspot-ics",
+                        "target-discovery-failed",
+                        json!({"error": error.to_string(), "error_kind": "discovery"}),
+                    );
+                    last_error = message;
                 }
-                Err(error) => {
-                    let message = format!("join: {error}");
-                    if message != last_error {
-                        diagnostics::warn(
-                            "windows-hotspot-winrt",
-                            "target-discovery-failed",
-                            json!({"error": error.to_string(), "error_kind": "join"}),
-                        );
-                        last_error = message;
-                    }
-                    continue;
+                continue;
+            }
+            Err(error) => {
+                let message = format!("join: {error}");
+                if message != last_error {
+                    diagnostics::warn(
+                        "windows-hotspot-ics",
+                        "target-discovery-failed",
+                        json!({"error": error.to_string(), "error_kind": "join"}),
+                    );
+                    last_error = message;
                 }
+                continue;
             }
         };
 
-        if stable_signature.as_deref() == Some(&signature) {
+        let current_signature = signature.unwrap_or_else(|| "inactive".to_owned());
+        if stable_signature.as_deref() == Some(&current_signature) {
             stable_count = stable_count.saturating_add(1);
         } else {
-            stable_signature = Some(signature.clone());
+            stable_signature = Some(current_signature.clone());
             stable_count = 1;
         }
         if stable_count < STABLE_SAMPLES {
@@ -750,11 +923,11 @@ async fn monitor_loop() {
                 last_error.clear();
                 if outcome != last_outcome {
                     diagnostics::info(
-                        "windows-hotspot-winrt",
+                        "windows-hotspot-ics",
                         "reconcile-succeeded",
                         json!({
                             "outcome": outcome,
-                            "stable_signature": signature,
+                            "stable_signature": current_signature,
                             "stable_samples": stable_count,
                         }),
                     );
@@ -765,11 +938,11 @@ async fn monitor_loop() {
                 let message = error.to_string();
                 if message != last_error {
                     diagnostics::error(
-                        "windows-hotspot-winrt",
+                        "windows-hotspot-ics",
                         "reconcile-failed",
                         json!({
                             "error": message,
-                            "stable_signature": signature,
+                            "stable_signature": current_signature,
                             "snapshot_file_present": path.exists(),
                             "action": "fail-closed-or-rollback",
                         }),
@@ -781,7 +954,7 @@ async fn monitor_loop() {
                 let message = error.to_string();
                 if message != last_error {
                     diagnostics::error(
-                        "windows-hotspot-winrt",
+                        "windows-hotspot-ics",
                         "reconcile-task-failed",
                         json!({"error": message}),
                     );
@@ -803,11 +976,29 @@ pub fn ensure_monitor_running() {
 
 #[cfg(test)]
 mod tests {
-    use super::{SavedTetheringState, normalize_guid, same_guid};
+    use super::{
+        InterfaceIdentity, RoleMutation, SavedRole, SharingRole, TargetPair, has_unrelated_private_role,
+        lease_owned_original_roles, lease_roles_are_desired, normalize_guid, role_mutation, role_of_saved_guid,
+    };
     use windows::core::GUID;
 
+    fn pair() -> TargetPair {
+        TargetPair {
+            tun: InterfaceIdentity {
+                guid: GUID::from_u128(0x11111111_1111_1111_1111_111111111111),
+                alias: "Meta".into(),
+                description: "Meta Tunnel".into(),
+            },
+            hotspot: InterfaceIdentity {
+                guid: GUID::from_u128(0x22222222_2222_2222_2222_222222222222),
+                alias: "Hotspot".into(),
+                description: "Microsoft Wi-Fi Direct Virtual Adapter".into(),
+            },
+        }
+    }
+
     #[test]
-    fn windows_hotspot_guid_normalization_ignores_braces_case_and_space() {
+    fn windows_network_guid_normalization_ignores_braces_case_and_space() {
         assert_eq!(
             normalize_guid(" {ABCDEFAB-1234-5678-90AB-ABCDEFABCDEF} "),
             "abcdefab-1234-5678-90ab-abcdefabcdef"
@@ -815,23 +1006,91 @@ mod tests {
     }
 
     #[test]
-    fn windows_hotspot_saved_guid_matches_native_guid() {
-        let guid = GUID::from_u128(0x11111111_1111_1111_1111_111111111111);
-        assert!(same_guid("{11111111-1111-1111-1111-111111111111}", guid));
+    fn windows_network_rollback_scope_keeps_public_and_lease_targets_only() {
+        let pair = pair();
+        let roles = vec![
+            SavedRole {
+                guid: format!("{:?}", GUID::from_u128(0x33333333_3333_3333_3333_333333333333)),
+                role: SharingRole::Public,
+            },
+            SavedRole {
+                guid: format!("{:?}", pair.hotspot.guid),
+                role: SharingRole::Private,
+            },
+            SavedRole {
+                guid: format!("{:?}", GUID::from_u128(0x44444444_4444_4444_4444_444444444444)),
+                role: SharingRole::Private,
+            },
+        ];
+        let retained = lease_owned_original_roles(&roles, &pair);
+        assert_eq!(retained.len(), 2);
+        assert!(retained.iter().any(|item| item.role == SharingRole::Public));
+        assert!(
+            retained
+                .iter()
+                .any(|item| { normalize_guid(&item.guid) == normalize_guid(&format!("{:?}", pair.hotspot.guid)) })
+        );
     }
 
     #[test]
-    fn windows_hotspot_snapshot_v22_preserves_original_public_and_user_state() {
-        let snapshot = SavedTetheringState {
-            version: 3,
-            created_unix_ms: 1,
-            tun_guid: "{11111111-1111-1111-1111-111111111111}".into(),
-            original_public_guid: "{22222222-2222-2222-2222-222222222222}".into(),
-            original_public_profile: "WLAN".into(),
-            hotspot_was_on: true,
-        };
-        assert_eq!(snapshot.version, 3);
-        assert!(snapshot.hotspot_was_on);
-        assert_ne!(snapshot.tun_guid, snapshot.original_public_guid);
+    fn windows_network_unrelated_private_ics_is_fail_closed() {
+        let pair = pair();
+        let roles = vec![SavedRole {
+            guid: format!("{:?}", GUID::from_u128(0x55555555_5555_5555_5555_555555555555)),
+            role: SharingRole::Private,
+        }];
+        assert!(has_unrelated_private_role(&roles, &pair));
+    }
+
+    #[test]
+    fn windows_network_active_lease_requires_both_expected_roles() {
+        let pair = pair();
+        let desired = vec![
+            SavedRole {
+                guid: format!("{:?}", pair.tun.guid),
+                role: SharingRole::Public,
+            },
+            SavedRole {
+                guid: format!("{:?}", pair.hotspot.guid),
+                role: SharingRole::Private,
+            },
+        ];
+        assert!(lease_roles_are_desired(&desired, &pair));
+
+        let drifted = vec![SavedRole {
+            guid: format!("{:?}", pair.tun.guid),
+            role: SharingRole::Public,
+        }];
+        assert!(!lease_roles_are_desired(&drifted, &pair));
+    }
+
+    #[test]
+    fn windows_network_minimal_diff_preserves_existing_hotspot_private_role() {
+        assert_eq!(
+            role_mutation(Some(SharingRole::Private), Some(SharingRole::Private)),
+            RoleMutation::None
+        );
+        assert_eq!(
+            role_mutation(Some(SharingRole::Public), Some(SharingRole::Public)),
+            RoleMutation::None
+        );
+    }
+
+    #[test]
+    fn windows_network_minimal_diff_only_disables_originally_unshared_target() {
+        assert_eq!(role_mutation(Some(SharingRole::Private), None), RoleMutation::Disable);
+        assert_eq!(role_mutation(None, None), RoleMutation::None);
+    }
+
+    #[test]
+    fn windows_network_saved_role_lookup_is_guid_normalized() {
+        let roles = vec![SavedRole {
+            guid: "{ABCDEFAB-1234-5678-90AB-ABCDEFABCDEF}".into(),
+            role: SharingRole::Private,
+        }];
+        assert_eq!(
+            role_of_saved_guid(&roles, "abcdefab-1234-5678-90ab-abcdefabcdef"),
+            Some(SharingRole::Private)
+        );
     }
 }

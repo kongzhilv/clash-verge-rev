@@ -134,8 +134,8 @@ jobs:
       - name: 运行 Windows TUN/热点安全专项回归
         run: node scripts/check-windows-tun-safety.mjs
 
-      - name: 运行 Windows Mobile Hotspot v22 WinRT 安全回归
-        run: node scripts/check-windows-hotspot-v22.mjs
+      - name: 运行 Windows Mobile Hotspot v24 生命周期/数据面安全回归
+        run: node scripts/check-windows-hotspot-zero-owner-v24.mjs
 
       - name: 运行 Windows WFP v21 loopback 安全回归
         run: node scripts/check-windows-wfp-v21.mjs
@@ -230,6 +230,9 @@ jobs:
           check_not_contains src/components/connection/connection-rule-assistant.tsx '打开分流中心' '连接分流助手不再重复分流中心入口'
           check_contains src/components/connection/connection-row-item.tsx "flexWrap: 'wrap'" '连接列表元信息允许换行避免裁字'
           check_contains src/components/routing/routing-relations-panel.tsx 'MoreVertRounded' '应用到出口关系不再堆叠跳转图标'
+          check_contains src-tauri/src/core/windows_hotspot_ics.rs 'hotspot_private_preserved_when_unchanged' '热点 PRIVATE 已是目标角色时采用最小差异且不抖动'
+          check_contains src-tauri/src/core/windows_hotspot_ics.rs 'mihomo-tun-as-ics-public-with-minimal-diff-persistent-rollback' '热点 VPN 数据面使用持久最小差异 ICS lease'
+          check_not_contains src-tauri/src/core/windows_hotspot_ics.rs 'NetworkOperatorTetheringManager' '正式路径不再接管 Mobile Hotspot 生命周期'
 
   native-builds:
     name: 构建 ${{ matrix.name }}
@@ -428,21 +431,21 @@ jobs:
           if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-gnu' ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
             {
-            echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc'
-            echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc'
-            echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++'
-            echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/'
-            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/'
+              echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc'
+              echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc'
+              echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++'
+              echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/'
+              echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/'
               echo 'PKG_CONFIG_ALLOW_CROSS=1'
             } >> "$GITHUB_ENV"
           else
             sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
             {
-            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc'
-            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc'
-            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++'
-            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/'
-            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/'
+              echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc'
+              echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc'
+              echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++'
+              echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/'
+              echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/'
               echo 'PKG_CONFIG_ALLOW_CROSS=1'
             } >> "$GITHUB_ENV"
           fi
@@ -636,26 +639,29 @@ jobs:
           WFP layer: FWPM_LAYER_ALE_AUTH_CONNECT_V6
           WFP condition: FWPM_CONDITION_FLAGS / FWP_MATCH_FLAGS_NONE_SET / FWP_CONDITION_FLAG_IS_LOOPBACK
           WFP semantics: ipv6:false blocks non-loopback IPv6 while preserving IPv6 loopback traffic
-          Windows Mobile Hotspot: WinRT NetworkOperatorTetheringManager / CreateFromConnectionProfile(Mihomo)
+          Windows Mobile Hotspot lifecycle: Windows/user-owned; Karing Start/Stop mutation paths = 0
+          Windows Mobile Hotspot VPN data plane: native HNetCfg ICS minimal-diff lease; Mihomo TUN=PUBLIC, hotspot=PRIVATE
+          Windows Mobile Hotspot rollback: persistent snapshot; unchanged hotspot PRIVATE role is not bounced
+          Windows Mobile Hotspot fail-closed: ambiguous targets/unrelated PRIVATE ICS/apply verification failure refuse or rollback mutation
           EOF
 
           cat > release-assets/release-notes.md <<'EOF'
           # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
 
-          本版在保留 `.21` IPv6 loopback WFP 根因修复的基础上，把 Windows Mobile Hotspot + Mihomo TUN 的上游绑定迁移到 WinRT 原生 tethering 控制面。
+          本版在保留 `.21` IPv6 loopback WFP 根因修复的基础上，把 Windows Mobile Hotspot 与 Mihomo TUN 的职责彻底分层：**热点生命周期由 Windows/用户所有，Karing 只管理 VPN 数据面的 ICS lease**。
 
-          - 根因位于 Mihomo 使用的 `sing-tun v0.4.22`：无 IPv6 TUN 地址时，原 `Meta / block ipv6` 在 `FWPM_LAYER_ALE_AUTH_CONNECT_V6` 创建无条件 BLOCK，连 `::1` 本机 loopback 也会被阻断。
-          - Windows stable 与 alpha 两套 Mihomo core 都改为固定源码构建，避免切换 alpha 后回归；stable 固定 `ac017cdd246ce8bd547653d927e7bf77d7ee73d5`，alpha 固定 `fb66af813b3e65023851e94166ec8a4f61e02634`，sing-tun 固定 `dfc71de64aed159d9a09a5df43077bab0671db1f`。
-          - `block ipv6` 改为 `FWPM_CONDITION_FLAGS + FWP_MATCH_FLAGS_NONE_SET + FWP_CONDITION_FLAG_IS_LOOPBACK`：`ipv6:false` 仍阻断非 loopback IPv6，但 WFP 标记为 loopback 的 `::1` 流量不再匹配该 BLOCK。
-          - 不在 GUI 外层追加高权重 PERMIT 来覆盖 core BLOCK，而是修正产生问题的原始 WFP filter 匹配域。
-          - patched core 使用固定 Go 1.20.14 工具链和固定 SHA256；源码 patch 采用 exact-once/fail-closed，源代码漂移时拒绝静默套补丁。
-          - 每次正式 Windows prebuild 都先运行 v21 WFP pins/语义 gate，再构建 stable+alpha core；独立 Windows x64/ARM64 workflow 还会实际编译两个架构并核验 provenance 与二进制 SHA256。
-          - `.22` 移除 Mobile Hotspot 主路径对经典 HNetCfg `EnableSharing/DisableSharing` 的依赖，改为 `NetworkOperatorTetheringManager::CreateFromConnectionProfile(Mihomo)`；先持久化原 public profile，再执行 Stop → Start，失败、关闭 TUN、退出及崩溃后的缺失 TUN profile 都会恢复原热点上游。
-          - 热点关闭、profile/GUID 识别歧义和未知 operational state 都采用 fail-closed；只有明确读到 Hotspot=Off 才视为用户关闭并清 lease。
-          - `.20/.21` 已验证的 Windows TUN route guard、managed physical interface lease、完整网络诊断与 WFP loopback 修复继续保留；仅替换过时的热点 HNetCfg 写控制路径。
-          - 发行观察器要求同一 source SHA 的主发行 workflow 与 WFP v21 三个 job 全成功，并对 12 个安装包做 SHA256 集合一一对应验证，避免 GitHub asset 文件名规范化造成假失败。
+          - `v2.5.4-karing.24` 移除生产路径里的 `NetworkOperatorTetheringManager`、`StartTetheringAsync`、`StopTetheringAsync` 和 shell/netsh 热点控制；启动、TUN 切换、Core reload、上游变化和退出都不再主动关闭或重开 Mobile Hotspot。
+          - 热点客户端仍需进入 VPN，因此保留并收敛到原生 HNetCfg COM 数据面：动态识别当前 Mihomo TUN 与活动 Wi-Fi Direct 热点侧，将 `Mihomo TUN=ICS PUBLIC`、`Mobile Hotspot=ICS PRIVATE`，不依赖本地化网卡名，也不写死 `192.168.137.0/24`。
+          - ICS 应用改为**最小差异**：热点已经是 PRIVATE 时不重复 `EnableSharing(PRIVATE)`；回滚也不再先 Disable 再 Enable 已正确的热点 PRIVATE。恢复原 PUBLIC 时利用 Windows ICS 的单 PUBLIC 语义切回原共享连接，从而减少无意义的数据面抖动。
+          - 每次 ICS lease 应用前持久化原始 PUBLIC/lease targets 快照；应用后立即读回 PUBLIC/PRIVATE 角色。目标识别歧义、存在无关 PRIVATE ICS、应用验证失败时均 fail-closed，并在可恢复场景立即回滚。
+          - 热点/Wi-Fi Direct 拓扑事件保持 observability-only，不再触发 Core/TUN refresh；Runtime 仍只追踪稳定物理上游，避免热点状态与 Mihomo 重载形成反馈环。
+          - `.22/.23` 历史安全脚本保留为兼容入口，但统一委托 `.24` lifecycle/data-plane gate，不能重新认证旧 WinRT Stop/Start 方案。
+          - Windows x64/ARM64 专项 workflow 强制真实 `cargo check`、ICS/network 单测和“已有 hotspot PRIVATE 不发生 mutation”的精确回归；正式发行还要求主构建、WFP 与 `.24` 专项全部对应同一发行 SHA。
+          - `.21` 的 IPv6 loopback WFP 修复继续保留：`block ipv6` 使用 `FWPM_CONDITION_FLAGS + FWP_MATCH_FLAGS_NONE_SET + FWP_CONDITION_FLAG_IS_LOOPBACK`，`ipv6:false` 阻断非 loopback IPv6，同时不误伤 `::1`。
+          - Windows stable 与 alpha 两套 Mihomo core 继续固定源码构建：stable `ac017cdd246ce8bd547653d927e7bf77d7ee73d5`，alpha `fb66af813b3e65023851e94166ec8a4f61e02634`，sing-tun `dfc71de64aed159d9a09a5df43077bab0671db1f`；patch exact-once/fail-closed，并记录 provenance 与 SHA256。
+          - 正式 Release 仍要求 12 个安装文件 + `SHA256SUMS.txt` + `BUILD_INFO.txt` 共 14 个公开资产，并由发行观察器对 source/tag/release target、Latest 状态及 12/12 安装包哈希做同 SHA 只读核验。
 
-          本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。Windows patched core 的固定来源与 WFP 语义同时记录在 `BUILD_INFO.txt`。
+          本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。Windows patched core 的固定来源、WFP 语义和 `.24` 热点生命周期/ICS 数据面策略都记录在 `BUILD_INFO.txt`。
 
           Commit: `${{ needs.review.outputs.commit }}`
           EOF
@@ -711,7 +717,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · WinRT Hotspot + IPv6 Loopback WFP" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Hotspot Lifecycle Zero-Owner + ICS + IPv6 Loopback WFP" \
             --notes-file release-assets/release-notes.md \
             --latest
 

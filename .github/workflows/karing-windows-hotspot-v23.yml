@@ -1,126 +1,18 @@
-name: Karing Windows Hotspot v23 single-owner safety
-run-name: Karing Windows Mobile Hotspot v23 单 owner 审查
+name: Karing Windows Hotspot v23 retired compatibility
 
 on:
-  pull_request:
-    branches:
-      - feature/karing-style-diversion
-    paths:
-      - 'src-tauri/src/core/windows_network_diagnostics.rs'
-      - 'src-tauri/src/core/windows_hotspot_ics.rs'
-      - 'src-tauri/src/utils/windows_network.rs'
-      - 'scripts/check-windows-hotspot-v22.mjs'
-      - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
-      - '.github/workflows/karing-windows-hotspot-v22.yml'
-      - '.github/workflows/karing-windows-hotspot-v23.yml'
-      - '.release/karing-release-tag.txt'
-  push:
-    branches:
-      - fix/karing-windows-hotspot-v23-single-owner
-      - feature/karing-style-diversion
-    paths:
-      - 'src-tauri/src/core/windows_network_diagnostics.rs'
-      - 'src-tauri/src/core/windows_hotspot_ics.rs'
-      - 'src-tauri/src/utils/windows_network.rs'
-      - 'scripts/check-windows-hotspot-v22.mjs'
-      - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
-      - '.github/workflows/karing-windows-hotspot-v22.yml'
-      - '.github/workflows/karing-windows-hotspot-v23.yml'
-      - '.release/karing-release-tag.txt'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  HUSKY: 0
-  CARGO_INCREMENTAL: 0
-  RUST_BACKTRACE: short
-
 jobs:
-  static-safety:
-    name: Validate hotspot single-owner invariants
+  compatibility:
+    name: Delegate retired v23 gate to v24
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
       - uses: actions/setup-node@v6
         with:
           node-version: '24.18.0'
-      - name: Keep v22 WinRT ownership guarantees
-        run: node scripts/check-windows-hotspot-v22.mjs
-      - name: Run v23 single-owner feedback-loop gate
-        run: node scripts/check-windows-hotspot-single-owner-v23.mjs
-      - name: Reject whitespace errors
-        run: git diff --check HEAD^
-
-  windows-compile:
-    name: Compile v23 network path ${{ matrix.target }}
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - x86_64-pc-windows-msvc
-          - aarch64-pc-windows-msvc
-    env:
-      RUSTFLAGS: '-D warnings'
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.96.1'
-          targets: ${{ matrix.target }}
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.0'
-          cache: pnpm
-      - name: Install project dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build matching service for target
-        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
-      - name: Prepare pinned Mihomo and runtime resources
-        run: pnpm run prebuild ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          prefix-key: karing-hotspot-v23-v1
-          key: windows-${{ matrix.target }}
-          workspaces: |
-            . -> target
-            .ci/service-ipc-source-${{ matrix.target }} -> target
-      - name: Cargo check v23 hotspot/network path
-        working-directory: src-tauri
-        run: cargo check --target ${{ matrix.target }} --workspace --all-features
-
-  windows-unit-tests:
-    name: Run v22 owner + v23 topology regressions
-    needs:
-      - static-safety
-      - windows-compile
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: '1.96.1'
-          targets: x86_64-pc-windows-msvc
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24.18.0'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: node scripts/build-matching-service.mjs x86_64-pc-windows-msvc
-      - run: pnpm run prebuild x86_64-pc-windows-msvc
-      - name: Test physical-upstream-only network watcher
-        working-directory: src-tauri
-        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network --all-features -- --nocapture
-      - name: Test persistent WinRT hotspot owner
-        working-directory: src-tauri
-        run: cargo test --target x86_64-pc-windows-msvc --lib windows_hotspot_ --all-features -- --nocapture
+      - run: node scripts/check-windows-hotspot-single-owner-v23.mjs
