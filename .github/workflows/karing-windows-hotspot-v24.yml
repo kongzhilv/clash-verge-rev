@@ -13,6 +13,8 @@ on:
       - 'scripts/check-windows-hotspot-v22.mjs'
       - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
       - 'scripts/check-windows-hotspot-zero-owner-v24.mjs'
+      - '.github/workflows/karing-windows-hotspot-v22.yml'
+      - '.github/workflows/karing-windows-hotspot-v23.yml'
       - '.github/workflows/karing-windows-hotspot-v24.yml'
       - '.release/karing-release-tag.txt'
   push:
@@ -27,12 +29,18 @@ on:
       - 'scripts/check-windows-hotspot-v22.mjs'
       - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
       - 'scripts/check-windows-hotspot-zero-owner-v24.mjs'
+      - '.github/workflows/karing-windows-hotspot-v22.yml'
+      - '.github/workflows/karing-windows-hotspot-v23.yml'
       - '.github/workflows/karing-windows-hotspot-v24.yml'
       - '.release/karing-release-tag.txt'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: karing-hotspot-v24-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   HUSKY: 0
