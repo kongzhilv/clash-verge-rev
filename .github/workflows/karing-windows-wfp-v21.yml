@@ -98,3 +98,5 @@ jobs:
 
           Write-Host "stable SHA256 verified: $stableHash"
           Write-Host "alpha SHA256 verified:  $alphaHash"
+
+# Final same-SHA audit stamp: rebuild both patched Windows cores before merge.

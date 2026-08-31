@@ -206,3 +206,5 @@ jobs:
           - Release: ${release_url}
 
           observer 全程只读核验。" >/dev/null
+
+# Final same-SHA audit stamp: semantic lint must validate the observer on the merge candidate.

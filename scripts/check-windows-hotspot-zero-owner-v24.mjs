@@ -158,3 +158,5 @@ console.log('[通过] ICS 目标按 GUID/设备身份动态识别，不依赖 sh
 console.log('[通过] ICS 变更具备持久 rollback、读回验证、歧义/无关 PRIVATE 共享 fail-closed')
 console.log('[通过] 热点拓扑变化不触发 Core/TUN refresh；Runtime 仍只追踪稳定物理上游')
 console.log('[通过] Windows x64/ARM64 编译与真实 ICS/network 单测执行被 v24 workflow 强制验证')
+
+// Final same-SHA audit stamp: keep v24, frontend and release gates bound to one commit.
