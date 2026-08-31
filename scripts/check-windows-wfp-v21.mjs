@@ -44,6 +44,7 @@ for (const [label, token] of [
   ['bounded transient retry delays', 'MIHOMO_NETWORK_RETRY_DELAYS_MS'],
   ['transient Go network classifier', 'TRANSIENT_GO_NETWORK_PATTERNS'],
   ['HTTP/2 fallback after transient failure', 'http2client=0'],
+  ['proxy any-error fallback after transient failure', 'https://proxy.golang.org|direct'],
   ['builder retry loop', 'runPatchedMihomoBuilder'],
 ]) {
   mustContain(wrapper, token, label)
