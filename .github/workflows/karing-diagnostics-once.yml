@@ -233,6 +233,9 @@ jobs:
           check_contains src-tauri/src/core/windows_hotspot_ics.rs 'hotspot_private_preserved_when_unchanged' '热点 PRIVATE 已是目标角色时采用最小差异且不抖动'
           check_contains src-tauri/src/core/windows_hotspot_ics.rs 'mihomo-tun-as-ics-public-with-minimal-diff-persistent-rollback' '热点 VPN 数据面使用持久最小差异 ICS lease'
           check_not_contains src-tauri/src/core/windows_hotspot_ics.rs 'NetworkOperatorTetheringManager' '正式路径不再接管 Mobile Hotspot 生命周期'
+          check_contains .github/workflows/karing-diagnostics-once.yml 'id: linux-arm64' 'Linux ARM64 已纳入 native build matrix'
+          check_contains .github/workflows/karing-diagnostics-once.yml 'os: ubuntu-22.04-arm' 'Linux ARM64 使用 GitHub 原生 ARM64 runner'
+          check_not_contains .github/workflows/karing-diagnostics-once.yml 'deb_arch: arm64' 'Linux ARM64 不再使用 x64 multiarch apt'
 
   native-builds:
     name: 构建 ${{ matrix.name }}
@@ -266,6 +269,11 @@ jobs:
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             platform: linux
+          - id: linux-arm64
+            name: Linux ARM64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform: linux
     runs-on: ${{ matrix.os }}
     steps:
       - name: 检出本次运行对应的代码
@@ -284,7 +292,6 @@ jobs:
           key: ${{ matrix.os }}-${{ matrix.target }}
           workspaces: |
             . -> target
-            .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
 
       - name: 安装 Linux 构建依赖
@@ -367,10 +374,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: aarch64-unknown-linux-gnu
-            name: ARM64
-            arch: arm64
-            deb_arch: arm64
           - target: armv7-unknown-linux-gnueabihf
             name: ARMv7
             arch: armhf
@@ -393,10 +396,9 @@ jobs:
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
-            .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
 
-      - name: 配置 Ubuntu 多架构软件源
+      - name: 配置 Ubuntu ARMv7 多架构软件源
         shell: bash
         run: |
           set -euo pipefail
@@ -405,50 +407,38 @@ jobs:
           deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-security main multiverse universe restricted
           deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-updates main multiverse universe restricted
           deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-backports main multiverse universe restricted
-          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy main multiverse universe restricted
-          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main multiverse universe restricted
-          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main multiverse universe restricted
-          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports jammy-backports main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-security main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-updates main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-backports main multiverse universe restricted
           EOF
           if [ -f /etc/apt/sources.list ]; then
             sudo mv /etc/apt/sources.list /etc/apt/sources.list.default
           fi
           sudo mv /tmp/sources.list /etc/apt/sources.list
-          sudo dpkg --add-architecture ${{ matrix.deb_arch }}
+          sudo dpkg --add-architecture armhf
           sudo apt-get update
           sudo apt-get install -y \
-            libxslt1.1:${{ matrix.deb_arch }} \
-            libwebkit2gtk-4.1-dev:${{ matrix.deb_arch }} \
-            libayatana-appindicator3-dev:${{ matrix.deb_arch }} \
-            libssl-dev:${{ matrix.deb_arch }} \
-            librsvg2-dev:${{ matrix.deb_arch }} \
+            libxslt1.1:armhf \
+            libwebkit2gtk-4.1-dev:armhf \
+            libayatana-appindicator3-dev:armhf \
+            libssl-dev:armhf \
+            librsvg2-dev:armhf \
             patchelf
 
-      - name: 安装交叉编译器
+      - name: 安装 ARMv7 交叉编译器
         shell: bash
         run: |
           set -euo pipefail
-          if [ '${{ matrix.target }}' = 'aarch64-unknown-linux-gnu' ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-            {
-              echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc'
-              echo 'CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc'
-              echo 'CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++'
-              echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig/'
-              echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/'
-              echo 'PKG_CONFIG_ALLOW_CROSS=1'
-            } >> "$GITHUB_ENV"
-          else
-            sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
-            {
-              echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc'
-              echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc'
-              echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++'
-              echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/'
-              echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/'
-              echo 'PKG_CONFIG_ALLOW_CROSS=1'
-            } >> "$GITHUB_ENV"
-          fi
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+          {
+            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc'
+            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc'
+            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++'
+            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/'
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/'
+            echo 'PKG_CONFIG_ALLOW_CROSS=1'
+          } >> "$GITHUB_ENV"
 
       - name: 安装 pnpm
         uses: pnpm/action-setup@v6
@@ -521,7 +511,6 @@ jobs:
           key: ${{ matrix.target }}
           workspaces: |
             . -> target
-            .ci/service-ipc-source-${{ matrix.target }} -> target
           cache-all-crates: true
 
       - name: 安装 pnpm
