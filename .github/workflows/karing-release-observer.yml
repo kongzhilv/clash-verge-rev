@@ -7,8 +7,10 @@ on:
     paths:
       - '.github/workflows/karing-release-observer.yml'
       - '.github/workflows/karing-windows-hotspot-v24.yml'
+      - '.github/workflows/karing-diagnostics-once.yml'
       - '.release/karing-release-tag.txt'
       - 'scripts/check-windows-hotspot-zero-owner-v24.mjs'
+      - 'src-tauri/src/core/windows_hotspot_ics.rs'
 
 permissions:
   actions: read
@@ -172,6 +174,10 @@ jobs:
           test -f release-audit/BUILD_INFO.txt
           grep -Fqx "Commit: ${source_sha}" release-audit/BUILD_INFO.txt
           grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot lifecycle: Windows/user-owned; Karing Start/Stop mutation paths = 0' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot VPN data plane: native HNetCfg ICS minimal-diff lease; Mihomo TUN=PUBLIC, hotspot=PRIVATE' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot rollback: persistent snapshot; unchanged hotspot PRIVATE role is not bounced' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot fail-closed: ambiguous targets/unrelated PRIVATE ICS/apply verification failure refuse or rollback mutation' release-audit/BUILD_INFO.txt
 
           installer_count=$(find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
@@ -192,7 +198,8 @@ jobs:
           - WFP run: \`${wfp_run_id}\` / success
           - Hotspot v24 lifecycle/data-plane run: \`${hotspot_run_id}\` / success
           - Mobile Hotspot lifecycle: **Windows/user-owned; Karing Start/Stop paths = 0**
-          - VPN sharing data plane: **native HNetCfg ICS · Mihomo TUN PUBLIC -> Hotspot PRIVATE**
+          - VPN sharing data plane: **native HNetCfg ICS minimal-diff · Mihomo TUN PUBLIC -> Hotspot PRIVATE**
+          - rollback: **unchanged hotspot PRIVATE preserved; persistent snapshot verified**
           - WFP policy: \`${policy}\`; loopback=\`${loopback}\`; non-loopback IPv6=\`${non_loopback}\`
           - public assets: **${asset_count}**（12 installers + SHA256SUMS + BUILD_INFO）
           - SHA256: **12/12 matched**
