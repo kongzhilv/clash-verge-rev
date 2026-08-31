@@ -9,7 +9,7 @@ function mustNotContain(text, token, label) {
 }
 
 function pushEventBlock(text, label) {
-  const lines = text.split('\n')
+  const lines = text.split(/\r?\n/)
   const start = lines.findIndex((line) => line === '  push:')
   if (start < 0) throw new Error(`${label}: missing push event`)
 
