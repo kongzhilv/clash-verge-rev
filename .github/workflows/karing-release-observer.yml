@@ -5,12 +5,17 @@ on:
     branches:
       - feature/karing-style-diversion
     paths:
-      - '.github/workflows/karing-release-observer.yml'
-      - '.github/workflows/karing-windows-hotspot-v24.yml'
       - '.github/workflows/karing-diagnostics-once.yml'
-      - '.release/karing-release-tag.txt'
-      - 'scripts/check-windows-hotspot-zero-owner-v24.mjs'
-      - 'src-tauri/src/core/windows_hotspot_ics.rs'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.release/**'
 
 permissions:
   actions: read

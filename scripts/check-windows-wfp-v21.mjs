@@ -8,6 +8,26 @@ function mustNotContain(text, token, label) {
   if (text.includes(token)) throw new Error(`${label}: forbidden ${token}`)
 }
 
+function pushEventBlock(text, label) {
+  const lines = text.split('\n')
+  const start = lines.findIndex((line) => line === '  push:')
+  if (start < 0) throw new Error(`${label}: missing push event`)
+
+  let end = lines.length
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (line && !line.startsWith(' ')) {
+      end = index
+      break
+    }
+    if (/^  [A-Za-z0-9_-]+:\s*$/.test(line)) {
+      end = index
+      break
+    }
+  }
+  return lines.slice(start, end).join('\n')
+}
+
 const build = fs.readFileSync(
   'scripts/build-karing-mihomo-windows-v21.mjs',
   'utf8',
@@ -57,6 +77,31 @@ if (pkg.scripts.prebuild !== 'node scripts/prebuild-karing-v21.mjs') {
   throw new Error(
     `package prebuild is not v21 wrapper: ${pkg.scripts.prebuild}`,
   )
+}
+
+const releaseInputs = [
+  '.github/workflows/karing-diagnostics-once.yml',
+  'src/**',
+  'src-tauri/**',
+  'crates/**',
+  'scripts/**',
+  'package.json',
+  'pnpm-lock.yaml',
+  'Cargo.toml',
+  'Cargo.lock',
+  '.cargo/**',
+  '.release/**',
+]
+for (const [label, workflow] of [
+  ['WFP v21 workflow', '.github/workflows/karing-windows-wfp-v21.yml'],
+  ['Hotspot v24 workflow', '.github/workflows/karing-windows-hotspot-v24.yml'],
+  ['release observer', '.github/workflows/karing-release-observer.yml'],
+]) {
+  const workflowText = fs.readFileSync(workflow, 'utf8')
+  const pushBlock = pushEventBlock(workflowText, label)
+  for (const releaseInput of releaseInputs) {
+    mustContain(pushBlock, `- '${releaseInput}'`, `${label} release input`)
+  }
 }
 
 mustNotContain(build, 'FWP_MATCH_FLAGS_ALL_SET', 'v21 block semantics')

@@ -15,20 +15,26 @@ on:
     branches:
       - feature/karing-style-diversion
     paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
       - '.github/workflows/karing-windows-wfp-v21.yml'
-      - '.github/workflows/karing-release-observer.yml'
-      - '.release/karing-windows-mihomo-v21.json'
-      - '.release/karing-release-tag.txt'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
-      - 'scripts/build-karing-mihomo-windows-v21.mjs'
-      - 'scripts/prebuild-karing-v21.mjs'
-      - 'scripts/check-windows-wfp-v21.mjs'
-      - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.release/**'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: karing-wfp-v21-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   HUSKY: 0
