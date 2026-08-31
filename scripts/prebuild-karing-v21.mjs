@@ -25,15 +25,22 @@ function sleepSync(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
 }
 
-function disableGoHttp2(env) {
+function createGoNetworkFallbackEnv(env) {
   const settings = (env.GODEBUG ?? '')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
     .filter((item) => !item.startsWith('http2client='))
+  const currentGoProxy = env.GOPROXY?.trim()
+  const retryGoProxy =
+    !currentGoProxy || currentGoProxy === 'https://proxy.golang.org,direct'
+      ? 'https://proxy.golang.org|direct'
+      : currentGoProxy
+
   return {
     ...env,
     GODEBUG: [...settings, 'http2client=0'].join(','),
+    GOPROXY: retryGoProxy,
   }
 }
 
@@ -43,7 +50,9 @@ function runPatchedMihomoBuilder(buildTarget) {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const env =
-      attempt === 1 ? { ...process.env } : disableGoHttp2(process.env)
+      attempt === 1
+        ? { ...process.env }
+        : createGoNetworkFallbackEnv(process.env)
     const result = spawnSync(process.execPath, [builder, buildTarget], {
       cwd: process.cwd(),
       env,
@@ -69,7 +78,7 @@ function runPatchedMihomoBuilder(buildTarget) {
 
     const delay = MIHOMO_NETWORK_RETRY_DELAYS_MS[attempt - 1]
     console.warn(
-      `[retry] transient Go module/network failure while building ${buildTarget}; attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms with GODEBUG=http2client=0`,
+      `[retry] transient Go module/network failure while building ${buildTarget}; attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms with HTTP/2 disabled and proxy error fallback enabled`,
     )
     sleepSync(delay)
   }
