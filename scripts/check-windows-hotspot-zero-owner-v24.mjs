@@ -51,11 +51,15 @@ for (const marker of [
   'TargetPair',
   'Mihomo TUN connection disappeared before ICS apply',
   'Mobile Hotspot connection disappeared before ICS apply',
-  'mihomo-tun-as-ics-public-with-persistent-rollback',
+  'mihomo-tun-as-ics-public-with-minimal-diff-persistent-rollback',
   'mihomo-tun=public,windows-mobile-hotspot=private',
   'fail-closed-no-ics-mutation',
-  'original-public+lease-targets-only',
+  'minimal-diff-original-public+lease-targets-only',
   'active_lease_readback',
+  'hotspot_private_preserved_when_unchanged',
+  'RoleMutation',
+  'role_mutation',
+  'reconcile_connection_role',
 ]) {
   requireText('hotspot', marker, `native ICS VPN data-plane invariant ${marker}`)
 }
@@ -64,6 +68,9 @@ for (const marker of [
   'windows_network_rollback_scope_keeps_public_and_lease_targets_only',
   'windows_network_unrelated_private_ics_is_fail_closed',
   'windows_network_active_lease_requires_both_expected_roles',
+  'windows_network_minimal_diff_preserves_existing_hotspot_private_role',
+  'windows_network_minimal_diff_only_disables_originally_unshared_target',
+  'windows_network_saved_role_lookup_is_guid_normalized',
 ]) {
   requireText('hotspot', marker, `native ICS regression must exist ${marker}`)
 }
@@ -133,6 +140,7 @@ for (const marker of [
   'cargo check --target ${{ matrix.target }} --workspace --all-features',
   'cargo test --target x86_64-pc-windows-msvc --lib windows_network_ --all-features',
   'cargo test --target x86_64-pc-windows-msvc --lib windows_network_active_lease_requires_both_expected_roles --all-features -- --exact --nocapture',
+  'cargo test --target x86_64-pc-windows-msvc --lib windows_network_minimal_diff_preserves_existing_hotspot_private_role --all-features -- --exact --nocapture',
 ]) {
   requireText('hotspotWorkflow', marker, `v24 workflow regression ${marker}`)
 }
@@ -145,6 +153,7 @@ if (failures.length > 0) {
 
 console.log('[通过] Mobile Hotspot Start/Stop 生命周期保持 Windows/用户所有，Karing 生命周期写入 = 0')
 console.log('[通过] Karing 只管理原生 HNetCfg ICS 数据面：Mihomo TUN=PUBLIC，热点侧=PRIVATE')
+console.log('[通过] ICS 应用/回滚采用最小差异：热点已是 PRIVATE 时不重复 Enable/Disable，不制造无意义抖动')
 console.log('[通过] ICS 目标按 GUID/设备身份动态识别，不依赖 shell、本地化网卡名或固定热点网段')
 console.log('[通过] ICS 变更具备持久 rollback、读回验证、歧义/无关 PRIVATE 共享 fail-closed')
 console.log('[通过] 热点拓扑变化不触发 Core/TUN refresh；Runtime 仍只追踪稳定物理上游')
