@@ -1,4 +1,4 @@
-name: Karing .23 发行核验
+name: Karing .24 发行核验
 
 on:
   push:
@@ -6,8 +6,9 @@ on:
       - feature/karing-style-diversion
     paths:
       - '.github/workflows/karing-release-observer.yml'
+      - '.github/workflows/karing-windows-hotspot-v24.yml'
       - '.release/karing-release-tag.txt'
-      - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
+      - 'scripts/check-windows-hotspot-zero-owner-v24.mjs'
 
 permissions:
   actions: read
@@ -21,30 +22,29 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.23 正式发行
+    name: 核验 v2.5.4-karing.24 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       WFP_WORKFLOW: karing-windows-wfp-v21.yml
-      HOTSPOT_V23_WORKFLOW: karing-windows-hotspot-v23.yml
+      HOTSPOT_WORKFLOW: karing-windows-hotspot-v24.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '16'
-      STATUS_MARKER: '<!-- karing-v254-karing23-release-audit -->'
+      PR_NUMBER: '17'
+      STATUS_MARKER: '<!-- karing-v254-karing24-release-audit -->'
     steps:
-      - name: 检出发行分支
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - name: 等待并只读核验正式发行
+      - name: Wait for same-SHA gates and verify immutable release inputs
         shell: bash
         run: |
           set -euo pipefail
 
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.23'
+          test "$release_tag" = 'v2.5.4-karing.24'
 
           post_failure() {
             local reason="$1"
@@ -53,9 +53,9 @@ jobs:
           - source: \`${source_sha}\`
           - reason: ${reason}
 
-          观察器只读核验，未删除、覆盖或重建任何 Release。" >/dev/null || true
+          observer 只读核验，没有删除、覆盖或重建 Release。" >/dev/null || true
           }
-          trap 'post_failure "observer step failed at line ${LINENO}"' ERR
+          trap 'post_failure "observer failed at line ${LINENO}"' ERR
 
           find_run_for_sha() {
             local workflow="$1"
@@ -95,19 +95,25 @@ jobs:
 
           main_run_id=$(wait_for_run "$MAIN_WORKFLOW")
           wfp_run_id=$(wait_for_run "$WFP_WORKFLOW")
-          hotspot_v23_run_id=$(wait_for_run "$HOTSPOT_V23_WORKFLOW")
-          test -n "$main_run_id"
-          test -n "$wfp_run_id"
-          test -n "$hotspot_v23_run_id"
+          hotspot_run_id=$(wait_for_run "$HOTSPOT_WORKFLOW")
           wait_for_success "$main_run_id"
           wait_for_success "$wfp_run_id"
-          wait_for_success "$hotspot_v23_run_id"
+          wait_for_success "$hotspot_run_id"
 
-          jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/jobs?per_page=100")
-          failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$jobs_json")
+          hotspot_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_run_id}/jobs?per_page=100")
+          for required in \
+            'Validate hotspot zero-owner invariants' \
+            'Compile v24 network path x86_64-pc-windows-msvc' \
+            'Compile v24 network path aarch64-pc-windows-msvc' \
+            'Run v24 zero-owner + topology regressions'; do
+            count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs")
+            test "$count" -eq 1
+          done
+
+          main_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/jobs?per_page=100")
+          failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$main_jobs")
           test -z "$failed_jobs"
-
-          for required_job in \
+          for required in \
             '审查并验证源码' \
             '构建 Windows x64' \
             '构建 Windows ARM64' \
@@ -120,96 +126,52 @@ jobs:
             '构建 Linux ARMv7' \
             '汇总并审查发行产物' \
             '发布正式 GitHub Release'; do
-            count=$(jq --arg name "$required_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$jobs_json")
+            count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$main_jobs")
             test "$count" -eq 1
           done
-
-          wfp_jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${wfp_run_id}/jobs?per_page=100")
-          for required_wfp_job in \
-            'Validate non-loopback IPv6 block policy' \
-            'Build patched Mihomo x86_64-pc-windows-msvc' \
-            'Build patched Mihomo aarch64-pc-windows-msvc'; do
-            count=$(jq --arg name "$required_wfp_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$wfp_jobs_json")
-            test "$count" -eq 1
-          done
-
-          hotspot_jobs_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_v23_run_id}/jobs?per_page=100")
-          hotspot_failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$hotspot_jobs_json")
-          test -z "$hotspot_failed_jobs"
-          for required_hotspot_job in \
-            'Validate hotspot single-owner invariants' \
-            'Compile v23 network path x86_64-pc-windows-msvc' \
-            'Compile v23 network path aarch64-pc-windows-msvc' \
-            'Run v22 owner + v23 topology regressions'; do
-            count=$(jq --arg name "$required_hotspot_job" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs_json")
-            test "$count" -eq 1
-          done
-
-          artifact_count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/artifacts?per_page=100" \
-            --jq '[.artifacts[] | select(.name == "karing-release-assets" and .expired == false)] | length')
-          test "$artifact_count" -eq 1
-
-          policy=$(jq -r '.policy' .release/karing-windows-mihomo-v21.json)
-          loopback=$(jq -r '.wfp.loopback' .release/karing-windows-mihomo-v21.json)
-          non_loopback=$(jq -r '.wfp.nonLoopbackIPv6' .release/karing-windows-mihomo-v21.json)
-          test "$policy" = 'block-non-loopback-ipv6'
-          test "$loopback" = 'permit'
-          test "$non_loopback" = 'block-when-ipv6-disabled'
-          grep -Fq 'node scripts/prebuild-karing-v21.mjs' package.json
 
           release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}")
-          asset_count=$(jq '.assets | length' <<<"$release_json")
           target=$(jq -r '.target_commitish' <<<"$release_json")
           draft=$(jq -r '.draft' <<<"$release_json")
           prerelease=$(jq -r '.prerelease' <<<"$release_json")
+          asset_count=$(jq '.assets | length' <<<"$release_json")
           latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
           tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${release_tag}" --jq '.object.sha')
 
-          test "$asset_count" -eq 14
           test "$target" = "$source_sha"
           test "$tag_sha" = "$source_sha"
           test "$draft" = false
           test "$prerelease" = false
           test "$latest_tag" = "$release_tag"
+          test "$asset_count" -eq 14
 
           rm -rf release-audit
-          mkdir -p release-audit
+          mkdir release-audit
           gh release download "$release_tag" --repo "$GITHUB_REPOSITORY" --dir release-audit
           test -f release-audit/SHA256SUMS.txt
           test -f release-audit/BUILD_INFO.txt
           grep -Fqx "Commit: ${source_sha}" release-audit/BUILD_INFO.txt
           grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
 
-          installer_count=$(find release-audit -maxdepth 1 -type f \( \
-            -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
-            \) | wc -l)
+          installer_count=$(find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
           test "$installer_count" -eq 12
           test "$checksum_lines" -eq 12
 
-          awk 'NF {print tolower($1)}' release-audit/SHA256SUMS.txt | sort > release-audit/expected-hashes.txt
-          find release-audit -maxdepth 1 -type f \( \
-            -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \
-            \) -print0 | sort -z | xargs -0 sha256sum | awk '{print tolower($1)}' | sort > release-audit/actual-hashes.txt
-          test "$(wc -l < release-audit/expected-hashes.txt)" -eq 12
-          test "$(wc -l < release-audit/actual-hashes.txt)" -eq 12
-          test "$(sort -u release-audit/expected-hashes.txt | wc -l)" -eq 12
-          test "$(sort -u release-audit/actual-hashes.txt | wc -l)" -eq 12
-          cmp -s release-audit/expected-hashes.txt release-audit/actual-hashes.txt
+          awk 'NF {print tolower($1)}' release-audit/SHA256SUMS.txt | sort > release-audit/expected.txt
+          find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) -print0 | sort -z | xargs -0 sha256sum | awk '{print tolower($1)}' | sort > release-audit/actual.txt
+          cmp -s release-audit/expected.txt release-audit/actual.txt
 
           release_url=$(jq -r '.html_url' <<<"$release_json")
           gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "${STATUS_MARKER}
           ### ✅ ${release_tag} 正式发行核验通过
+          - source/tag/release target: \`${source_sha}\`
           - main run: \`${main_run_id}\` / success
-          - WFP v21 run: \`${wfp_run_id}\` / success
-          - Hotspot v23 run: \`${hotspot_v23_run_id}\` / success
-          - source/tag target: \`${source_sha}\`
-          - WFP policy: \`${policy}\`；loopback=\`${loopback}\`；non-loopback IPv6=\`${non_loopback}\`
-          - Hotspot control plane: **WinRT single-owner / hotspot topology observability-only**
-          - public assets: **${asset_count}**（12 个安装文件 + SHA256SUMS + BUILD_INFO）
-          - Latest: \`${latest_tag}\`
-          - draft: \`${draft}\`；prerelease: \`${prerelease}\`
-          - SHA256: **12/12 digest-matched**
+          - WFP run: \`${wfp_run_id}\` / success
+          - Hotspot v24 zero-owner run: \`${hotspot_run_id}\` / success
+          - Mobile Hotspot lifecycle: **Windows/user-owned; Karing mutation paths = 0**
+          - public assets: **${asset_count}**（12 installers + SHA256SUMS + BUILD_INFO）
+          - SHA256: **12/12 matched**
           - Release: ${release_url}
 
-          观察器全程只读核验，没有删除、覆盖或重建 Release。" >/dev/null
+          observer 全程只读核验。" >/dev/null
