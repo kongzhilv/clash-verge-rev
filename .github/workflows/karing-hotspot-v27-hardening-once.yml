@@ -1,4 +1,4 @@
-# one-shot trigger: v27 fail-closed restore hardening
+# one-shot trigger: v27 fail-closed restore hardening (retry exact monitor marker)
 name: Karing one-shot Hotspot v27 restore hardening
 
 on:
@@ -197,7 +197,7 @@ jobs:
               '            "original_upstream_guid": original_upstream_guid,\n            "saved_public_visible": saved_public_exists,\n            "saved_hnetcfg_roles": &original,\n',
           ))
           replacements.append((
-              '            "upstream_restore_identity": "NetworkInformation.preferred-profile-adapter-guid",\n',
+              '            "upstream_restore_identity": "current-stable-physical-default-route-guid;snapshot-guid-fallback",\n',
               '            "upstream_restore_identity": "stable-native-physical-default-route-guid",\n',
           ))
           replacements.append((
