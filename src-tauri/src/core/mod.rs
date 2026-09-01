@@ -17,6 +17,7 @@ pub mod win_uwp;
 #[cfg(target_os = "windows")]
 pub mod windows_deep_network_diagnostics;
 #[cfg(target_os = "windows")]
+#[path = "windows_hotspot_ics_v27.rs"]
 pub mod windows_hotspot_ics;
 #[cfg(target_os = "windows")]
 pub mod windows_network_diagnostics;
