@@ -1,0 +1,9 @@
+Karing v2.5.4-karing.26 forwarding-safe release audit
+
+Purpose: bind the main desktop release, Windows WFP v21, Windows Mobile Hotspot v26, and release observer workflows to the same source SHA after the v26 whitespace audit fix.
+
+Required semantics:
+- WinRT/Wi-Fi Direct Mobile Hotspot remains Windows-owned; Karing HNetCfg mutation = 0.
+- Physical ForwardingEnabled changes are stable Runtime routing state.
+- ForwardingEnabled=true routes only final fake-IP CIDR(s) through TUN; no TUN default route.
+- Legacy Hosted Network retains HNetCfg compatibility and rollback diagnostics.
