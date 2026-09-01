@@ -1,0 +1,98 @@
+name: Karing v26 repair executor
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/scripts/karing_v26_repair.py'
+      - '.github/workflows/karing-v26-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: karing-v26-repair-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    name: Apply, review and publish v26 source repair
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust formatter
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          components: rustfmt
+
+      - name: Apply deterministic repair
+        run: python3 .github/scripts/karing_v26_repair.py
+
+      - name: Format Rust and reject formatting drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --manifest-path ./src-tauri/Cargo.toml --all
+          cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
+
+      - name: Run v26 static safety gate
+        run: node scripts/check-windows-hotspot-zero-owner-v26.mjs
+
+      - name: Validate release workflow syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color -oneline \
+            .github/workflows/karing-diagnostics-once.yml \
+            .github/workflows/karing-release-observer.yml \
+            .github/workflows/karing-windows-hotspot-v26.yml
+
+      - name: Assert v26 release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tr -d '\r\n' < .release/karing-release-tag.txt)" = 'v2.5.4-karing.26'
+          grep -Fq 'physical-forwarding-mode-changed' src-tauri/src/core/windows_network_diagnostics.rs
+          grep -Fq 'apply_forwarding_safe_tun_route' src-tauri/src/utils/windows_network.rs
+          grep -Fq 'windows-owned-hotspot-no-hnetcfg-mutation' src-tauri/src/core/windows_hotspot_ics.rs
+          grep -Fq 'EVENT_E_ALL_SUBSCRIBERS_FAILED' src-tauri/src/core/windows_hotspot_ics.rs
+
+      - name: Remove one-shot repair machinery
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/scripts/karing_v26_repair.py
+          rm -f .github/workflows/karing-v26-repair.yml
+
+      - name: Review final diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+          test -n "$(git status --porcelain)"
+          test ! -e .github/scripts/karing_v26_repair.py
+          test ! -e .github/workflows/karing-v26-repair.yml
+
+      - name: Commit and push final v26 candidate
+        env:
+          PUSH_TOKEN: ${{ secrets.KARING_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PUSH_TOKEN"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(windows): make hotspot TUN forwarding-safe for karing.26'
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:feature/karing-style-diversion
