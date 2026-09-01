@@ -24,18 +24,16 @@ const source = Object.fromEntries(
   ),
 )
 const hotspotProduction = source.hotspot.split('\n#[cfg(test)]', 1)[0]
-
 const failures = []
+
 const requireText = (key, text, label) => {
   if (!source[key].includes(text)) failures.push(`${label}: missing ${text}`)
 }
-const forbidText = (key, text, label) => {
-  if (source[key].includes(text))
-    failures.push(`${label}: still contains ${text}`)
-}
-const forbidHotspotProductionText = (text, label) => {
-  if (hotspotProduction.includes(text))
+
+const forbidText = (text, label) => {
+  if (hotspotProduction.includes(text)) {
     failures.push(`${label}: production code still contains ${text}`)
+  }
 }
 
 requireText(
@@ -49,15 +47,8 @@ requireText(
   'runtime activates the v27 Mobile Hotspot ICS implementation',
 )
 
-// Preserve the mature v26 host-route invariants: native-only discovery, bounded
-// topology stabilization, physical upstream ownership and forwarding-safe TUN
-// routing. v27 must add hotspot compatibility without weakening these guards.
 for (const [key, marker, label] of [
-  [
-    'manager',
-    'prepare_windows_tun_runtime_for_start',
-    'pre-start Windows TUN safety remains active',
-  ],
+  ['manager', 'prepare_windows_tun_runtime_for_start', 'pre-start TUN safety remains active'],
   [
     'manager',
     'tokio::task::spawn_blocking(detect_stable_upstream)',
@@ -71,18 +62,10 @@ for (const [key, marker, label] of [
   [
     'lifecycle',
     'self.prepare_windows_tun_runtime_for_start().await?;',
-    'route/outbound bindings are installed before core startup',
+    'route and outbound bindings are installed before core startup',
   ],
-  [
-    'windowsNetwork',
-    'GetIpForwardTable2',
-    'native route inventory remains enabled',
-  ],
-  [
-    'windowsNetwork',
-    'GetIfTable2',
-    'native interface inventory remains enabled',
-  ],
+  ['windowsNetwork', 'GetIpForwardTable2', 'native route inventory remains enabled'],
+  ['windowsNetwork', 'GetIfTable2', 'native interface inventory remains enabled'],
   [
     'windowsNetwork',
     'GetUnicastIpAddressTable',
@@ -96,12 +79,12 @@ for (const [key, marker, label] of [
   [
     'windowsNetwork',
     'const STABLE_SAMPLES: usize = 6;',
-    'physical upstream requires stable samples',
+    'physical upstream still requires stable samples',
   ],
   [
     'windowsNetwork',
     'const MAX_SAMPLES: usize = 24;',
-    'physical upstream stabilization stays bounded',
+    'physical upstream stabilization remains bounded',
   ],
   [
     'windowsNetwork',
@@ -117,7 +100,7 @@ for (const [key, marker, label] of [
   [
     'windowsNetwork',
     'tun.insert(Value::from("auto-route"), Value::from(false));',
-    'non-fake-IP forwarding fails closed',
+    'non-fake-IP forwarding remains fail-closed',
   ],
   [
     'windowsManagedInterface',
@@ -172,84 +155,63 @@ for (const forbidden of [
   'std::process::Command',
   '192.168.137.0/24',
 ]) {
-  forbidText(
-    'windowsNetwork',
-    forbidden,
-    'host TUN safety remains native and identity-driven',
-  )
+  if (source.windowsNetwork.includes(forbidden)) {
+    failures.push(`host TUN safety remains native: still contains ${forbidden}`)
+  }
 }
 
-// v27 compatibility topology. Runtime identity is GUID-based and the observed
-// adapter aliases are diagnostics only; no SSID, ifIndex or hotspot subnet is a
-// behavioral input. Ambiguous discovery must fail closed.
 for (const [marker, label] of [
-  ['GetIfTable2', 'adapter inventory uses native IP Helper'],
+  ['GetIfTable2', 'hotspot adapter inventory uses native IP Helper'],
   ['GetUnicastIpAddressTable', 'hotspot addressing uses native IP Helper'],
-  ['InterfaceGuid', 'adapter identity is GUID based'],
-  [
-    'target-identification-ambiguous',
-    'ambiguous adapter discovery fails closed',
-  ],
-  [
-    'is_mobile_hotspot_adapter',
-    'modern Wi-Fi Direct/Mobile Hotspot is eligible',
-  ],
+  ['InterfaceGuid', 'hotspot adapter identity remains GUID based'],
+  ['target-identification-ambiguous', 'ambiguous discovery remains fail-closed'],
+  ['is_mobile_hotspot_adapter', 'modern Mobile Hotspot remains eligible'],
   [
     'is_windows_mobile_hotspot_identity',
-    'Windows-owned hotspot is tracked for safe restore',
+    'Windows-owned Mobile Hotspot remains tracked',
   ],
   [
     'NetworkInformation::GetInternetConnectionProfile',
-    'original upstream is captured dynamically',
+    'physical Internet adapter is discovered dynamically',
   ],
-  ['NetworkAdapterId', 'original upstream is persisted by adapter GUID'],
-  [
-    'EnableSharing(ICSSHARINGTYPE_PRIVATE)',
-    'active hotspot is made ICS PRIVATE',
-  ],
-  [
-    'EnableSharing(ICSSHARINGTYPE_PUBLIC)',
-    'Mihomo TUN is made ICS PUBLIC',
-  ],
+  ['NetworkAdapterId', 'physical upstream is persisted by adapter GUID'],
+  ['EnableSharing(ICSSHARINGTYPE_PRIVATE)', 'active hotspot is made ICS PRIVATE'],
+  ['EnableSharing(ICSSHARINGTYPE_PUBLIC)', 'Mihomo TUN is made ICS PUBLIC'],
   ['save_snapshot', 'original ICS state is persisted before mutation'],
   [
     'snapshot.version != 2 && snapshot.version != 3',
-    'v20/v26 snapshots remain upgrade-readable',
+    'historical lease snapshots remain upgrade-readable',
   ],
   [
     'restore dynamically captured Mobile Hotspot upstream as PUBLIC',
-    'hidden Windows hotspot state has a dynamic restore fallback',
+    'hidden Windows hotspot state retains a dynamic restore fallback',
   ],
   [
     'preserve Windows Mobile Hotspot PRIVATE side during restore',
-    'Windows-owned hotspot is not torn down on restore',
+    'restore does not tear down the Windows-owned hotspot side',
   ],
-  ['restore_snapshot_unlocked', 'ICS state has a rollback path'],
+  ['restore_snapshot_unlocked', 'ICS state retains a rollback path'],
   ['rollback-immediately', 'failed apply rolls back immediately'],
-  ['lease_roles_are_desired', 'post-apply role readback is verified'],
-  ['restore_now', 'shutdown/TUN-off explicit restore remains available'],
+  ['lease_roles_are_desired', 'post-apply role readback remains verified'],
+  ['restore_now', 'shutdown and TUN-off explicit restore remains available'],
   [
     'const LOOP_INTERVAL: Duration = Duration::from_secs(2);',
-    'hotspot topology is monitored',
+    'hotspot topology remains monitored',
   ],
   [
     'const STABLE_SAMPLES: u8 = 3;',
     'hotspot topology changes require stable observations',
   ],
+  ['hardcoded_upstream_interface', 'diagnostics certify dynamic upstream behavior'],
+  ['hardcoded_hotspot_subnet', 'diagnostics certify dynamic hotspot behavior'],
   [
-    'hardcoded_upstream_interface',
-    'diagnostics certify dynamic upstream behavior',
-  ],
-  [
-    'hardcoded_hotspot_subnet',
-    'diagnostics certify dynamic hotspot behavior',
+    'windows-hotspot-ics-lease-v20.json',
+    'v27 reuses the existing persistent lease snapshot path',
   ],
 ]) {
   requireText('hotspot', marker, label)
 }
 
-// Only production code is checked here. Test fixtures are allowed to name known
-// bad examples so the checker itself does not become self-referential.
 for (const forbidden of [
   'CMCC-303-5G',
   '192.168.137.0/24',
@@ -265,18 +227,13 @@ for (const forbidden of [
   'windows-owned-hotspot-no-hnetcfg-mutation',
   'expect("checked non-empty")',
 ]) {
-  forbidHotspotProductionText(forbidden, 'v27 remains generic and release-safe')
+  forbidText(forbidden, 'v27 remains generic and release-safe')
 }
 
 requireText(
-  'hotspot',
-  'windows-hotspot-ics-lease-v20.json',
-  'v27 reuses the existing persistent lease snapshot path',
-)
-requireText(
   'manifest',
   '"Networking_Connectivity"',
-  'WinRT connectivity API needed for dynamic upstream GUID is enabled',
+  'dynamic upstream GUID discovery feature remains enabled',
 )
 requireText(
   'utils',
@@ -291,14 +248,7 @@ if (failures.length) {
 }
 
 console.log('[windows-tun-safety-v27] OK')
-console.log('[通过] 主机侧 v26 native route/forwarding-safe 不变量保留')
-console.log(
-  '[通过] 现代 Mobile Hotspot 动态 GUID 识别并切换为 PRIVATE，Mihomo TUN 为 PUBLIC',
-)
-console.log(
-  '[通过] HNetCfg 初始隐藏热点角色时，按 preferred Internet adapter GUID 动态恢复上游',
-)
+console.log('[通过] v26 native route/forwarding-safe 不变量保留')
+console.log('[通过] Mobile Hotspot=ICS PRIVATE，Mihomo TUN=ICS PUBLIC')
+console.log('[通过] 动态 GUID 识别、持久快照、readback、回滚和恢复均受门禁保护')
 console.log('[通过] 无 SSID / 固定 ifIndex / 固定热点子网 / PowerShell 路径')
-console.log(
-  '[通过] 持久快照、readback、立即回滚、TUN/退出恢复与拓扑监察保留',
-)
