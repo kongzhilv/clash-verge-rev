@@ -289,6 +289,53 @@ fn role_mutation(current: Option<SharingRole>, desired: Option<SharingRole>) -> 
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LeaseApplyOrder {
+    TunPublicOnly,
+    HotspotPrivateThenTunPublic,
+}
+
+impl LeaseApplyOrder {
+    fn label(self) -> &'static str {
+        match self {
+            Self::TunPublicOnly => "tun-public-only-existing-hotspot-private",
+            Self::HotspotPrivateThenTunPublic => "hotspot-private-then-tun-public",
+        }
+    }
+}
+
+fn lease_apply_order(original: &[SavedRole], pair: &TargetPair) -> LeaseApplyOrder {
+    if role_of_guid(original, pair.hotspot.guid) == Some(SharingRole::Private) {
+        LeaseApplyOrder::TunPublicOnly
+    } else {
+        LeaseApplyOrder::HotspotPrivateThenTunPublic
+    }
+}
+
+fn sharing_role_name(role: SharingRole) -> &'static str {
+    match role {
+        SharingRole::Public => "public",
+        SharingRole::Private => "private",
+    }
+}
+
+fn hresult_symbol(raw: i32) -> &'static str {
+    match raw as u32 {
+        0x80004004 => "E_ABORT",
+        0x80004005 => "E_FAIL",
+        0x80070057 => "E_INVALIDARG",
+        0x80004002 => "E_NOINTERFACE",
+        0x80004001 => "E_NOTIMPL",
+        0x8007000E => "E_OUTOFMEMORY",
+        0x80004003 => "E_POINTER",
+        _ => "UNKNOWN_HRESULT",
+    }
+}
+
+fn error_chain_strings(error: &anyhow::Error) -> Vec<String> {
+    error.chain().map(|item| item.to_string()).collect()
+}
+
 fn snapshot_path() -> Result<PathBuf> {
     Ok(dirs::app_home_dir()?.join(SNAPSHOT_FILE))
 }
@@ -394,15 +441,27 @@ fn reconcile_connection_role(
     let state = connection_log(manager, connection)?;
     let mutation = role_mutation(state.sharing_role, desired);
     let configuration = sharing_configuration(manager, connection)?;
+    let desired_name = desired.map(sharing_role_name).unwrap_or("disabled");
+    let current_name = state.sharing_role.map(sharing_role_name).unwrap_or("disabled");
 
     match mutation {
         RoleMutation::None => Ok(false),
         RoleMutation::Enable(role) => {
-            set_role(&configuration, role).with_context(|| context)?;
+            set_role(&configuration, role).with_context(|| {
+                format!(
+                    "{context}; adapter_name={}; device_name={}; guid={}; current_role={current_name}; desired_role={desired_name}",
+                    state.name, state.device_name, state.guid
+                )
+            })?;
             Ok(true)
         }
         RoleMutation::Disable => {
-            unsafe { configuration.DisableSharing() }.with_context(|| context)?;
+            unsafe { configuration.DisableSharing() }.with_context(|| {
+                format!(
+                    "{context}; adapter_name={}; device_name={}; guid={}; current_role={current_name}; desired_role={desired_name}",
+                    state.name, state.device_name, state.guid
+                )
+            })?;
             Ok(true)
         }
     }
@@ -494,13 +553,27 @@ fn lease_owned_original_roles(original: &[SavedRole], pair: &TargetPair) -> Vec<
 }
 
 fn set_role(configuration: &INetSharingConfiguration, role: SharingRole) -> Result<()> {
-    unsafe {
+    let result = unsafe {
         match role {
             SharingRole::Public => configuration.EnableSharing(ICSSHARINGTYPE_PUBLIC),
             SharingRole::Private => configuration.EnableSharing(ICSSHARINGTYPE_PRIVATE),
         }
+    };
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            let raw = error.code().0;
+            bail!(
+                "INetSharingConfiguration::EnableSharing failed; role={}; hresult=0x{:08X}; hresult_i32={}; symbol={}; windows_error={}",
+                sharing_role_name(role),
+                raw as u32,
+                raw,
+                hresult_symbol(raw),
+                error
+            )
+        }
     }
-    .context("INetSharingConfiguration::EnableSharing failed")
 }
 
 fn create_managers() -> Result<(ComApartment, INetSharingManager, INetConnectionManager)> {
@@ -657,13 +730,24 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
         bail!("refusing to replace an unrelated existing PRIVATE ICS connection");
     }
 
-    // Resolve both COM connections before persisting rollback state. If either target
-    // vanished during the stability window, no mutation has happened and no stale
-    // snapshot is left behind for the next reconcile pass to misinterpret.
     let tun = find_connection(&sharing_manager, &connections, pair.tun.guid)?
         .ok_or_else(|| anyhow!("Mihomo TUN connection disappeared before ICS apply"))?;
     let hotspot = find_connection(&sharing_manager, &connections, pair.hotspot.guid)?
         .ok_or_else(|| anyhow!("Mobile Hotspot connection disappeared before ICS apply"))?;
+
+    let apply_order = lease_apply_order(&original, pair);
+    diagnostics::info(
+        "windows-hotspot-ics",
+        "apply-plan",
+        json!({
+            "order": apply_order.label(),
+            "hotspot_role_before": role_of_guid(&original, pair.hotspot.guid).map(sharing_role_name),
+            "tun_role_before": role_of_guid(&original, pair.tun.guid).map(sharing_role_name),
+            "private_settle_ms": 500,
+            "public_settle_ms": 250,
+            "reason": "prepare-private-side-before-public-when-hnetcfg-does-not-expose-existing-mobile-hotspot-private-role",
+        }),
+    );
 
     let snapshot = SavedSharingState {
         version: 2,
@@ -678,22 +762,35 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
     save_snapshot(path, &snapshot)?;
 
     let apply_result = (|| -> Result<(bool, bool)> {
+        let hotspot_changed = match apply_order {
+            LeaseApplyOrder::TunPublicOnly => false,
+            LeaseApplyOrder::HotspotPrivateThenTunPublic => {
+                let changed = reconcile_connection_role(
+                    &sharing_manager,
+                    &hotspot,
+                    Some(SharingRole::Private),
+                    "apply Mobile Hotspot PRIVATE ICS role before PUBLIC",
+                )?;
+                if changed {
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+                changed
+            }
+        };
+
         let tun_changed = reconcile_connection_role(
             &sharing_manager,
             &tun,
             Some(SharingRole::Public),
-            "apply Mihomo TUN PUBLIC ICS role",
+            "apply Mihomo TUN PUBLIC ICS role after PRIVATE preparation",
         )?;
-        let hotspot_changed = reconcile_connection_role(
-            &sharing_manager,
-            &hotspot,
-            Some(SharingRole::Private),
-            "apply Mobile Hotspot PRIVATE ICS role",
-        )?;
+        if tun_changed {
+            std::thread::sleep(Duration::from_millis(250));
+        }
 
         let after = current_shared_roles(&sharing_manager, &connections)?;
         if !lease_roles_are_desired(&after, pair) {
-            bail!("ICS role verification failed after minimal-diff apply");
+            bail!("ICS role verification failed after state-aware minimal-diff apply");
         }
         Ok((tun_changed, hotspot_changed))
     })();
@@ -706,6 +803,11 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
                 "apply-verification-failed",
                 json!({
                     "error": error.to_string(),
+                    "error_full": format!("{error:#}"),
+                    "error_chain": error_chain_strings(&error),
+                    "apply_order": apply_order.label(),
+                    "tun_guid": guid_string(pair.tun.guid),
+                    "hotspot_guid": guid_string(pair.hotspot.guid),
                     "action": "restore-original-ics-immediately",
                 }),
             );
@@ -733,6 +835,7 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
                 "role": "private",
                 "mutated": hotspot_changed,
             },
+            "apply_order": apply_order.label(),
             "originally_shared": original,
             "snapshot_file_present": true,
             "rollback_scope": "minimal-diff-original-public+lease-targets-only",
@@ -942,6 +1045,8 @@ async fn monitor_loop() {
                         "reconcile-failed",
                         json!({
                             "error": message,
+                            "error_full": format!("{error:#}"),
+                            "error_chain": error_chain_strings(&error),
                             "stable_signature": current_signature,
                             "snapshot_file_present": path.exists(),
                             "action": "fail-closed-or-rollback",
@@ -1093,4 +1198,39 @@ mod tests {
             Some(SharingRole::Private)
         );
     }
+
+    #[test]
+    fn windows_network_unshared_hotspot_prepares_private_before_public() {
+        let pair = pair();
+        let original = Vec::<SavedRole>::new();
+        assert_eq!(
+            super::lease_apply_order(&original, &pair),
+            super::LeaseApplyOrder::HotspotPrivateThenTunPublic
+        );
+        assert_eq!(
+            super::LeaseApplyOrder::HotspotPrivateThenTunPublic.label(),
+            "hotspot-private-then-tun-public"
+        );
+    }
+
+    #[test]
+    fn windows_network_existing_hotspot_private_skips_private_mutation() {
+        let pair = pair();
+        let original = vec![SavedRole {
+            guid: format!("{:?}", pair.hotspot.guid),
+            role: SharingRole::Private,
+        }];
+        assert_eq!(
+            super::lease_apply_order(&original, &pair),
+            super::LeaseApplyOrder::TunPublicOnly
+        );
+    }
+
+    #[test]
+    fn windows_network_hresult_symbols_cover_enable_sharing_failures() {
+        assert_eq!(super::hresult_symbol(0x80004002u32 as i32), "E_NOINTERFACE");
+        assert_eq!(super::hresult_symbol(0x80004005u32 as i32), "E_FAIL");
+        assert_eq!(super::hresult_symbol(0x80070057u32 as i32), "E_INVALIDARG");
+    }
+
 }

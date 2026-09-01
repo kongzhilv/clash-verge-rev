@@ -1,4 +1,4 @@
-name: Karing .24 发行核验
+name: Karing .25 发行核验
 
 on:
   push:
@@ -29,16 +29,16 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.24 正式发行
+    name: 核验 v2.5.4-karing.25 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       WFP_WORKFLOW: karing-windows-wfp-v21.yml
-      HOTSPOT_WORKFLOW: karing-windows-hotspot-v24.yml
+      HOTSPOT_WORKFLOW: karing-windows-hotspot-v25.yml
       RELEASE_BRANCH: feature/karing-style-diversion
-      PR_NUMBER: '17'
-      STATUS_MARKER: '<!-- karing-v254-karing24-release-audit -->'
+      PR_NUMBER: '1'
+      STATUS_MARKER: '<!-- karing-v254-karing25-release-audit -->'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,7 +51,7 @@ jobs:
 
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.24'
+          test "$release_tag" = 'v2.5.4-karing.25'
 
           post_failure() {
             local reason="$1"
@@ -110,9 +110,9 @@ jobs:
           hotspot_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_run_id}/jobs?per_page=100")
           for required in \
             'Validate hotspot lifecycle + native ICS invariants' \
-            'Compile v24 network path x86_64-pc-windows-msvc' \
-            'Compile v24 network path aarch64-pc-windows-msvc' \
-            'Run v24 lifecycle + ICS + topology regressions'; do
+            'Compile v25 network path x86_64-pc-windows-msvc' \
+            'Compile v25 network path aarch64-pc-windows-msvc' \
+            'Run v25 lifecycle + ICS + topology regressions'; do
             count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs")
             test "$count" -eq 1
           done
@@ -181,6 +181,8 @@ jobs:
           grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows Mobile Hotspot lifecycle: Windows/user-owned; Karing Start/Stop mutation paths = 0' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows Mobile Hotspot VPN data plane: native HNetCfg ICS minimal-diff lease; Mihomo TUN=PUBLIC, hotspot=PRIVATE' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot ICS apply order: preserve existing PRIVATE; otherwise hotspot PRIVATE before Mihomo PUBLIC' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot ICS diagnostics: EnableSharing HRESULT/symbol + full error chain retained' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows Mobile Hotspot rollback: persistent snapshot; unchanged hotspot PRIVATE role is not bounced' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows Mobile Hotspot fail-closed: ambiguous targets/unrelated PRIVATE ICS/apply verification failure refuse or rollback mutation' release-audit/BUILD_INFO.txt
 
@@ -201,7 +203,7 @@ jobs:
           - source/tag/release target: \`${source_sha}\`
           - main run: \`${main_run_id}\` / success
           - WFP run: \`${wfp_run_id}\` / success
-          - Hotspot v24 lifecycle/data-plane run: \`${hotspot_run_id}\` / success
+          - Hotspot v25 lifecycle/data-plane run: \`${hotspot_run_id}\` / success
           - Mobile Hotspot lifecycle: **Windows/user-owned; Karing Start/Stop paths = 0**
           - VPN sharing data plane: **native HNetCfg ICS minimal-diff · Mihomo TUN PUBLIC -> Hotspot PRIVATE**
           - rollback: **unchanged hotspot PRIVATE preserved; persistent snapshot verified**

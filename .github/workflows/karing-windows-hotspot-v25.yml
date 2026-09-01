@@ -1,0 +1,143 @@
+name: Karing Windows Hotspot v25 lifecycle/data-plane safety
+run-name: Karing Windows Mobile Hotspot v25 生命周期/数据面审查
+
+on:
+  pull_request:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - 'src-tauri/src/core/windows_hotspot_ics.rs'
+      - 'src-tauri/src/core/windows_network_diagnostics.rs'
+      - 'src-tauri/src/utils/windows_network.rs'
+      - 'src-tauri/src/feat/window.rs'
+      - 'scripts/check-windows-hotspot-v22.mjs'
+      - 'scripts/check-windows-hotspot-single-owner-v23.mjs'
+      - 'scripts/check-windows-hotspot-zero-owner-v25.mjs'
+      - '.github/workflows/karing-windows-hotspot-v22.yml'
+      - '.github/workflows/karing-windows-hotspot-v23.yml'
+      - '.github/workflows/karing-windows-hotspot-v25.yml'
+      - '.release/karing-release-tag.txt'
+  push:
+    branches:
+      - fix/karing-windows-hotspot-v25-zero-owner
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - '.github/workflows/karing-windows-hotspot-v25.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: karing-hotspot-v25-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUSKY: 0
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  static-safety:
+    name: Validate hotspot lifecycle + native ICS invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+      - name: Run v25 lifecycle/data-plane safety gate
+        run: node scripts/check-windows-hotspot-zero-owner-v25.mjs
+      - name: Reject whitespace errors
+        run: git diff --check HEAD^
+
+  windows-compile:
+    name: Compile v25 network path ${{ matrix.target }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+    env:
+      RUSTFLAGS: '-D warnings'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build matching service for target
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+      - name: Prepare pinned Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing-hotspot-v25-v3
+          key: windows-${{ matrix.target }}
+          workspaces: |
+            . -> target
+      - name: Cargo check v25 hotspot/network path
+        working-directory: src-tauri
+        run: cargo check --target ${{ matrix.target }} --workspace --all-features
+
+  windows-unit-tests:
+    name: Run v25 lifecycle + ICS + topology regressions
+    needs:
+      - static-safety
+      - windows-compile
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: x86_64-pc-windows-msvc
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/build-matching-service.mjs x86_64-pc-windows-msvc
+      - run: pnpm run prebuild x86_64-pc-windows-msvc
+      - name: Test physical-upstream watcher and native ICS lease suite
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_ --all-features -- --nocapture
+      - name: Prove native ICS role verification test is executed
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_active_lease_requires_both_expected_roles --all-features -- --exact --nocapture
+      - name: Prove unchanged hotspot PRIVATE role is never bounced
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_minimal_diff_preserves_existing_hotspot_private_role --all-features -- --exact --nocapture
+      - name: Prove unshared hotspot is prepared PRIVATE before PUBLIC
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_unshared_hotspot_prepares_private_before_public --all-features -- --exact --nocapture
+      - name: Prove EnableSharing HRESULT diagnostics are preserved
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_hresult_symbols_cover_enable_sharing_failures --all-features -- --exact --nocapture
