@@ -673,7 +673,7 @@ jobs:
           WFP semantics: ipv6:false blocks non-loopback IPv6 while preserving IPv6 loopback traffic
           Windows Mobile Hotspot lifecycle: hotspot Start/Stop remains Windows/user-owned; Karing leases only ICS roles while TUN + hotspot are active
           Windows Mobile Hotspot compatibility: runtime GUID/device-class/private-IPv4 discovery; active hotspot = ICS PRIVATE; Mihomo TUN = ICS PUBLIC
-          Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback, TUN-off/exit restore and dynamic original-upstream GUID fallback
+          Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback and TUN-off/exit restore; restore requires a native stable physical IPv4 default-route GUID anchor and fails closed when unavailable
           Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route
           Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop
           Windows genericity: no fixed SSID, hotspot subnet, physical ifIndex or TUN ifIndex is a behavioral input
@@ -688,7 +688,7 @@ jobs:
           - **移除 `.26` 的错误门禁。** 旧策略把现代 Wi-Fi Direct/Mobile Hotspot 排除在 HNetCfg ICS lease 之外，结果正好阻止了已经验证有效的 TUN-PUBLIC/Hotspot-PRIVATE 拓扑。`.27` 允许活动现代热点进入受控 lease，但仍不启动或停止 Windows 热点本身。
           - **完全动态识别。** TUN 与热点通过运行时接口 GUID、设备类型、活动状态和私有 IPv4 属性识别；无法唯一识别时 fail-closed，不修改 ICS。实现不依赖 SSID、固定 ifIndex、固定物理接口名或 `192.168.137.0/24`。
           - **状态安全。** 修改前写入持久 snapshot；应用后 readback 验证热点 PRIVATE + TUN PUBLIC；任何失败立即 rollback。关闭 TUN、退出程序或拓扑不再满足条件时恢复原状态。
-          - **升级恢复兼容。** `.27` 继续复用 `windows-hotspot-ics-lease-v20.json`，兼容历史 snapshot v2/v3，避免升级时遗留旧 lease。对于 Windows Mobile Hotspot 在 HNetCfg 中隐藏原角色的情况，动态保存 preferred Internet adapter GUID 作为恢复兜底。
+          - **升级恢复兼容。** `.27` 继续复用 `windows-hotspot-ics-lease-v20.json`，兼容历史 snapshot v2/v3，避免升级时遗留旧 lease。恢复时重新通过 native 稳定物理 IPv4 默认路由解析当前物理上游 GUID；没有稳定动态恢复锚点时 fail-closed，不回退到 WinRT Internet profile 或持久快照中的旧物理上游。
           - **持续监察。** 热点/TUN 组合每 2 秒检查一次，并要求连续 3 个稳定样本后才执行变更；候选歧义、COM 失败和 readback 不一致都有结构化诊断。
           - **`.26` 的 forwarding-safe 防护继续保留。** 物理 `ForwardingEnabled=true` 时，TUN 自动路由继续限制到最终 Fake-IP CIDR；Mihomo outbound/provider socket 继续绑定稳定物理上游，用户显式 `interface-name` 始终优先。
           - **真实 Windows CI。** `.27` 在 Windows x64 与 ARM64 上分别执行网络路径 `cargo check`，并运行 v27 ICS lease、Fake-IP-only forwarding、自定义 Fake-IP range、ForwardingEnabled 身份变化和显式 interface 优先级回归。
