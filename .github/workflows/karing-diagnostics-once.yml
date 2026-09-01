@@ -131,11 +131,11 @@ jobs:
       - name: 构建前端
         run: pnpm run web:build
 
-      - name: 运行 Windows TUN/热点安全专项回归
+      - name: 运行 Windows TUN/热点 v27 安全专项回归
         run: node scripts/check-windows-tun-safety.mjs
 
-      - name: 运行 Windows Mobile Hotspot v26 转发安全路由/所有权回归
-        run: node scripts/check-windows-hotspot-zero-owner-v26.mjs
+      - name: 运行 Windows Mobile Hotspot v27 ICS/转发兼容回归
+        run: node scripts/check-windows-tun-safety-v27.mjs
 
       - name: 运行 Windows WFP v21 loopback 安全回归
         run: node scripts/check-windows-wfp-v21.mjs
@@ -230,14 +230,21 @@ jobs:
           check_not_contains src/components/connection/connection-rule-assistant.tsx '打开分流中心' '连接分流助手不再重复分流中心入口'
           check_contains src/components/connection/connection-row-item.tsx "flexWrap: 'wrap'" '连接列表元信息允许换行避免裁字'
           check_contains src/components/routing/routing-relations-panel.tsx 'MoreVertRounded' '应用到出口关系不再堆叠跳转图标'
-          check_contains src-tauri/src/core/windows_hotspot_ics.rs 'windows-owned-hotspot-no-hnetcfg-mutation' 'WinRT/Wi-Fi Direct Mobile Hotspot 不再由 HNetCfg 接管'
-          check_contains src-tauri/src/utils/windows_network.rs 'apply_forwarding_safe_tun_route' 'Windows Forwarding 模式启用 fake-IP-only TUN 路由'
-          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'physical-forwarding-mode-changed' '物理 ForwardingEnabled 变化触发受控 Runtime 重生成'
-          check_contains src-tauri/src/core/manager/config.rs 'forwarding-safe-fake-ip-only' '最终 Runtime 记录 forwarding-safe 路由策略'
-          check_contains src-tauri/src/core/windows_hotspot_ics.rs 'EVENT_E_ALL_SUBSCRIBERS_FAILED' '0x80040201 COM 错误已映射为标准符号'
-          check_contains src-tauri/src/core/windows_hotspot_ics.rs 'hresult=0x' 'Legacy HNetCfg EnableSharing 失败记录 HRESULT'
-          check_contains src-tauri/src/core/windows_hotspot_ics.rs 'error_chain' 'Legacy HNetCfg 失败保留完整错误链'
-          check_not_contains src-tauri/src/core/windows_hotspot_ics.rs 'NetworkOperatorTetheringManager' '正式路径不再接管 Mobile Hotspot 生命周期'
+          check_contains src-tauri/src/core/mod.rs '#[path = "windows_hotspot_ics_v27.rs"]' '运行时已切换到 v27 Mobile Hotspot ICS 实现'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'is_mobile_hotspot_adapter' 'v27 动态识别活动 Mobile Hotspot 适配器'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'NetworkInformation::GetInternetConnectionProfile' 'v27 动态捕获当前 Internet 上游 GUID'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'EnableSharing(ICSSHARINGTYPE_PRIVATE)' 'v27 将活动热点设为 ICS PRIVATE'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'EnableSharing(ICSSHARINGTYPE_PUBLIC)' 'v27 将 Mihomo TUN 设为 ICS PUBLIC'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'save_snapshot' 'v27 修改 ICS 前持久化原状态'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'rollback-immediately' 'v27 ICS 应用失败立即回滚'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'lease_roles_are_desired' 'v27 修改后执行角色 readback'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'restore_now' 'v27 退出/TUN 关闭具有显式恢复路径'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'windows-hotspot-ics-lease-v20.json' 'v27 兼容历史持久 lease 路径'
+          check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'CMCC-303-5G' 'v27 不写死现场 SSID'
+          check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs '192.168.137.0/24' 'v27 不写死 Windows 热点子网'
+          check_contains src-tauri/src/utils/windows_network.rs 'apply_forwarding_safe_tun_route' 'Windows Forwarding 模式继续启用 fake-IP-only TUN 路由'
+          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'physical-forwarding-mode-changed' '物理 ForwardingEnabled 变化继续触发受控 Runtime 重生成'
+          check_contains src-tauri/src/core/manager/config.rs 'forwarding-safe-fake-ip-only' '最终 Runtime 继续记录 forwarding-safe 路由策略'
           python3 - <<'PY_MATRIX'
           from pathlib import Path
 
@@ -655,28 +662,28 @@ jobs:
           WFP layer: FWPM_LAYER_ALE_AUTH_CONNECT_V6
           WFP condition: FWPM_CONDITION_FLAGS / FWP_MATCH_FLAGS_NONE_SET / FWP_CONDITION_FLAG_IS_LOOPBACK
           WFP semantics: ipv6:false blocks non-loopback IPv6 while preserving IPv6 loopback traffic
-          Windows Mobile Hotspot lifecycle: Windows/user-owned; Karing Start/Stop mutation paths = 0
-          Windows Mobile Hotspot ownership: WinRT/Wi-Fi Direct remains Windows-owned; HNetCfg mutation = 0
+          Windows Mobile Hotspot lifecycle: hotspot Start/Stop remains Windows/user-owned; Karing leases only ICS roles while TUN + hotspot are active
+          Windows Mobile Hotspot compatibility: runtime GUID/device-class/private-IPv4 discovery; active hotspot = ICS PRIVATE; Mihomo TUN = ICS PUBLIC
+          Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback, TUN-off/exit restore and dynamic original-upstream GUID fallback
           Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route
           Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop
-          Windows HNetCfg legacy compatibility: retained only for legacy Hosted Network; EnableSharing HRESULT/symbol + full error chain retained
-          Windows COM diagnostic: 0x80040201 = EVENT_E_ALL_SUBSCRIBERS_FAILED
+          Windows genericity: no fixed SSID, hotspot subnet, physical ifIndex or TUN ifIndex is a behavioral input
           EOF
 
           cat > release-assets/release-notes.md <<'EOF'
           # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
 
-          `.26` 修复 `.25` 在真实 Windows Mobile Hotspot + Mihomo TUN 并发场景仍会整机断网的问题。现场日志证明故障发生在 HNetCfg 之前：Windows 开启热点后把物理 WLAN `ForwardingEnabled` 置为 true，而 Mihomo 仍使用普通 `auto-route` 默认路由，随后 DNS、DIRECT、代理节点同时超时并出现 `reject loopback connection`。
+          `.27` 修复 `.26` 仍未覆盖的 Windows Mobile Hotspot 客户端转发路径：`.26` 已避免宿主机在物理接口开启 forwarding 后被 TUN 默认路由回灌，但热点客户端取得 Fake-IP 后，ICS 仍可能把后续连接交给物理上游而不是 Mihomo TUN，导致手机/平板无法按 Mihomo 规则正常访问网络。
 
-          - **根因 1：Windows IP forwarding + TUN 默认路由回灌。** `.26` 把物理上游 `ForwardingEnabled` 纳入稳定 Runtime 身份。该状态变化通过 IP Helper 去抖/确认后触发一次受控 Runtime 重生成，不启动/停止热点。
-          - **forwarding-safe TUN：** 当物理上游 `ForwardingEnabled=true`，保留 `auto-route` 但用 Mihomo `route-address` 将自动路由限制为最终 DNS 配置里的 `fake-ip-range`（以及启用 IPv6 时的 fake-ip v6 range），不再安装 TUN 全局默认路由。若最终配置不是 fake-ip，则 fail-closed 关闭 `auto-route`，优先保证宿主机不被路由回环黑洞。
-          - 这一策略直接对应 Mihomo 官方文档：`route-address` 在 `auto-route` 开启时用指定网段替代默认路由；也对应 Mihomo 2026 年 Windows issue 中“主网卡转发与 TUN 默认路由同时开启会回环”的复现场景。
-          - **根因 2：WinRT Mobile Hotspot 不是 HNetCfg PRIVATE 的应用所有对象。** `.25` 新诊断捕获到 `EnableSharing(PRIVATE)` 对 Wi-Fi Direct 返回 `0x80040201`。`.26` 将 Wi-Fi Direct/Mobile Hotspot 明确标记为 `WindowsMobileHotspot`，生产路径对其 HNetCfg mutation 永远为 0；HNetCfg 只保留给 legacy Hosted Network 兼容。
-          - `0x80040201` 现在映射为 Windows 标准 `EVENT_E_ALL_SUBSCRIBERS_FAILED`，legacy HNetCfg 失败仍保留十六进制 HRESULT、符号名和完整 error chain。
-          - 代理节点与 provider socket 继续绑定稳定物理 WLAN；用户显式 `interface-name` 仍优先；物理 LAN `route-exclude-address` 防护继续保留。
-          - `.26` 新增独立 Windows x64/ARM64 gate：真实 `cargo check`、完整 `windows_network_` 单测，并精确证明 forwarding-safe fake-IP-only route、ForwardingEnabled Runtime 身份变化、WinRT Wi-Fi Direct 零 HNetCfg mutation。
-          - `.24/.25` 专项 workflow 仍保留用于历史 `workflow_dispatch`/对应修复分支审计，但不再在当前功能分支 push 上用旧语义阻挡后续发行。
-          - `.21` IPv6 loopback WFP 修复继续保留，正式 Release 仍要求 12 个安装文件 + `SHA256SUMS.txt` + `BUILD_INFO.txt` 共 14 个公开资产，并由 observer 做同 SHA 与 12/12 SHA256 核验。
+          - **成熟拓扑：Mihomo TUN = ICS PUBLIC，当前 Mobile Hotspot = ICS PRIVATE。** 该拓扑与上游 Clash Verge Rev #7739 的 Windows 11 端到端验证一致：热点客户端 DNS/Fake-IP 后续连接进入 Mihomo，并由现有规则选择 DIRECT 或代理。
+          - **移除 `.26` 的错误门禁。** 旧策略把现代 Wi-Fi Direct/Mobile Hotspot 排除在 HNetCfg ICS lease 之外，结果正好阻止了已经验证有效的 TUN-PUBLIC/Hotspot-PRIVATE 拓扑。`.27` 允许活动现代热点进入受控 lease，但仍不启动或停止 Windows 热点本身。
+          - **完全动态识别。** TUN 与热点通过运行时接口 GUID、设备类型、活动状态和私有 IPv4 属性识别；无法唯一识别时 fail-closed，不修改 ICS。实现不依赖 SSID、固定 ifIndex、固定物理接口名或 `192.168.137.0/24`。
+          - **状态安全。** 修改前写入持久 snapshot；应用后 readback 验证热点 PRIVATE + TUN PUBLIC；任何失败立即 rollback。关闭 TUN、退出程序或拓扑不再满足条件时恢复原状态。
+          - **升级恢复兼容。** `.27` 继续复用 `windows-hotspot-ics-lease-v20.json`，兼容历史 snapshot v2/v3，避免升级时遗留旧 lease。对于 Windows Mobile Hotspot 在 HNetCfg 中隐藏原角色的情况，动态保存 preferred Internet adapter GUID 作为恢复兜底。
+          - **持续监察。** 热点/TUN 组合每 2 秒检查一次，并要求连续 3 个稳定样本后才执行变更；候选歧义、COM 失败和 readback 不一致都有结构化诊断。
+          - **`.26` 的 forwarding-safe 防护继续保留。** 物理 `ForwardingEnabled=true` 时，TUN 自动路由继续限制到最终 Fake-IP CIDR；Mihomo outbound/provider socket 继续绑定稳定物理上游，用户显式 `interface-name` 始终优先。
+          - **真实 Windows CI。** `.27` 在 Windows x64 与 ARM64 上分别执行网络路径 `cargo check`，并运行 v27 ICS lease、Fake-IP-only forwarding、自定义 Fake-IP range、ForwardingEnabled 身份变化和显式 interface 优先级回归。
+          - `.21` IPv6 loopback WFP 修复继续保留。正式 Release 仍要求 12 个安装文件 + `SHA256SUMS.txt` + `BUILD_INFO.txt` 共 14 个公开资产，并在发布后核对 tag、commit、Latest 状态与资产数量。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。
 
@@ -734,7 +741,7 @@ jobs:
             release-assets/BUILD_INFO.txt \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${{ needs.review.outputs.commit }}" \
-            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Hotspot Forwarding-Safe TUN + Windows Ownership + IPv6 Loopback WFP" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Mobile Hotspot ICS → Mihomo TUN + Forwarding-Safe + IPv6 Loopback WFP" \
             --notes-file release-assets/release-notes.md \
             --latest
 
