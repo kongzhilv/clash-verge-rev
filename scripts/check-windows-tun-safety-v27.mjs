@@ -291,5 +291,7 @@ if (failures.length) {
 console.log('[windows-tun-safety-v27] OK')
 console.log('[通过] v26 native route/forwarding-safe 不变量保留')
 console.log('[通过] Mobile Hotspot=ICS PRIVATE，Mihomo TUN=ICS PUBLIC')
-console.log('[通过] 当前物理上游优先恢复，持久快照仅作后备，readback/回滚/恢复均受门禁保护')
+console.log(
+  '[通过] 当前物理上游优先恢复，持久快照仅作后备，readback/回滚/恢复均受门禁保护',
+)
 console.log('[通过] 无 SSID / 固定 ifIndex / 固定热点子网 / PowerShell 路径')
