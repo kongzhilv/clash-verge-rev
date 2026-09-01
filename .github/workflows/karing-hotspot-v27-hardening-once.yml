@@ -1,3 +1,4 @@
+# one-shot trigger: v27 fail-closed restore hardening
 name: Karing one-shot Hotspot v27 restore hardening
 
 on:
