@@ -1,0 +1,225 @@
+name: Karing 正式发行核验
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.release/karing-release-authorize.txt'
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: karing-release-observer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-release:
+    name: 核验当前 Karing 正式发行
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MAIN_WORKFLOW: karing-diagnostics-once.yml
+      WFP_WORKFLOW: karing-windows-wfp-v21.yml
+      HOTSPOT_WORKFLOW: karing-windows-hotspot-v26.yml
+      RELEASE_BRANCH: feature/karing-style-diversion
+      PR_NUMBER: '1'
+      STATUS_MARKER: '<!-- karing-current-release-audit -->'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Wait for same-SHA gates and verify immutable release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_sha=$(git rev-parse HEAD)
+          release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
+          version=$(jq -r .version package.json)
+          if [[ ! "$release_tag" =~ ^v${version}-karing\.[0-9]+$ ]]; then
+            echo "非法 Karing Release tag: $release_tag" >&2
+            exit 1
+          fi
+
+
+          authorization=$(tr -d '\r\n' < .release/karing-release-authorize.txt)
+          if [ "$authorization" != "PUBLISH:${release_tag}" ]; then
+            echo "发行授权内容与 tag 不匹配: $authorization" >&2
+            exit 1
+          fi
+          mapfile -t changed < <(git diff-tree --no-commit-id --name-only -r "$source_sha")
+          if [ "${#changed[@]}" -ne 1 ] || [ "${changed[0]}" != '.release/karing-release-authorize.txt' ]; then
+            echo '发行核验要求授权提交只能修改发行授权文件' >&2
+            printf 'changed: %s\n' "${changed[@]}" >&2
+            exit 1
+          fi
+
+          post_failure() {
+            local reason="$1"
+            gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "${STATUS_MARKER}
+          ### ❌ ${release_tag} 发行核验失败
+          - source: \`${source_sha}\`
+          - reason: ${reason}
+
+          observer 只读核验，没有删除、覆盖或重建 Release。" >/dev/null || true
+          }
+          trap 'post_failure "observer failed at line ${LINENO}"' ERR
+
+          find_run_for_sha() {
+            local workflow="$1"
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow}/runs" \
+              -f branch="$RELEASE_BRANCH" -f event=push -f per_page=30 \
+              --jq ".workflow_runs[] | select(.head_sha == \"${source_sha}\") | .id" | head -n1 || true
+          }
+
+          wait_for_run() {
+            local workflow="$1"
+            local run_id=''
+            for _attempt in $(seq 1 120); do
+              run_id=$(find_run_for_sha "$workflow")
+              if [ -n "$run_id" ]; then
+                printf '%s\n' "$run_id"
+                return 0
+              fi
+              sleep 10
+            done
+            return 1
+          }
+
+          wait_for_success() {
+            local run_id="$1"
+            local status=''
+            for _attempt in $(seq 1 240); do
+              status=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.status')
+              if [ "$status" = 'completed' ]; then
+                break
+              fi
+              sleep 15
+            done
+            test "$status" = 'completed'
+            test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')" = 'success'
+          }
+
+          main_run_id=$(wait_for_run "$MAIN_WORKFLOW")
+          wfp_run_id=$(wait_for_run "$WFP_WORKFLOW")
+          hotspot_run_id=$(wait_for_run "$HOTSPOT_WORKFLOW")
+          wait_for_success "$main_run_id"
+          wait_for_success "$wfp_run_id"
+          wait_for_success "$hotspot_run_id"
+
+          hotspot_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_run_id}/jobs?per_page=100")
+          for required in \
+            'Validate v27 generic hotspot TUN/ICS invariants' \
+            'Compile v27 network path x86_64-pc-windows-msvc' \
+            'Compile v27 network path aarch64-pc-windows-msvc'; do
+            count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs")
+            test "$count" -eq 1
+          done
+
+          wfp_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${wfp_run_id}/jobs?per_page=100")
+          for required in \
+            'Validate non-loopback IPv6 block policy' \
+            'Build patched Mihomo x86_64-pc-windows-msvc' \
+            'Build patched Mihomo aarch64-pc-windows-msvc'; do
+            count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$wfp_jobs")
+            test "$count" -eq 1
+          done
+
+          policy=$(jq -r '.policy' .release/karing-windows-mihomo-v21.json)
+          loopback=$(jq -r '.wfp.loopback' .release/karing-windows-mihomo-v21.json)
+          non_loopback=$(jq -r '.wfp.nonLoopbackIPv6' .release/karing-windows-mihomo-v21.json)
+          test "$policy" = 'block-non-loopback-ipv6'
+          test "$loopback" = 'permit'
+          test "$non_loopback" = 'block-when-ipv6-disabled'
+
+          main_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/jobs?per_page=100")
+          failed_jobs=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join("；")' <<<"$main_jobs")
+          test -z "$failed_jobs"
+          for required in \
+            '审查并验证源码' \
+            '构建 Windows x64' \
+            '构建 Windows ARM64' \
+            '构建固定 WebView2 x64' \
+            '构建固定 WebView2 ARM64' \
+            '构建 macOS Apple Silicon' \
+            '构建 macOS Intel' \
+            '构建 Linux x64' \
+            '构建 Linux ARM64' \
+            '构建 Linux ARMv7' \
+            '汇总并审查发行产物' \
+            '发布正式 GitHub Release'; do
+            count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$main_jobs")
+            test "$count" -eq 1
+          done
+
+          artifact_count=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${main_run_id}/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name == "karing-release-assets" and .expired == false)] | length')
+          test "$artifact_count" -eq 1
+
+          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${release_tag}")
+          target=$(jq -r '.target_commitish' <<<"$release_json")
+          draft=$(jq -r '.draft' <<<"$release_json")
+          prerelease=$(jq -r '.prerelease' <<<"$release_json")
+          asset_count=$(jq '.assets | length' <<<"$release_json")
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${release_tag}" --jq '.object.sha')
+
+          test "$target" = "$source_sha"
+          test "$tag_sha" = "$source_sha"
+          test "$draft" = false
+          test "$prerelease" = false
+          test "$latest_tag" = "$release_tag"
+          test "$asset_count" -eq 14
+
+          rm -rf release-audit
+          mkdir release-audit
+          gh release download "$release_tag" --repo "$GITHUB_REPOSITORY" --dir release-audit
+          test -f release-audit/SHA256SUMS.txt
+          test -f release-audit/BUILD_INFO.txt
+          grep -Fqx "Commit: ${source_sha}" release-audit/BUILD_INFO.txt
+          grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot lifecycle: hotspot Start/Stop remains Windows/user-owned; Karing leases only ICS roles while TUN + hotspot are active' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot compatibility: runtime GUID/device-class/private-IPv4 discovery; active hotspot = ICS PRIVATE; Mihomo TUN = ICS PUBLIC' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback, TUN-off/exit restore and dynamic original-upstream GUID fallback' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows genericity: no fixed SSID, hotspot subnet, physical ifIndex or TUN ifIndex is a behavioral input' release-audit/BUILD_INFO.txt
+
+          installer_count=$(find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
+          checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
+          test "$installer_count" -eq 12
+          test "$checksum_lines" -eq 12
+
+          awk 'NF {print tolower($1)}' release-audit/SHA256SUMS.txt | sort > release-audit/expected.txt
+          find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) -print0 | sort -z | xargs -0 sha256sum | awk '{print tolower($1)}' | sort > release-audit/actual.txt
+          test "$(wc -l < release-audit/expected.txt)" -eq 12
+          test "$(wc -l < release-audit/actual.txt)" -eq 12
+          cmp -s release-audit/expected.txt release-audit/actual.txt
+
+          release_url=$(jq -r '.html_url' <<<"$release_json")
+          gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "${STATUS_MARKER}
+          ### ✅ ${release_tag} 正式发行核验通过
+          - source/tag/release target: \`${source_sha}\`
+          - main run: \`${main_run_id}\` / success
+          - WFP run: \`${wfp_run_id}\` / success
+          - Hotspot v27 run: \`${hotspot_run_id}\` / success
+          - Mobile Hotspot lifecycle: **Windows/user-owned Start/Stop；Karing only leases ICS roles**
+          - Mobile Hotspot topology: **active hotspot = ICS PRIVATE · Mihomo TUN = ICS PUBLIC**
+          - Identity: **runtime GUID/device-class/private-IPv4；no fixed SSID/ifIndex/subnet**
+          - State safety: **persistent snapshot · readback · immediate rollback · TUN-off/exit restore**
+          - TUN routing: **ForwardingEnabled -> fake-IP-only route-address · no TUN default route**
+          - WFP policy: \`${policy}\`; loopback=\`${loopback}\`; non-loopback IPv6=\`${non_loopback}\`
+          - public assets: **${asset_count}**（12 installers + SHA256SUMS + BUILD_INFO）
+          - SHA256: **12/12 matched**
+          - Release: ${release_url}
+
+          observer 全程只读核验。" >/dev/null
+
+# Generic same-SHA audit stamp: future Karing releases reuse the current tag file and v27+ contracts.
