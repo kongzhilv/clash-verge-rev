@@ -1,0 +1,3 @@
+Karing release candidate: v2.5.4-karing.27
+Purpose: trigger the main release, Windows WFP, Windows Mobile Hotspot v27, and release observer workflows on one immutable source SHA.
+Runtime behavior: unchanged.
