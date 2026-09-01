@@ -20,7 +20,6 @@ on:
   push:
     branches:
       - fix/karing-windows-hotspot-v24-zero-owner
-      - feature/karing-style-diversion
     paths:
       - '.github/workflows/karing-diagnostics-once.yml'
       - '.github/workflows/karing-windows-hotspot-v24.yml'

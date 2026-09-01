@@ -61,6 +61,7 @@ fn runtime_network_snapshot(config: &serde_yaml_ng::Mapping) -> JsonValue {
             "auto_detect_interface": yaml_bool(tun, "auto-detect-interface"),
             "include_interface": string_list("include-interface"),
             "exclude_interface": string_list("exclude-interface"),
+            "route_address": string_list("route-address"),
             "route_exclude_address": string_list("route-exclude-address"),
         },
         "dns": {
@@ -323,6 +324,7 @@ impl CoreManager {
                 "route_metric": route.route_metric,
                 "interface_metric": route.interface_metric,
                 "effective_metric": route.effective_metric,
+                "forwarding_enabled": route.forwarding_enabled,
                 "route_exclude_addresses": &route.route_exclude_addresses,
             }),
         );
@@ -339,7 +341,9 @@ impl CoreManager {
                 "source_address": route.source_address.as_str(),
                 "gateway": route.gateway.as_str(),
                 "route_exclude_addresses": &route.route_exclude_addresses,
-                "hotspot_runtime_dependency": false,
+                "forwarding_enabled": route.forwarding_enabled,
+                "routing_strategy": if route.forwarding_enabled { "forwarding-safe-fake-ip-only" } else { "normal-auto-route" },
+                "hotspot_runtime_dependency": "forwarding-mode-only",
                 "hotspot_owner": "windows-hotspot-winrt",
                 "tun_auto_detect_interface": lease.auto_detect_interface,
                 "lease_scope": "runtime-only",
@@ -359,12 +363,13 @@ impl CoreManager {
         logging!(
             info,
             Type::Core,
-            "Windows TUN safety: stable physical upstream={} index={} source={} gateway={} metric={}; runtime interface lease owns Mihomo outbound selection and follows IP Helper topology changes",
+            "Windows TUN safety: stable physical upstream={} index={} source={} gateway={} metric={} forwarding={}; runtime interface lease owns Mihomo outbound selection and follows IP Helper topology changes",
             route.interface_alias,
             route.interface_index,
             route.source_address,
             route.gateway,
-            route.effective_metric
+            route.effective_metric,
+            route.forwarding_enabled
         );
         diagnostics::info(
             "windows-tun",
@@ -378,7 +383,9 @@ impl CoreManager {
                 "top_level_interface_pinned": lease.applied,
                 "interface_pin_source": "runtime-managed-stable-physical-upstream",
                 "interface_pin_scope": "all-mihomo-outbound",
-                "failover_strategy": "topology-watcher-regenerate-runtime",
+                "forwarding_enabled": route.forwarding_enabled,
+                "routing_strategy": if route.forwarding_enabled { "forwarding-safe-fake-ip-only" } else { "normal-auto-route" },
+                "failover_strategy": "topology-watcher-regenerate-runtime-on-upstream-or-forwarding-mode",
             }),
         );
         Ok(true)

@@ -51,10 +51,17 @@ struct InterfaceIdentity {
     description: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HotspotOwnership {
+    WindowsMobileHotspot,
+    LegacyHostedNetwork,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TargetPair {
     tun: InterfaceIdentity,
     hotspot: InterfaceIdentity,
+    hotspot_ownership: HotspotOwnership,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -182,21 +189,32 @@ fn is_mihomo_tun(row: &MIB_IF_ROW2) -> bool {
             || identity.contains("wintun") && identity.contains("clash"))
 }
 
+fn hotspot_ownership_from_identity(identity: &str) -> Option<HotspotOwnership> {
+    if [
+        "wi-fi direct virtual adapter",
+        "wifi direct virtual adapter",
+        "mobile hotspot",
+    ]
+    .iter()
+    .any(|marker| identity.contains(marker))
+    {
+        return Some(HotspotOwnership::WindowsMobileHotspot);
+    }
+    if ["microsoft hosted network", "hosted network virtual"]
+        .iter()
+        .any(|marker| identity.contains(marker))
+    {
+        return Some(HotspotOwnership::LegacyHostedNetwork);
+    }
+    None
+}
+
 fn is_hotspot_adapter(row: &MIB_IF_ROW2) -> bool {
     if row.OperStatus != IfOperStatusUp {
         return false;
     }
     let identity = interface_identity(row);
-    !is_filter_component(&identity)
-        && [
-            "wi-fi direct virtual adapter",
-            "wifi direct virtual adapter",
-            "microsoft hosted network",
-            "hosted network virtual",
-            "mobile hotspot",
-        ]
-        .iter()
-        .any(|marker| identity.contains(marker))
+    !is_filter_component(&identity) && hotspot_ownership_from_identity(&identity).is_some()
 }
 
 fn has_private_ipv4(interface_index: u32, addresses: &[MIB_UNICASTIPADDRESS_ROW]) -> bool {
@@ -255,9 +273,15 @@ fn target_pair() -> Result<Option<TargetPair>> {
         return Ok(None);
     }
 
+    let hotspot = hotspot_candidates.remove(0);
+    let hotspot_identity = format!("{} {}", hotspot.alias, hotspot.description).to_lowercase();
+    let hotspot_ownership = hotspot_ownership_from_identity(&hotspot_identity)
+        .ok_or_else(|| anyhow!("identified hotspot adapter has no ownership classification"))?;
+
     Ok(Some(TargetPair {
         tun: tun_candidates.remove(0),
-        hotspot: hotspot_candidates.remove(0),
+        hotspot,
+        hotspot_ownership,
     }))
 }
 
@@ -328,6 +352,7 @@ fn hresult_symbol(raw: i32) -> &'static str {
         0x80004001 => "E_NOTIMPL",
         0x8007000E => "E_OUTOFMEMORY",
         0x80004003 => "E_POINTER",
+        0x80040201 => "EVENT_E_ALL_SUBSCRIBERS_FAILED",
         _ => "UNKNOWN_HRESULT",
     }
 }
@@ -527,6 +552,10 @@ fn role_of_guid(roles: &[SavedRole], guid: GUID) -> Option<SharingRole> {
         .map(|item| item.role)
 }
 
+fn hnetcfg_lease_allowed(pair: &TargetPair) -> bool {
+    pair.hotspot_ownership == HotspotOwnership::LegacyHostedNetwork
+}
+
 fn lease_roles_are_desired(roles: &[SavedRole], pair: &TargetPair) -> bool {
     role_of_guid(roles, pair.tun.guid) == Some(SharingRole::Public)
         && role_of_guid(roles, pair.hotspot.guid) == Some(SharingRole::Private)
@@ -713,6 +742,9 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Resul
 }
 
 fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
+    if !hnetcfg_lease_allowed(pair) {
+        bail!("refusing HNetCfg mutation for Windows-owned Mobile Hotspot/Wi-Fi Direct adapter");
+    }
     let (_apartment, sharing_manager, connection_manager) = create_managers()?;
     let connections = enumerate_connections(&connection_manager)?;
     log_all_sharing_state(&sharing_manager, &connections, "apply-before");
@@ -860,6 +892,37 @@ fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
         None
     };
 
+    if let Some(pair) = pair.as_ref()
+        && !hnetcfg_lease_allowed(pair)
+    {
+        if let Some(snapshot) = saved.as_ref() {
+            restore_snapshot_unlocked(path, snapshot)?;
+            diagnostics::info(
+                "windows-hotspot-ics",
+                "windows-owned-hotspot-old-lease-restored",
+                json!({
+                    "hotspot_guid": guid_string(pair.hotspot.guid),
+                    "owner": "windows-hotspot-winrt",
+                    "hnetcfg_mutation": false,
+                }),
+            );
+            return Ok("windows-owned-hotspot-old-lease-restored");
+        }
+        diagnostics::info(
+            "windows-hotspot-ics",
+            "windows-owned-hotspot-no-hnetcfg-mutation",
+            json!({
+                "hotspot_guid": guid_string(pair.hotspot.guid),
+                "hotspot_alias": pair.hotspot.alias,
+                "hotspot_description": pair.hotspot.description,
+                "owner": "windows-hotspot-winrt",
+                "hnetcfg_mutation": false,
+                "routing_owner": "windows-forwarding-safe-tun-runtime",
+            }),
+        );
+        return Ok("windows-owned-hotspot-no-hnetcfg-mutation");
+    }
+
     match (saved, pair) {
         (Some(snapshot), Some(pair))
             if same_guid(&snapshot.tun_guid, pair.tun.guid) && same_guid(&snapshot.hotspot_guid, pair.hotspot.guid) =>
@@ -938,7 +1001,7 @@ async fn monitor_loop() {
             "shutdown_restore_gate": true,
             "active_lease_readback": true,
             "hotspot_private_preserved_when_unchanged": true,
-            "desired_topology": "mihomo-tun=public,windows-mobile-hotspot=private",
+            "desired_topology": "windows-mobile-hotspot=windows-owned-no-hnetcfg;legacy-hosted-network=hnetcfg-lease",
         }),
     );
 
@@ -1082,8 +1145,9 @@ pub fn ensure_monitor_running() {
 #[cfg(test)]
 mod tests {
     use super::{
-        InterfaceIdentity, RoleMutation, SavedRole, SharingRole, TargetPair, has_unrelated_private_role,
-        lease_owned_original_roles, lease_roles_are_desired, normalize_guid, role_mutation, role_of_saved_guid,
+        HotspotOwnership, InterfaceIdentity, RoleMutation, SavedRole, SharingRole, TargetPair,
+        has_unrelated_private_role, lease_owned_original_roles, lease_roles_are_desired, normalize_guid, role_mutation,
+        role_of_saved_guid,
     };
     use windows::core::GUID;
 
@@ -1097,8 +1161,9 @@ mod tests {
             hotspot: InterfaceIdentity {
                 guid: GUID::from_u128(0x22222222_2222_2222_2222_222222222222),
                 alias: "Hotspot".into(),
-                description: "Microsoft Wi-Fi Direct Virtual Adapter".into(),
+                description: "Microsoft Hosted Network Virtual Adapter".into(),
             },
+            hotspot_ownership: HotspotOwnership::LegacyHostedNetwork,
         }
     }
 
@@ -1227,9 +1292,34 @@ mod tests {
     }
 
     #[test]
+    fn windows_network_windows_owned_wifi_direct_never_uses_hnetcfg() {
+        assert_eq!(
+            super::hotspot_ownership_from_identity("microsoft wi-fi direct virtual adapter #2"),
+            Some(HotspotOwnership::WindowsMobileHotspot)
+        );
+        let mut pair = pair();
+        pair.hotspot.description = "Microsoft Wi-Fi Direct Virtual Adapter #2".into();
+        pair.hotspot_ownership = HotspotOwnership::WindowsMobileHotspot;
+        assert!(!super::hnetcfg_lease_allowed(&pair));
+    }
+
+    #[test]
+    fn windows_network_legacy_hosted_network_retains_hnetcfg_compatibility() {
+        assert_eq!(
+            super::hotspot_ownership_from_identity("microsoft hosted network virtual adapter"),
+            Some(HotspotOwnership::LegacyHostedNetwork)
+        );
+        assert!(super::hnetcfg_lease_allowed(&pair()));
+    }
+
+    #[test]
     fn windows_network_hresult_symbols_cover_enable_sharing_failures() {
         assert_eq!(super::hresult_symbol(0x80004002u32 as i32), "E_NOINTERFACE");
         assert_eq!(super::hresult_symbol(0x80004005u32 as i32), "E_FAIL");
         assert_eq!(super::hresult_symbol(0x80070057u32 as i32), "E_INVALIDARG");
+        assert_eq!(
+            super::hresult_symbol(0x80040201u32 as i32),
+            "EVENT_E_ALL_SUBSCRIBERS_FAILED"
+        );
     }
 }

@@ -1,4 +1,4 @@
-name: Karing .25 发行核验
+name: Karing .26 发行核验
 
 on:
   push:
@@ -29,16 +29,16 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.25 正式发行
+    name: 核验 v2.5.4-karing.26 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       MAIN_WORKFLOW: karing-diagnostics-once.yml
       WFP_WORKFLOW: karing-windows-wfp-v21.yml
-      HOTSPOT_WORKFLOW: karing-windows-hotspot-v25.yml
+      HOTSPOT_WORKFLOW: karing-windows-hotspot-v26.yml
       RELEASE_BRANCH: feature/karing-style-diversion
       PR_NUMBER: '1'
-      STATUS_MARKER: '<!-- karing-v254-karing25-release-audit -->'
+      STATUS_MARKER: '<!-- karing-v254-karing26-release-audit -->'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,7 +51,7 @@ jobs:
 
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.25'
+          test "$release_tag" = 'v2.5.4-karing.26'
 
           post_failure() {
             local reason="$1"
@@ -109,10 +109,10 @@ jobs:
 
           hotspot_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_run_id}/jobs?per_page=100")
           for required in \
-            'Validate hotspot lifecycle + native ICS invariants' \
-            'Compile v25 network path x86_64-pc-windows-msvc' \
-            'Compile v25 network path aarch64-pc-windows-msvc' \
-            'Run v25 lifecycle + ICS + topology regressions'; do
+            'Validate hotspot forwarding-safe + ownership invariants' \
+            'Compile v26 network path x86_64-pc-windows-msvc' \
+            'Compile v26 network path aarch64-pc-windows-msvc' \
+            'Run v26 forwarding-safe + ICS + topology regressions'; do
             count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs")
             test "$count" -eq 1
           done
@@ -180,11 +180,11 @@ jobs:
           grep -Fqx "Commit: ${source_sha}" release-audit/BUILD_INFO.txt
           grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows Mobile Hotspot lifecycle: Windows/user-owned; Karing Start/Stop mutation paths = 0' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot VPN data plane: native HNetCfg ICS minimal-diff lease; Mihomo TUN=PUBLIC, hotspot=PRIVATE' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot ICS apply order: preserve existing PRIVATE; otherwise hotspot PRIVATE before Mihomo PUBLIC' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot ICS diagnostics: EnableSharing HRESULT/symbol + full error chain retained' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot rollback: persistent snapshot; unchanged hotspot PRIVATE role is not bounced' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot fail-closed: ambiguous targets/unrelated PRIVATE ICS/apply verification failure refuse or rollback mutation' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot ownership: WinRT/Wi-Fi Direct remains Windows-owned; HNetCfg mutation = 0' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows HNetCfg legacy compatibility: retained only for legacy Hosted Network; EnableSharing HRESULT/symbol + full error chain retained' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows COM diagnostic: 0x80040201 = EVENT_E_ALL_SUBSCRIBERS_FAILED' release-audit/BUILD_INFO.txt
 
           installer_count=$(find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
@@ -203,10 +203,11 @@ jobs:
           - source/tag/release target: \`${source_sha}\`
           - main run: \`${main_run_id}\` / success
           - WFP run: \`${wfp_run_id}\` / success
-          - Hotspot v25 lifecycle/data-plane run: \`${hotspot_run_id}\` / success
+          - Hotspot v26 forwarding-safe/ownership run: \`${hotspot_run_id}\` / success
           - Mobile Hotspot lifecycle: **Windows/user-owned; Karing Start/Stop paths = 0**
-          - VPN sharing data plane: **native HNetCfg ICS minimal-diff · Mihomo TUN PUBLIC -> Hotspot PRIVATE**
-          - rollback: **unchanged hotspot PRIVATE preserved; persistent snapshot verified**
+          - Mobile Hotspot ownership: **WinRT/Wi-Fi Direct Windows-owned · HNetCfg mutation 0**
+          - TUN routing: **ForwardingEnabled -> fake-IP-only route-address · no TUN default route**
+          - legacy HNetCfg: **Hosted Network only · persistent rollback + HRESULT diagnostics retained**
           - WFP policy: \`${policy}\`; loopback=\`${loopback}\`; non-loopback IPv6=\`${non_loopback}\`
           - public assets: **${asset_count}**（12 installers + SHA256SUMS + BUILD_INFO）
           - SHA256: **12/12 matched**

@@ -50,6 +50,7 @@ pub struct WindowsUpstreamRoute {
     pub route_metric: u32,
     pub interface_metric: u32,
     pub effective_metric: u32,
+    pub forwarding_enabled: bool,
     pub route_exclude_addresses: Vec<String>,
 }
 
@@ -65,8 +66,8 @@ pub struct ManagedProxyBindingStats {
 impl WindowsUpstreamRoute {
     fn signature(&self) -> String {
         format!(
-            "{}|{}|{}|{}",
-            self.interface_index, self.interface_alias, self.source_address, self.gateway
+            "{}|{}|{}|{}|{}",
+            self.interface_index, self.interface_alias, self.source_address, self.gateway, self.forwarding_enabled
         )
     }
 }
@@ -170,7 +171,7 @@ fn load_default_routes() -> Result<Vec<MIB_IPFORWARD_ROW2>> {
     Ok(result)
 }
 
-fn connected_interface_metric(interface_index: u32) -> Option<u32> {
+fn connected_interface_state(interface_index: u32) -> Option<(u32, bool)> {
     let mut row = MIB_IPINTERFACE_ROW {
         Family: AF_INET,
         InterfaceIndex: interface_index,
@@ -178,7 +179,7 @@ fn connected_interface_metric(interface_index: u32) -> Option<u32> {
     };
     let status = unsafe { GetIpInterfaceEntry(&mut row) };
     if status.0 == 0 && row.Connected && !row.DisableDefaultRoutes {
-        Some(row.Metric)
+        Some((row.Metric, row.ForwardingEnabled))
     } else {
         None
     }
@@ -289,7 +290,7 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
         else {
             continue;
         };
-        let Some(interface_metric) = connected_interface_metric(route.InterfaceIndex) else {
+        let Some((interface_metric, forwarding_enabled)) = connected_interface_state(route.InterfaceIndex) else {
             continue;
         };
         let Some(gateway) = ipv4_from_sockaddr(&route.NextHop) else {
@@ -308,6 +309,7 @@ fn query_upstream_route() -> Result<WindowsUpstreamRoute> {
             route_metric: route.Metric,
             interface_metric,
             effective_metric,
+            forwarding_enabled,
             route_exclude_addresses,
         });
     }
@@ -495,7 +497,70 @@ fn apply_managed_proxy_bindings(config: &mut Mapping, interface_alias: &str) -> 
     stats
 }
 
+fn forwarding_safe_route_addresses(config: &Mapping) -> Vec<String> {
+    let Some(dns) = config.get("dns").and_then(Value::as_mapping) else {
+        return Vec::new();
+    };
+    if dns.get("enhanced-mode").and_then(Value::as_str) != Some("fake-ip") {
+        return Vec::new();
+    }
+
+    let mut routes = Vec::new();
+    if let Some(range) = dns
+        .get("fake-ip-range")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    {
+        routes.push(range.to_owned());
+    }
+
+    let ipv6_enabled = config.get("ipv6").and_then(Value::as_bool).unwrap_or(false);
+    if ipv6_enabled
+        && let Some(range) = dns
+            .get("fake-ip-range6")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+    {
+        routes.push(range.to_owned());
+    }
+    routes
+}
+
+fn apply_forwarding_safe_tun_route(config: &mut Mapping, forwarding_enabled: bool) -> bool {
+    if !forwarding_enabled {
+        return false;
+    }
+    let route_addresses = forwarding_safe_route_addresses(config);
+    let Some(Value::Mapping(tun)) = config.get_mut("tun") else {
+        return false;
+    };
+    let enabled = tun.get("enable").and_then(Value::as_bool).unwrap_or(false);
+    let auto_route = tun.get("auto-route").and_then(Value::as_bool).unwrap_or(false);
+    if !enabled || !auto_route {
+        return false;
+    }
+
+    if route_addresses.is_empty() {
+        // Windows cannot safely combine physical IP forwarding with Mihomo's
+        // ordinary global TUN default route. If fake-IP routing is unavailable,
+        // fail closed on auto-route instead of black-holing the host in a loop.
+        tun.insert(Value::from("auto-route"), Value::from(false));
+        tun.remove("route-address");
+        return true;
+    }
+
+    // Mihomo route-address replaces the default route when auto-route is enabled.
+    // In Windows forwarding/hotspot mode route only the final fake-IP CIDR(s),
+    // preserving the physical default route for Mihomo's own outbound sockets.
+    tun.insert(
+        Value::from("route-address"),
+        Value::Sequence(route_addresses.into_iter().map(Value::from).collect()),
+    );
+    true
+}
+
 pub fn apply_managed_upstream(config: &mut Mapping, route: &WindowsUpstreamRoute) -> ManagedProxyBindingStats {
+    apply_forwarding_safe_tun_route(config, route.forwarding_enabled);
     if let Some(Value::Mapping(tun)) = config.get_mut("tun") {
         // Runtime routing is intentionally independent from Mobile Hotspot state.
         // Only the stable physical LAN guard is merged here. Hotspot lifecycle,
@@ -532,6 +597,7 @@ mod tests {
             route_metric: 0,
             interface_metric: 25,
             effective_metric: 25,
+            forwarding_enabled: false,
             route_exclude_addresses: vec!["192.168.1.0/24".into()],
         }
     }
@@ -718,6 +784,61 @@ proxy-providers:
         after.effective_metric = 125;
         after.route_exclude_addresses = vec!["10.0.0.0/8".into()];
         assert_eq!(before.signature(), after.signature());
+    }
+
+    #[test]
+    fn windows_network_forwarding_safe_tun_routes_only_fake_ip_range() {
+        let mut config = mapping(
+            "{ipv6: false, tun: {enable: true, auto-route: true}, dns: {enhanced-mode: fake-ip, fake-ip-range: 198.18.0.1/16}}",
+        );
+        let mut forwarding = route();
+        forwarding.forwarding_enabled = true;
+        apply_managed_upstream(&mut config, &forwarding);
+
+        let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
+        assert_eq!(tun.get("auto-route").and_then(Value::as_bool), Some(true));
+        let routes = tun.get("route-address").and_then(Value::as_sequence).unwrap();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].as_str(), Some("198.18.0.1/16"));
+        assert!(!routes.iter().any(|value| value.as_str() == Some("0.0.0.0/0")));
+    }
+
+    #[test]
+    fn windows_network_forwarding_safe_tun_uses_custom_fake_ip_range() {
+        let mut config = mapping(
+            "{ipv6: false, tun: {enable: true, auto-route: true, route-address: [0.0.0.0/0]}, dns: {enhanced-mode: fake-ip, fake-ip-range: 198.19.0.1/16}}",
+        );
+        let mut forwarding = route();
+        forwarding.forwarding_enabled = true;
+        apply_managed_upstream(&mut config, &forwarding);
+
+        let routes = config
+            .get("tun")
+            .and_then(Value::as_mapping)
+            .and_then(|tun| tun.get("route-address"))
+            .and_then(Value::as_sequence)
+            .unwrap();
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].as_str(), Some("198.19.0.1/16"));
+    }
+
+    #[test]
+    fn windows_network_forwarding_without_fake_ip_disables_global_auto_route() {
+        let mut config = mapping("{tun: {enable: true, auto-route: true}, dns: {enhanced-mode: redir-host}}");
+        let mut forwarding = route();
+        forwarding.forwarding_enabled = true;
+        apply_managed_upstream(&mut config, &forwarding);
+        let tun = config.get("tun").and_then(Value::as_mapping).unwrap();
+        assert_eq!(tun.get("auto-route").and_then(Value::as_bool), Some(false));
+        assert!(tun.get("route-address").is_none());
+    }
+
+    #[test]
+    fn windows_network_forwarding_change_changes_stable_route_signature() {
+        let before = route();
+        let mut after = before.clone();
+        after.forwarding_enabled = true;
+        assert_ne!(before.signature(), after.signature());
     }
 
     #[test]

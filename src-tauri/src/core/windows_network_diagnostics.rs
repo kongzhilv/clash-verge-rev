@@ -91,6 +91,7 @@ struct PhysicalUpstreamSnapshot {
     route_metric: u32,
     interface_metric: u32,
     effective_metric: u32,
+    forwarding_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -99,6 +100,7 @@ struct PhysicalUpstreamIdentity {
     interface_alias: String,
     source_address: String,
     gateway: String,
+    forwarding_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -255,14 +257,14 @@ fn load_default_routes() -> Result<Vec<MIB_IPFORWARD_ROW2>> {
     Ok(result)
 }
 
-fn interface_metric(interface_index: u32) -> Option<u32> {
+fn interface_state(interface_index: u32) -> Option<(u32, bool)> {
     let mut row = MIB_IPINTERFACE_ROW {
         Family: AF_INET,
         InterfaceIndex: interface_index,
         ..Default::default()
     };
     let status = unsafe { GetIpInterfaceEntry(&mut row) };
-    (status.0 == 0 && row.Connected && !row.DisableDefaultRoutes).then_some(row.Metric)
+    (status.0 == 0 && row.Connected && !row.DisableDefaultRoutes).then_some((row.Metric, row.ForwardingEnabled))
 }
 
 fn identity(interface: &InterfaceRow) -> String {
@@ -379,7 +381,7 @@ fn capture_topology() -> Result<WindowsTopologySnapshot> {
         .filter_map(|route| {
             let interface = interface_map.get(&route.InterfaceIndex)?;
             let gateway = ipv4_from_sockaddr(&route.NextHop)?;
-            let metric = interface_metric(route.InterfaceIndex);
+            let metric = interface_state(route.InterfaceIndex).map(|state| state.0);
             Some(DefaultRouteSnapshot {
                 interface_index: route.InterfaceIndex,
                 interface_alias: interface.alias.clone(),
@@ -429,7 +431,7 @@ fn capture_topology() -> Result<WindowsTopologySnapshot> {
                 .filter(|address| address.interface_index == interface.index)
                 .min_by_key(|address| u32::from(address.address))?;
             let gateway = ipv4_from_sockaddr(&route.NextHop)?;
-            let interface_metric = interface_metric(interface.index)?;
+            let (interface_metric, forwarding_enabled) = interface_state(interface.index)?;
             Some(PhysicalUpstreamSnapshot {
                 interface_index: interface.index,
                 interface_alias: interface.alias.clone(),
@@ -438,6 +440,7 @@ fn capture_topology() -> Result<WindowsTopologySnapshot> {
                 route_metric: route.Metric,
                 interface_metric,
                 effective_metric: route.Metric.saturating_add(interface_metric),
+                forwarding_enabled,
             })
         })
         .min_by_key(|route| {
@@ -503,7 +506,24 @@ fn physical_upstream_identity(snapshot: &WindowsTopologySnapshot) -> Option<Phys
             interface_alias: upstream.interface_alias.clone(),
             source_address: upstream.source_address.clone(),
             gateway: upstream.gateway.clone(),
+            forwarding_enabled: upstream.forwarding_enabled,
         })
+}
+
+fn forwarding_state_changed(
+    previous: Option<&PhysicalUpstreamIdentity>,
+    current: Option<&PhysicalUpstreamIdentity>,
+) -> bool {
+    match (previous, current) {
+        (Some(previous), Some(current)) => {
+            previous.interface_index == current.interface_index
+                && previous.interface_alias == current.interface_alias
+                && previous.source_address == current.source_address
+                && previous.gateway == current.gateway
+                && previous.forwarding_enabled != current.forwarding_enabled
+        }
+        _ => false,
+    }
 }
 
 fn hotspot_topology_changed(previous: &WindowsTopologySnapshot, current: &WindowsTopologySnapshot) -> bool {
@@ -561,8 +581,8 @@ async fn refresh_runtime_network_state(
             "reason": reason,
             "previous_physical_upstream": &previous.physical_upstream,
             "current_physical_upstream": &current.physical_upstream,
-            "trigger_scope": "stable-physical-upstream-only",
-            "hotspot_events_can_trigger_core_refresh": false,
+            "trigger_scope": "stable-physical-upstream-or-forwarding-mode",
+            "hotspot_events_can_trigger_core_refresh": "forwarding-mode-only",
             "hotspot_owner": "windows-hotspot-winrt",
             "proxy_socket_binding": "per-node/provider-defense-in-depth",
         }),
@@ -612,14 +632,14 @@ async fn monitor_loop() {
             "route_registration_status": registration[2],
             "event_debounce_ms": EVENT_DEBOUNCE.as_millis(),
             "watchdog_interval_ms": WATCHDOG_INTERVAL.as_millis(),
-            "hotspot_mode": "observability-only",
+            "hotspot_mode": "lifecycle-observability+routing-mode",
             "hotspot_owner": "windows-hotspot-winrt",
-            "hotspot_events_can_trigger_core_refresh": false,
+            "hotspot_events_can_trigger_core_refresh": "forwarding-mode-only",
             "physical_upstream_refresh": true,
             "physical_upstream_identity_ignores_metrics": true,
             "upstream_confirm_samples": UPSTREAM_CONFIRM_SAMPLES,
             "upstream_confirm_delay_ms": UPSTREAM_CONFIRM_DELAY.as_millis(),
-            "failover_strategy": "confirm-stable-physical-upstream-then-regenerate-runtime",
+            "failover_strategy": "confirm-stable-physical-upstream-or-forwarding-mode-then-regenerate-runtime",
         }),
     );
 
@@ -689,6 +709,8 @@ async fn monitor_loop() {
         };
 
         let current_upstream = physical_upstream_identity(&current);
+        let forwarding_mode_changed =
+            forwarding_state_changed(last_runtime_upstream.as_ref(), current_upstream.as_ref());
         let runtime_upstream_changed = current_upstream.is_some() && current_upstream != last_runtime_upstream;
         let topology_changed = current != previous;
         if !topology_changed && !runtime_upstream_changed {
@@ -721,7 +743,7 @@ async fn monitor_loop() {
                     "previous_physical_upstream": &previous.physical_upstream,
                     "current_physical_upstream": &current.physical_upstream,
                     "hotspot_owner": "windows-hotspot-winrt",
-                    "hotspot_events_can_trigger_core_refresh": false,
+                    "hotspot_events_can_trigger_core_refresh": "forwarding-mode-only",
                     "snapshot": &current,
                 }),
             );
@@ -730,7 +752,7 @@ async fn monitor_loop() {
         if hotspot_changed {
             diagnostics::info(
                 "windows-hotspot-guard",
-                "hotspot-observed-no-core-refresh",
+                "hotspot-observed-routing-mode-evaluation",
                 json!({
                     "previous_hotspot_present": previous.hotspot_present,
                     "current_hotspot_present": current.hotspot_present,
@@ -738,14 +760,15 @@ async fn monitor_loop() {
                     "current_hotspot_subnets": &current.hotspot_subnets,
                     "single_owner": true,
                     "owner": "windows-hotspot-winrt",
-                    "core_refresh_suppressed": true,
-                    "reason": "prevent-hotspot-tun-reload-feedback-loop",
+                    "forwarding_mode_changed": forwarding_mode_changed,
+                    "lifecycle_mutation": false,
+                    "core_refresh_policy": "only-for-stable-physical-forwarding-mode-change",
                 }),
             );
         }
 
         if runtime_upstream_changed {
-            if hotspot_changed {
+            if hotspot_changed && !forwarding_mode_changed {
                 diagnostics::info(
                     "windows-network-upstream",
                     "refresh-deferred-during-hotspot-transition",
@@ -759,8 +782,13 @@ async fn monitor_loop() {
                 match confirm_physical_upstream(candidate).await {
                     Ok(Some(confirmed)) => {
                         let confirmed_identity = physical_upstream_identity(&confirmed);
+                        let reason = if forwarding_mode_changed {
+                            "physical-forwarding-mode-changed"
+                        } else {
+                            "physical-upstream-changed"
+                        };
                         if confirmed_identity != last_runtime_upstream
-                            && refresh_runtime_network_state("physical-upstream-changed", &previous, &confirmed).await
+                            && refresh_runtime_network_state(reason, &previous, &confirmed).await
                         {
                             last_runtime_upstream = confirmed_identity;
                         }
@@ -803,7 +831,7 @@ pub fn ensure_monitor_running() {
 mod tests {
     use super::{
         AddressRow, InterfaceRow, InterfaceSnapshot, PhysicalUpstreamSnapshot, WindowsTopologySnapshot,
-        hotspot_topology_changed, is_hotspot_side, physical_upstream_identity,
+        forwarding_state_changed, hotspot_topology_changed, is_hotspot_side, physical_upstream_identity,
     };
     use std::net::Ipv4Addr;
 
@@ -847,6 +875,7 @@ mod tests {
             route_metric,
             interface_metric: 25,
             effective_metric: route_metric.saturating_add(25),
+            forwarding_enabled: false,
         }
     }
 
@@ -934,6 +963,22 @@ mod tests {
         let after = snapshot(true, vec!["172.22.44.0/24"], true, Some(physical));
         assert!(hotspot_topology_changed(&before, &after));
         assert_eq!(physical_upstream_identity(&before), physical_upstream_identity(&after));
+    }
+
+    #[test]
+    fn windows_network_forwarding_change_changes_runtime_identity() {
+        let before_physical = upstream(25, "WLAN", "192.168.1.6", "192.168.1.1", 0);
+        let mut after_physical = before_physical.clone();
+        after_physical.forwarding_enabled = true;
+        let before = snapshot(false, vec![], false, Some(before_physical));
+        let after = snapshot(true, vec![], true, Some(after_physical));
+        let before_identity = physical_upstream_identity(&before);
+        let after_identity = physical_upstream_identity(&after);
+        assert_ne!(before_identity, after_identity);
+        assert!(forwarding_state_changed(
+            before_identity.as_ref(),
+            after_identity.as_ref()
+        ));
     }
 
     #[test]
