@@ -23,6 +23,7 @@ const source = Object.fromEntries(
     ]),
   ),
 )
+const hotspotProduction = source.hotspot.split('\n#[cfg(test)]', 1)[0]
 
 const failures = []
 const requireText = (key, text, label) => {
@@ -31,6 +32,10 @@ const requireText = (key, text, label) => {
 const forbidText = (key, text, label) => {
   if (source[key].includes(text))
     failures.push(`${label}: still contains ${text}`)
+}
+const forbidHotspotProductionText = (text, label) => {
+  if (hotspotProduction.includes(text))
+    failures.push(`${label}: production code still contains ${text}`)
 }
 
 requireText(
@@ -243,6 +248,8 @@ for (const [marker, label] of [
   requireText('hotspot', marker, label)
 }
 
+// Only production code is checked here. Test fixtures are allowed to name known
+// bad examples so the checker itself does not become self-referential.
 for (const forbidden of [
   'CMCC-303-5G',
   '192.168.137.0/24',
@@ -258,7 +265,7 @@ for (const forbidden of [
   'windows-owned-hotspot-no-hnetcfg-mutation',
   'expect("checked non-empty")',
 ]) {
-  forbidText('hotspot', forbidden, 'v27 remains generic and release-safe')
+  forbidHotspotProductionText(forbidden, 'v27 remains generic and release-safe')
 }
 
 requireText(
