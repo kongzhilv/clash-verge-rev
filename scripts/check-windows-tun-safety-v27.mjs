@@ -191,6 +191,22 @@ for (const [marker, label] of [
   ],
   ['NetworkAdapterId', 'physical upstream is persisted by adapter GUID'],
   [
+    'current_physical_upstream_guid',
+    'restore re-resolves the current physical upstream',
+  ],
+  [
+    'detect_stable_upstream',
+    'restore retains stable native default-route fallback when WinRT is TUN-owned',
+  ],
+  [
+    'select_restore_upstream_guid',
+    'restore keeps the persisted pre-lease upstream as a fallback',
+  ],
+  [
+    'current.or_else(|| saved.map(str::to_owned))',
+    'current physical upstream remains authoritative over the snapshot fallback',
+  ],
+  [
     'EnableSharing(ICSSHARINGTYPE_PRIVATE)',
     'active hotspot is made ICS PRIVATE',
   ],
@@ -201,8 +217,12 @@ for (const [marker, label] of [
     'historical lease snapshots remain upgrade-readable',
   ],
   [
-    'restore dynamically captured Mobile Hotspot upstream as PUBLIC',
-    'hidden Windows hotspot state retains a dynamic restore fallback',
+    'restore current physical Mobile Hotspot upstream as PUBLIC',
+    'hidden Windows hotspot state restores the current physical upstream first',
+  ],
+  [
+    'snapshot_upstream_fallback_guid',
+    'snapshot upstream fallback remains observable in diagnostics',
   ],
   [
     'preserve Windows Mobile Hotspot PRIVATE side during restore',
@@ -271,5 +291,5 @@ if (failures.length) {
 console.log('[windows-tun-safety-v27] OK')
 console.log('[通过] v26 native route/forwarding-safe 不变量保留')
 console.log('[通过] Mobile Hotspot=ICS PRIVATE，Mihomo TUN=ICS PUBLIC')
-console.log('[通过] 动态 GUID 识别、持久快照、readback、回滚和恢复均受门禁保护')
+console.log('[通过] 当前物理上游优先恢复，持久快照仅作后备，readback/回滚/恢复均受门禁保护')
 console.log('[通过] 无 SSID / 固定 ifIndex / 固定热点子网 / PowerShell 路径')
