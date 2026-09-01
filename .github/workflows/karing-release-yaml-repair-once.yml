@@ -150,3 +150,5 @@ jobs:
           git add .karing-generated2
           git commit -m 'chore(ci): stage repaired release workflow blobs'
           git push origin HEAD:feature/karing-style-diversion
+
+# trigger repair
