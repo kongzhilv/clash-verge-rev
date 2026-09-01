@@ -44,7 +44,7 @@ requireText(
 )
 forbidText(
   'entrypoint',
-  "check-windows-tun-safety-v24.mjs",
+  'check-windows-tun-safety-v24.mjs',
   'current Windows TUN safety entrypoint must not certify stale v24 semantics',
 )
 
@@ -104,13 +104,28 @@ for (const api of [
   )
 
 for (const [marker, label] of [
-  ['const STABLE_SAMPLES: usize = 6;', 'physical upstream requires stable samples'],
-  ['const MAX_SAMPLES: usize = 24;', 'physical upstream stability check is bounded'],
-  ['skip_as_source: row.SkipAsSource', 'address inventory retains SkipAsSource'],
+  [
+    'const STABLE_SAMPLES: usize = 6;',
+    'physical upstream requires stable samples',
+  ],
+  [
+    'const MAX_SAMPLES: usize = 24;',
+    'physical upstream stability check is bounded',
+  ],
+  [
+    'skip_as_source: row.SkipAsSource',
+    'address inventory retains SkipAsSource',
+  ],
   ['!address.skip_as_source', 'physical source rejects SkipAsSource addresses'],
-  ['is_filter_component', 'derived Wi-Fi Direct/filter components are classified'],
+  [
+    'is_filter_component',
+    'derived Wi-Fi Direct/filter components are classified',
+  ],
   ['route-exclude-address', 'physical LAN CIDR stays outside TUN auto-route'],
-  ['managed_physical_route_guards', 'Runtime guards derive from stable physical upstream'],
+  [
+    'managed_physical_route_guards',
+    'Runtime guards derive from stable physical upstream',
+  ],
   [
     'route_signature_ignores_metric_churn_and_runtime_guards',
     'route stability ignores metric/runtime-guard churn',
@@ -121,7 +136,10 @@ for (const [marker, label] of [
     'managed_proxy_sockets_bind_to_stable_physical_interface',
     'proxy sockets bind to the stable physical interface',
   ],
-  ['explicit_provider_binding_is_preserved', 'explicit provider bindings remain higher priority'],
+  [
+    'explicit_provider_binding_is_preserved',
+    'explicit provider bindings remain higher priority',
+  ],
   [
     'managed_upstream_preserves_user_strict_route',
     'user strict-route semantics remain preserved',
@@ -186,18 +204,30 @@ requireText(
   'managed physical interface module is compiled on Windows',
 )
 for (const [marker, label] of [
-  ['apply_managed_physical_interface_lease', 'managed physical interface lease implementation exists'],
-  ['config.insert(interface_key, Value::from(alias));', 'managed lease binds global Mihomo outbound interface'],
+  [
+    'apply_managed_physical_interface_lease',
+    'managed physical interface lease implementation exists',
+  ],
+  [
+    'config.insert(interface_key, Value::from(alias));',
+    'managed lease binds global Mihomo outbound interface',
+  ],
   [
     'tun.insert(Value::from("auto-detect-interface"), Value::from(false));',
     'application topology watcher remains the single upstream selector',
   ],
-  ['explicit_user_interface_is_never_overwritten', 'explicit user interface binding is preserved'],
+  [
+    'explicit_user_interface_is_never_overwritten',
+    'explicit user interface binding is preserved',
+  ],
   [
     'managed_lease_binds_all_outbound_to_stable_physical_nic',
     'all outbound traffic uses the stable NIC lease',
   ],
-  ['empty_detected_alias_does_not_create_a_broken_lease', 'empty interface cannot create a broken lease'],
+  [
+    'empty_detected_alias_does_not_create_a_broken_lease',
+    'empty interface cannot create a broken lease',
+  ],
 ])
   requireText('windowsManagedInterface', marker, label)
 
@@ -384,7 +414,15 @@ console.log(
 console.log(
   '[通过] Forwarding=true 时 auto-route 仅路由最终 fake-IP CIDR(s)，不安装 TUN 默认路由',
 )
-console.log('[通过] 非 fake-IP 配置 fail-closed 关闭 unsafe auto-route，避免宿主机回环黑洞')
-console.log('[通过] Runtime 全 outbound 继续绑定稳定物理 NIC，用户显式 interface 配置优先')
-console.log('[通过] 物理 LAN route guard、proxy/provider defense-in-depth 与 outbound diagnostics 保留')
-console.log('[通过] HNetCfg 仅保留 legacy Hosted Network 兼容及持久 rollback/HRESULT 诊断')
+console.log(
+  '[通过] 非 fake-IP 配置 fail-closed 关闭 unsafe auto-route，避免宿主机回环黑洞',
+)
+console.log(
+  '[通过] Runtime 全 outbound 继续绑定稳定物理 NIC，用户显式 interface 配置优先',
+)
+console.log(
+  '[通过] 物理 LAN route guard、proxy/provider defense-in-depth 与 outbound diagnostics 保留',
+)
+console.log(
+  '[通过] HNetCfg 仅保留 legacy Hosted Network 兼容及持久 rollback/HRESULT 诊断',
+)
