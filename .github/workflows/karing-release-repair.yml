@@ -1,0 +1,100 @@
+name: Karing release workflow repair
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-release-repair.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    name: Repair Karing release gate safely
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Patch, review, and push release workflow
+        env:
+          KARING_PAT: ${{ secrets.KARING_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${KARING_PAT:-}" ]; then
+            echo 'KARING_RELEASE_TOKEN is missing' >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/karing-diagnostics-once.yml')
+          text = path.read_text(encoding='utf-8')
+
+          old_gate = '''          check_contains .github/workflows/karing-diagnostics-once.yml 'id: linux-arm64' 'Linux ARM64 已纳入 native build matrix'
+          check_contains .github/workflows/karing-diagnostics-once.yml 'os: ubuntu-22.04-arm' 'Linux ARM64 使用 GitHub 原生 ARM64 runner'
+          check_not_contains .github/workflows/karing-diagnostics-once.yml 'deb_arch: arm64' 'Linux ARM64 不再使用 x64 multiarch apt'
+'''
+          new_gate = '''          python3 - <<'PY_MATRIX'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/karing-diagnostics-once.yml').read_text(encoding='utf-8')
+          native_marker = '\\n  native-builds:\\n'
+          next_marker = '\\n  linux-arm-builds:\\n'
+          if native_marker not in workflow:
+              raise SystemExit('[失败] 未找到 native-builds job')
+          native = workflow.split(native_marker, 1)[1]
+          if next_marker in native:
+              native = native.split(next_marker, 1)[0]
+
+          required = (
+              ('id: linux-arm64', 'Linux ARM64 已纳入 native build matrix'),
+              ('os: ubuntu-22.04-arm', 'Linux ARM64 使用 GitHub 原生 ARM64 runner'),
+          )
+          for needle, label in required:
+              if needle not in native:
+                  raise SystemExit(f'[失败] {label}：native-builds 中未找到 {needle}')
+              print(f'[通过] {label}')
+
+          if 'deb_arch: arm64' in native:
+              raise SystemExit('[失败] Linux ARM64 native build matrix 仍包含 x64 multiarch deb_arch: arm64')
+          print('[通过] Linux ARM64 不再使用 x64 multiarch apt')
+          PY_MATRIX
+'''
+
+          if old_gate not in text:
+              raise SystemExit('Expected self-referential ARM64 scope gate was not found; refusing broad rewrite')
+          text = text.replace(old_gate, new_gate, 1)
+
+          old_token = '          GH_TOKEN: ${{ github.token }}'
+          desired_token = '          GH_TOKEN: $' + '{{ secrets.KARING_RELEASE_TOKEN }}'
+          if old_token not in text:
+              raise SystemExit('Expected GitHub token release line was not found; refusing broad rewrite')
+          text = text.replace(old_token, desired_token, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          git diff --check
+          git diff -- .github/workflows/karing-diagnostics-once.yml
+
+          grep -Fq "native_marker = '\\n  native-builds:\\n'" .github/workflows/karing-diagnostics-once.yml
+          grep -Fq 'GH_TOKEN: ${{ secrets.KARING_RELEASE_TOKEN }}' .github/workflows/karing-diagnostics-once.yml
+          if grep -Fq "check_not_contains .github/workflows/karing-diagnostics-once.yml 'deb_arch: arm64'" .github/workflows/karing-diagnostics-once.yml; then
+            echo 'Self-referential release gate survived patch' >&2
+            exit 1
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/karing-diagnostics-once.yml
+          git commit -m 'fix(release): make Karing ARM64 gate non-self-referential'
+          git remote set-url origin "https://x-access-token:${KARING_PAT}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin HEAD:feature/karing-style-diversion
