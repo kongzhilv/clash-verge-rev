@@ -1,4 +1,4 @@
 Karing release candidate: v2.5.4-karing.27
 Purpose: trigger the main release, Windows WFP, Windows Mobile Hotspot v27, and release observer workflows on one immutable source SHA.
-Runtime behavior: unchanged.
-Final audit: v27 upstream-switch restore fix canonicalized by rustfmt; one-shot formatter workflow removed before this release trigger.
+Runtime behavior: release blocked pending v27 fail-closed restore-anchor hardening discovered during final review.
+Audit hold: supersede and cancel the prior packaging candidate before it can publish; a new final audit stamp will be written after the hardening workflow and safety gates are updated.
