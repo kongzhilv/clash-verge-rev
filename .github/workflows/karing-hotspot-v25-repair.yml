@@ -1,0 +1,40 @@
+name: Karing hotspot v25 one-shot repair
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-hotspot-v25-repair.yml'
+      - '.github/repair/karing_hotspot_v25.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.KARING_RELEASE_TOKEN }}
+
+      - name: Apply transactional hotspot v25 repair
+        run: python3 .github/repair/karing_hotspot_v25.py
+
+      - name: Review staged diff
+        run: |
+          git diff --check
+          git status --short
+          git diff -- src-tauri/src/core/windows_hotspot_ics.rs scripts/check-windows-hotspot-zero-owner-v25.mjs .github/workflows/karing-windows-hotspot-v25.yml .github/workflows/karing-diagnostics-once.yml .github/workflows/karing-release-observer.yml .release/karing-release-tag.txt
+
+      - name: Commit and push reviewed repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix(windows): harden hotspot ICS ordering and diagnostics for karing.25'
+          git push origin HEAD:feature/karing-style-diversion
