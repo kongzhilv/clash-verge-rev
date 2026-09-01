@@ -1,0 +1,828 @@
+name: Karing 桌面版审查与发行
+run-name: ${{ github.event_name == 'pull_request' && '审查 Karing 桌面版安装包' || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release(karing): publish ') && '构建并发布 Karing 桌面版' || '审查并构建 Karing 桌面版候选') }}
+
+on:
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.release/karing-release-tag.txt'
+      - '.release/karing-release-authorize.txt'
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.release/karing-release-tag.txt'
+      - '.release/karing-release-authorize.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: 0
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+  NODE_OPTIONS: --max_old_space_size=4096
+  RELEASE_BRANCH: feature/karing-style-diversion
+
+concurrency:
+  group: karing-desktop-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: 审查并验证源码
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      commit: ${{ steps.meta.outputs.commit }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+    steps:
+      - name: 检出本次运行对应的代码
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Linux 构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxslt1.1 \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf
+
+      - name: 安装 Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 读取并验证发行信息
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version package.json)
+          commit=$(git rev-parse HEAD)
+          release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
+          test "$version" = '2.5.4'
+          if [[ ! "$release_tag" =~ ^v${version}-karing\.[0-9]+$ ]]; then
+            echo "非法 Karing Release tag: $release_tag" >&2
+            exit 1
+          fi
+          test "$(jq -r .version src-tauri/tauri.conf.json)" = '2.5.4'
+          grep -Fq 'version = "2.5.4"' src-tauri/Cargo.toml
+          {
+            echo "version=$version"
+            echo "commit=$commit"
+            echo "release_tag=$release_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 检查 Rust 格式
+        run: cargo fmt --manifest-path ./src-tauri/Cargo.toml --all -- --check
+
+      - name: 检查前端格式
+        run: pnpm format:check
+
+      - name: 运行 ESLint
+        run: pnpm lint
+
+      - name: 运行 TypeScript 类型检查
+        run: pnpm typecheck
+
+      - name: 检查未使用的前端代码和依赖
+        run: pnpm knip:report
+
+      - name: 构建前端
+        run: pnpm run web:build
+
+      - name: 运行 Windows TUN/热点 v27 安全专项回归
+        run: node scripts/check-windows-tun-safety.mjs
+
+      - name: 运行 Windows Mobile Hotspot v27 ICS/转发兼容回归
+        run: node scripts/check-windows-tun-safety-v27.mjs
+
+      - name: 运行 Windows WFP v21 loopback 安全回归
+        run: node scripts/check-windows-wfp-v21.mjs
+
+      - name: 运行程序归因专项回归
+        run: node scripts/check-karing-process-attribution.mjs
+
+      - name: 运行前端成熟度专项回归
+        run: node scripts/check-karing-ui-maturity.mjs
+
+      - name: 运行 Rust Clippy
+        run: cargo clippy --workspace --all-targets --features clippy -- -D warnings
+
+      - name: 审查 Karing 发行范围
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_contains() {
+            local file="$1"
+            local text="$2"
+            local label="$3"
+            if grep -Fq "$text" "$file"; then
+              echo "[通过] $label"
+            else
+              echo "[失败] $label：$file 中未找到 $text"
+              exit 1
+            fi
+          }
+
+          check_not_contains() {
+            local file="$1"
+            local text="$2"
+            local label="$3"
+            if grep -Fq "$text" "$file"; then
+              echo "[失败] $label：$file 中仍包含 $text"
+              exit 1
+            fi
+            echo "[通过] $label"
+          }
+
+          if [ -e mobile/android/upstream.env ]; then
+            echo '[失败] 本桌面发行不应包含 Android 上游环境文件'
+            exit 1
+          fi
+          echo '[通过] Android 不在本次发行范围内'
+
+          check_contains src-tauri/src/core/diagnostics.rs 'basename("diagnostic")' '独立诊断日志已落盘'
+          check_contains src-tauri/src/core/diagnostics.rs 'Cleanup::KeepLogFiles' '诊断日志启用轮转保留策略'
+          check_contains src-tauri/src/core/diagnostics.rs '<redacted>' '诊断日志敏感字段脱敏测试存在'
+          check_contains src-tauri/src/core/manager/config.rs 'saved-app-network-settings' '配置生成前记录软件网络开关'
+          check_contains src-tauri/src/core/manager/config.rs 'saved-clash-before-generate' '配置生成前记录 Clash 网络快照'
+          check_contains src-tauri/src/core/manager/config.rs 'runtime-generated' '配置生成后记录 Runtime 网络快照'
+          check_contains src-tauri/src/core/manager/config.rs '"ipv6": config.get("ipv6")' 'Runtime 快照记录 IPv6 实际值'
+          check_contains src-tauri/src/core/manager/config.rs '"enhanced_mode": yaml_str(dns, "enhanced-mode")' 'Runtime 快照记录 DNS 模式'
+          check_contains src-tauri/src/core/sysopt.rs 'record_os_proxy_state("before-apply")' '系统代理写入前记录 OS 状态'
+          check_contains src-tauri/src/core/sysopt.rs 'record_os_proxy_state("after-apply")' '系统代理写入后回读 OS 状态'
+          check_contains src-tauri/src/core/manager/lifecycle.rs 'prepare_windows_tun_runtime_for_start' 'Windows TUN 启动前执行物理出口稳定检查'
+          check_contains src-tauri/src/utils/windows_network.rs 'const STABLE_SAMPLES: usize = 6;' 'Windows 默认路由需通过稳定窗口'
+          check_contains src-tauri/src/utils/windows_managed_interface.rs 'config.insert(interface_key, Value::from(alias));' 'Windows TUN Runtime 将全部 Mihomo outbound 绑定稳定物理出口'
+          check_contains src-tauri/src/utils/windows_managed_interface.rs 'tun.insert(Value::from("auto-detect-interface"), Value::from(false));' 'managed lease 下由应用 topology watcher 独占物理出口选择'
+          check_not_contains src-tauri/src/utils/windows_network.rs 'config.insert(\n        Value::from("interface-name")' 'route guard 模块本身不直接拥有顶层物理出口 lease'
+          check_contains src-tauri/src/utils/windows_managed_interface.rs 'windows_network_explicit_user_interface_is_never_overwritten' '用户显式顶层 interface-name 永远优先于 managed lease'
+          check_contains src-tauri/src/core/manager/config.rs 'managed-physical-interface-lease-applied' 'Windows TUN 记录 Runtime-managed 全出站物理接口 lease'
+          check_contains src-tauri/src/core/manager/config.rs 'all-mihomo-outbound' 'Windows TUN 日志记录 managed lease 覆盖全部 Mihomo outbound'
+          check_contains src-tauri/src/core/manager/config.rs 'regenerate-runtime-on-physical-upstream-change' '物理上游切换通过 topology watcher 重生成 Runtime 迁移 lease'
+          check_contains src-tauri/src/feat/clash.rs 'MIHOMO_CONTROL_MAX_ATTEMPTS' 'Mihomo 控制 API 启动就绪采用有界重试'
+          check_contains src-tauri/src/feat/clash.rs 'control-read-retry' '控制 API 瞬态失败记录重试诊断'
+          check_contains src-tauri/src/feat/clash.rs 'control-read-recovered' '控制 API 恢复后记录就绪耗时'
+          check_contains src-tauri/src/cmd/clash.rs 'ui-get-clash-mode' 'UI mode 读取复用控制 API 就绪逻辑'
+          check_contains src-tauri/src/cmd/clash.rs '"start-requested"' '核心启动生命周期进入结构化诊断'
+          check_contains src-tauri/src/cmd/clash.rs 'pub async fn start_proxy()' '后端已实现启动主代理命令'
+          check_contains src-tauri/src/cmd/clash.rs 'pub async fn stop_proxy()' '后端已实现停止主代理命令'
+          check_contains src-tauri/src/lib.rs 'cmd::start_proxy' '已注册启动主代理命令'
+          check_contains src-tauri/src/lib.rs 'cmd::stop_proxy' '已注册停止主代理命令'
+          check_contains src/components/home/proxy-tun-card.tsx "value ? 'start_proxy' : 'stop_proxy'" '前端主开关已连接后端命令'
+          check_contains src-tauri/src/enhance/field/diversion.rs 'const CONFIG_KEY: &str = "x-karing-diversion";' 'Karing 分流编译器使用正确配置键'
+          check_contains src-tauri/src/cmd/save_profile.rs 'Global Merge and Script are always collected' '全局 Merge 与 Script 保存后会刷新运行时'
+          check_contains src/services/process-connections.ts 'resolvedIdentitiesByPid' '同 PID 完整身份会修复占位连接记录'
+          check_contains src/services/process-connections.ts 'PID_PLACEHOLDER_PATTERN' 'PID 占位值不会被当成程序名'
+          check_contains src/services/process-connections.ts 'INACTIVE_TCP_STATES' '失效 TCP 状态不会污染程序归因'
+          check_not_contains src-tauri/src/cmd/process_connections.rs 'format!("PID {pid}")' '后端不再制造 PID 假程序名'
+          check_contains src-tauri/src/core/manager/config.rs 'core is stopped; staged configuration without starting it' '后台配置更新不会偷偷启动已关闭内核'
+          check_contains src/components/connection/connection-detail.tsx 'const TWO_PANE_QUERY' '连接详情使用自适应 list-detail 双栏阈值'
+          check_contains src/components/connection/connection-detail.tsx "position: 'absolute'" '普通窗口详情替换连接工作区而不是模态覆盖'
+          check_contains src/components/connection/connection-detail.tsx 'ArrowBackRounded' '单栏详情提供返回连接列表导航'
+          check_contains src/components/connection/connection-detail.tsx "flex: '1 1 0'" '详情正文拥有独立可收缩滚动区'
+          check_contains src/components/connection/connection-detail.tsx "scrollbarGutter: 'stable'" '详情滚动条不会挤压内容'
+          check_not_contains src/components/connection/connection-detail.tsx '<Drawer' '连接详情已彻底移除旧模态 Drawer'
+          check_contains src/components/base/adaptive-dialog.tsx "useMediaQuery(theme.breakpoints.down('sm'))" '复杂对话框仅在小屏切换全屏'
+          check_contains src/components/rule/diversion-manager/project-panel.tsx 'MoreVertRounded' '应用规则低频操作已收进更多菜单'
+          check_not_contains src/components/connection/connection-rule-assistant.tsx '打开分流中心' '连接分流助手不再重复分流中心入口'
+          check_contains src/components/connection/connection-row-item.tsx "flexWrap: 'wrap'" '连接列表元信息允许换行避免裁字'
+          check_contains src/components/routing/routing-relations-panel.tsx 'MoreVertRounded' '应用到出口关系不再堆叠跳转图标'
+          check_contains src-tauri/src/core/mod.rs '#[path = "windows_hotspot_ics_v27.rs"]' '运行时已切换到 v27 Mobile Hotspot ICS 实现'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'is_mobile_hotspot_adapter' 'v27 动态识别活动 Mobile Hotspot 适配器'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'NetworkInformation::GetInternetConnectionProfile' 'v27 动态捕获当前 Internet 上游 GUID'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'EnableSharing(ICSSHARINGTYPE_PRIVATE)' 'v27 将活动热点设为 ICS PRIVATE'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'EnableSharing(ICSSHARINGTYPE_PUBLIC)' 'v27 将 Mihomo TUN 设为 ICS PUBLIC'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'save_snapshot' 'v27 修改 ICS 前持久化原状态'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'rollback-immediately' 'v27 ICS 应用失败立即回滚'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'lease_roles_are_desired' 'v27 修改后执行角色 readback'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'restore_now' 'v27 退出/TUN 关闭具有显式恢复路径'
+          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'windows-hotspot-ics-lease-v20.json' 'v27 兼容历史持久 lease 路径'
+          check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'CMCC-303-5G' 'v27 不写死现场 SSID'
+          check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs '192.168.137.0/24' 'v27 不写死 Windows 热点子网'
+          check_contains src-tauri/src/utils/windows_network.rs 'apply_forwarding_safe_tun_route' 'Windows Forwarding 模式继续启用 fake-IP-only TUN 路由'
+          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'physical-forwarding-mode-changed' '物理 ForwardingEnabled 变化继续触发受控 Runtime 重生成'
+          check_contains src-tauri/src/core/manager/config.rs 'forwarding-safe-fake-ip-only' '最终 Runtime 继续记录 forwarding-safe 路由策略'
+          python3 - <<'PY_MATRIX'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/karing-diagnostics-once.yml').read_text(encoding='utf-8')
+          native_marker = '\n  native-builds:\n'
+          next_marker = '\n  linux-arm-builds:\n'
+          if native_marker not in workflow:
+              raise SystemExit('[失败] 未找到 native-builds job')
+          native = workflow.split(native_marker, 1)[1]
+          if next_marker in native:
+              native = native.split(next_marker, 1)[0]
+
+          required = (
+              ('id: linux-arm64', 'Linux ARM64 已纳入 native build matrix'),
+              ('os: ubuntu-22.04-arm', 'Linux ARM64 使用 GitHub 原生 ARM64 runner'),
+          )
+          for needle, label in required:
+              if needle not in native:
+                  raise SystemExit(f'[失败] {label}：native-builds 中未找到 {needle}')
+              print(f'[通过] {label}')
+
+          if 'deb_arch: arm64' in native:
+              raise SystemExit('[失败] Linux ARM64 native build matrix 仍包含 x64 multiarch deb_arch: arm64')
+          print('[通过] Linux ARM64 不再使用 x64 multiarch apt')
+          PY_MATRIX
+
+  native-builds:
+    name: 构建 ${{ matrix.name }}
+    needs: review
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows
+          - id: windows-arm64
+            name: Windows ARM64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            platform: windows
+          - id: macos-arm64
+            name: macOS Apple Silicon
+            os: macos-latest
+            target: aarch64-apple-darwin
+            platform: macos
+          - id: macos-x64
+            name: macOS Intel
+            os: macos-latest
+            target: x86_64-apple-darwin
+            platform: macos
+          - id: linux-x64
+            name: Linux x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux
+          - id: linux-arm64
+            name: Linux ARM64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: 检出本次运行对应的代码
+        uses: actions/checkout@v7
+
+      - name: 安装 Rust 及目标平台
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+
+      - name: 恢复 Rust 构建缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing-desktop-native-v6
+          key: ${{ matrix.os }}-${{ matrix.target }}
+          workspaces: |
+            . -> target
+          cache-all-crates: true
+
+      - name: 安装 Linux 构建依赖
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxslt1.1 \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 根据 Cargo.lock 构建匹配服务组件
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: 准备 Mihomo 和运行资源
+        run: pnpm run prebuild ${{ matrix.target }}
+
+      - name: 生成无更新签名的打包配置
+        shell: bash
+        run: |
+          mkdir -p .ci
+          printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
+
+      - name: 构建桌面安装包
+        run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
+
+      - name: 上传 Windows 安装包
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing-${{ matrix.id }}
+          path: target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: 上传 macOS 磁盘映像
+        if: matrix.platform == 'macos'
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing-${{ matrix.id }}
+          path: target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: 上传 Linux 安装包
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing-${{ matrix.id }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  linux-arm-builds:
+    name: 构建 Linux ${{ matrix.name }}
+    needs: review
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: armv7-unknown-linux-gnueabihf
+            name: ARMv7
+            arch: armhf
+            deb_arch: armhf
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出本次运行对应的代码
+        uses: actions/checkout@v7
+
+      - name: 安装 Rust 及目标平台
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+
+      - name: 恢复 Rust 构建缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing-desktop-linux-arm-v6
+          key: ${{ matrix.target }}
+          workspaces: |
+            . -> target
+          cache-all-crates: true
+
+      - name: 配置 Ubuntu ARMv7 多架构软件源
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/sources.list <<'EOF'
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy main multiverse universe restricted
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-security main multiverse universe restricted
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-updates main multiverse universe restricted
+          deb [arch=amd64,i386] http://archive.ubuntu.com/ubuntu jammy-backports main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-security main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-updates main multiverse universe restricted
+          deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-backports main multiverse universe restricted
+          EOF
+          if [ -f /etc/apt/sources.list ]; then
+            sudo mv /etc/apt/sources.list /etc/apt/sources.list.default
+          fi
+          sudo mv /tmp/sources.list /etc/apt/sources.list
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxslt1.1:armhf \
+            libwebkit2gtk-4.1-dev:armhf \
+            libayatana-appindicator3-dev:armhf \
+            libssl-dev:armhf \
+            librsvg2-dev:armhf \
+            patchelf
+
+      - name: 安装 ARMv7 交叉编译器
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+          {
+            echo 'CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc'
+            echo 'CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc'
+            echo 'CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++'
+            echo 'PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig/'
+            echo 'PKG_CONFIG_SYSROOT_DIR=/usr/arm-linux-gnueabihf/'
+            echo 'PKG_CONFIG_ALLOW_CROSS=1'
+          } >> "$GITHUB_ENV"
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 根据 Cargo.lock 构建匹配服务组件
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: 准备 Mihomo 和运行资源
+        run: pnpm run prebuild ${{ matrix.target }}
+
+      - name: 生成无更新签名的打包配置
+        shell: bash
+        run: |
+          mkdir -p .ci
+          printf '%s\n' '{"bundle":{"createUpdaterArtifacts":false}}' > .ci/tauri-release.conf.json
+
+      - name: 交叉编译 Linux 安装包
+        run: pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
+
+      - name: 上传 Linux ARM 安装包
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing-linux-${{ matrix.arch }}
+          path: |
+            target/${{ matrix.target }}/release/bundle/deb/*.deb
+            target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  fixed-webview2-builds:
+    name: 构建固定 WebView2 ${{ matrix.name }}
+    needs: review
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            name: x64
+            arch: x64
+          - target: aarch64-pc-windows-msvc
+            name: ARM64
+            arch: arm64
+    runs-on: windows-latest
+    steps:
+      - name: 检出本次运行对应的代码
+        uses: actions/checkout@v7
+
+      - name: 安装 Rust 及目标平台
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+
+      - name: 恢复 Rust 构建缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing-desktop-fixed-webview2-v6
+          key: ${{ matrix.target }}
+          workspaces: |
+            . -> target
+          cache-all-crates: true
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 根据 Cargo.lock 构建匹配服务组件
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+
+      - name: 准备 Mihomo 和运行资源
+        run: pnpm run prebuild ${{ matrix.target }}
+
+      - name: 下载固定版 WebView2 运行库
+        shell: pwsh
+        run: |
+          $version = '133.0.3065.92'
+          $cab = "Microsoft.WebView2.FixedVersionRuntime.$version.${{ matrix.arch }}.cab"
+          Invoke-WebRequest -Uri "https://github.com/westinyang/WebView2RuntimeArchive/releases/download/$version/$cab" -OutFile $cab
+          Expand.exe $cab -F:* ./src-tauri
+          Remove-Item ./src-tauri/tauri.windows.conf.json
+          Rename-Item ./src-tauri/webview2.${{ matrix.arch }}.json tauri.windows.conf.json
+
+      - name: 生成无更新签名的打包配置
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .ci | Out-Null
+          '{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding utf8 .ci/tauri-release.conf.json
+
+      - name: 构建固定 WebView2 安装包
+        shell: pwsh
+        run: |
+          pnpm tauri build --target ${{ matrix.target }} --config .ci/tauri-release.conf.json
+          $files = Get-ChildItem "target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe"
+          if (-not $files) { throw '没有找到固定 WebView2 安装包' }
+          foreach ($file in $files) {
+            $newName = $file.Name -replace '-setup\.exe$', '_fixed_webview2-setup.exe'
+            Rename-Item $file.FullName $newName
+          }
+
+      - name: 上传固定 WebView2 安装包
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing-fixed-webview2-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/bundle/nsis/*_fixed_webview2-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  package-release:
+    name: 汇总并审查发行产物
+    needs:
+      - review
+      - native-builds
+      - linux-arm-builds
+      - fixed-webview2-builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载全部安装包
+        uses: actions/download-artifact@v8
+        with:
+          pattern: karing-*
+          path: downloaded-assets
+          merge-multiple: true
+
+      - name: 校验并整理发行文件
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          find downloaded-assets -type f \
+            \( -iname '*.exe' -o -iname '*.dmg' -o -iname '*.deb' -o -iname '*.rpm' \) \
+            -exec cp '{}' release-assets/ \;
+
+          count=$(find release-assets -maxdepth 1 -type f | wc -l)
+          if [ "$count" -ne 12 ]; then
+            echo "应当生成 12 个可安装文件，实际找到 $count 个"
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
+
+          if find release-assets -maxdepth 1 -type f ! -name '*2.5.4*' -print -quit | grep -q .; then
+            echo '发现没有 2.5.4 版本号的安装文件'
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
+
+          (
+            cd release-assets
+            sha256sum -- * > SHA256SUMS.txt
+          )
+
+          cat > release-assets/BUILD_INFO.txt <<EOF
+          Repository: ${GITHUB_REPOSITORY}
+          Event: ${GITHUB_EVENT_NAME}
+          Commit: ${{ needs.review.outputs.commit }}
+          Version: ${{ needs.review.outputs.version }}
+          Release tag: ${{ needs.review.outputs.release_tag }}
+          Platforms: Windows x64/ARM64, macOS Intel/Apple Silicon, Linux x64/ARM64/ARMv7
+          Signing: unsigned fork build; no upstream Apple notarization or updater signature
+          Android: intentionally not included
+          Windows Mihomo stable source: ac017cdd246ce8bd547653d927e7bf77d7ee73d5 (v1.19.30)
+          Windows Mihomo alpha source: fb66af813b3e65023851e94166ec8a4f61e02634
+          Windows sing-tun source: dfc71de64aed159d9a09a5df43077bab0671db1f (v0.4.22)
+          Windows core toolchain: Go 1.20.14 / SHA256 0e0d0190406ead891d94ecf00f961bb5cfa15ddd47499d2649f12eee80aee110
+          WFP layer: FWPM_LAYER_ALE_AUTH_CONNECT_V6
+          WFP condition: FWPM_CONDITION_FLAGS / FWP_MATCH_FLAGS_NONE_SET / FWP_CONDITION_FLAG_IS_LOOPBACK
+          WFP semantics: ipv6:false blocks non-loopback IPv6 while preserving IPv6 loopback traffic
+          Windows Mobile Hotspot lifecycle: hotspot Start/Stop remains Windows/user-owned; Karing leases only ICS roles while TUN + hotspot are active
+          Windows Mobile Hotspot compatibility: runtime GUID/device-class/private-IPv4 discovery; active hotspot = ICS PRIVATE; Mihomo TUN = ICS PUBLIC
+          Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback, TUN-off/exit restore and dynamic original-upstream GUID fallback
+          Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route
+          Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop
+          Windows genericity: no fixed SSID, hotspot subnet, physical ifIndex or TUN ifIndex is a behavioral input
+          EOF
+
+          cat > release-assets/release-notes.md <<'EOF'
+          # Clash Verge Rev Karing ${{ needs.review.outputs.release_tag }}
+
+          `.27` 修复 `.26` 仍未覆盖的 Windows Mobile Hotspot 客户端转发路径：`.26` 已避免宿主机在物理接口开启 forwarding 后被 TUN 默认路由回灌，但热点客户端取得 Fake-IP 后，ICS 仍可能把后续连接交给物理上游而不是 Mihomo TUN，导致手机/平板无法按 Mihomo 规则正常访问网络。
+
+          - **成熟拓扑：Mihomo TUN = ICS PUBLIC，当前 Mobile Hotspot = ICS PRIVATE。** 该拓扑与上游 Clash Verge Rev #7739 的 Windows 11 端到端验证一致：热点客户端 DNS/Fake-IP 后续连接进入 Mihomo，并由现有规则选择 DIRECT 或代理。
+          - **移除 `.26` 的错误门禁。** 旧策略把现代 Wi-Fi Direct/Mobile Hotspot 排除在 HNetCfg ICS lease 之外，结果正好阻止了已经验证有效的 TUN-PUBLIC/Hotspot-PRIVATE 拓扑。`.27` 允许活动现代热点进入受控 lease，但仍不启动或停止 Windows 热点本身。
+          - **完全动态识别。** TUN 与热点通过运行时接口 GUID、设备类型、活动状态和私有 IPv4 属性识别；无法唯一识别时 fail-closed，不修改 ICS。实现不依赖 SSID、固定 ifIndex、固定物理接口名或 `192.168.137.0/24`。
+          - **状态安全。** 修改前写入持久 snapshot；应用后 readback 验证热点 PRIVATE + TUN PUBLIC；任何失败立即 rollback。关闭 TUN、退出程序或拓扑不再满足条件时恢复原状态。
+          - **升级恢复兼容。** `.27` 继续复用 `windows-hotspot-ics-lease-v20.json`，兼容历史 snapshot v2/v3，避免升级时遗留旧 lease。对于 Windows Mobile Hotspot 在 HNetCfg 中隐藏原角色的情况，动态保存 preferred Internet adapter GUID 作为恢复兜底。
+          - **持续监察。** 热点/TUN 组合每 2 秒检查一次，并要求连续 3 个稳定样本后才执行变更；候选歧义、COM 失败和 readback 不一致都有结构化诊断。
+          - **`.26` 的 forwarding-safe 防护继续保留。** 物理 `ForwardingEnabled=true` 时，TUN 自动路由继续限制到最终 Fake-IP CIDR；Mihomo outbound/provider socket 继续绑定稳定物理上游，用户显式 `interface-name` 始终优先。
+          - **真实 Windows CI。** `.27` 在 Windows x64 与 ARM64 上分别执行网络路径 `cargo check`，并运行 v27 ICS lease、Fake-IP-only forwarding、自定义 Fake-IP range、ForwardingEnabled 身份变化和显式 interface 优先级回归。
+          - `.21` IPv6 loopback WFP 修复继续保留。正式 Release 仍要求 12 个安装文件 + `SHA256SUMS.txt` + `BUILD_INFO.txt` 共 14 个公开资产，并在发布后核对 tag、commit、Latest 状态与资产数量。
+
+          本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。
+
+          Commit: `${{ needs.review.outputs.commit }}`
+          EOF
+
+          echo '发行文件：'
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 上传已审查的完整发行资产
+        uses: actions/upload-artifact@v7
+        with:
+          name: karing-release-assets
+          path: release-assets
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+
+
+    authorize_release:
+      name: 校验正式发行授权
+      needs:
+        - review
+        - package-release
+      runs-on: ubuntu-latest
+      outputs:
+        authorized: ${{ steps.gate.outputs.authorized }}
+      steps:
+        - name: 检出发行授权提交
+          uses: actions/checkout@v7
+          with:
+            fetch-depth: 2
+
+        - name: Fail-closed 校验发行授权
+          id: gate
+          env:
+            RELEASE_TAG: ${{ needs.review.outputs.release_tag }}
+            COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          shell: bash
+          run: |
+            set -euo pipefail
+            echo 'authorized=false' >> "$GITHUB_OUTPUT"
+
+            if [ "$GITHUB_EVENT_NAME" != 'push' ]; then
+              echo '非 push 事件：仅构建候选，不发布'
+              exit 0
+            fi
+            if [ "$GITHUB_REF" != 'refs/heads/feature/karing-style-diversion' ]; then
+              echo '非发行分支：仅构建候选，不发布'
+              exit 0
+            fi
+            if [ "$GITHUB_ACTOR" != 'kongzhilv' ]; then
+              echo "非仓库发行账户触发：${GITHUB_ACTOR}"
+              exit 0
+            fi
+            if [[ "$COMMIT_MESSAGE" != "release(karing): publish ${RELEASE_TAG}" ]]; then
+              echo 'commit message 未形成精确发行授权'
+              exit 0
+            fi
+
+            mapfile -t changed < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")
+            if [ "${#changed[@]}" -ne 1 ] || [ "${changed[0]}" != '.release/karing-release-authorize.txt' ]; then
+              echo '发行授权提交必须且只能修改 .release/karing-release-authorize.txt'
+              printf 'changed: %s
+  ' "${changed[@]}"
+              exit 0
+            fi
+
+            test -f .release/karing-release-authorize.txt || { echo '缺少发行授权文件'; exit 0; }
+            authorization=$(tr -d '
+  ' < .release/karing-release-authorize.txt)
+            if [ "$authorization" != "PUBLISH:${RELEASE_TAG}" ]; then
+              echo '发行授权内容与当前 tag 不匹配'
+              exit 0
+            fi
+
+            echo 'authorized=true' >> "$GITHUB_OUTPUT"
+            echo "正式发行授权通过：${RELEASE_TAG} @ ${GITHUB_SHA}"
+
+  publish-release:
+    name: 发布正式 GitHub Release
+    if: ${{ needs.authorize_release.outputs.authorized == 'true' }}
+    needs:
+      - review
+      - package-release
+      - authorize_release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.review.outputs.release_tag }}
+    steps:
+      - name: 下载已审查的发行资产
+        uses: actions/download-artifact@v8
+        with:
+          name: karing-release-assets
+          path: release-assets
+
+      - name: 创建并发布正式 Latest 版本
+        env:
+          GH_TOKEN: ${{ secrets.KARING_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "发行标签 ${RELEASE_TAG} 已存在，拒绝覆盖历史 Release"
+            exit 1
+          fi
+
+          gh release create "${RELEASE_TAG}" \
+            release-assets/*.exe \
+            release-assets/*.dmg \
+            release-assets/*.rpm \
+            release-assets/*.deb \
+            release-assets/SHA256SUMS.txt \
+            release-assets/BUILD_INFO.txt \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${{ needs.review.outputs.commit }}" \
+            --title "Clash Verge Rev Karing v${{ needs.review.outputs.version }} · Mobile Hotspot ICS → Mihomo TUN + Forwarding-Safe + IPv6 Loopback WFP" \
+            --notes-file release-assets/release-notes.md \
+            --latest
+
+          release_json=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")
+          asset_count=$(jq '.assets | length' <<<"$release_json")
+          target=$(jq -r '.target_commitish' <<<"$release_json")
+          draft=$(jq -r '.draft' <<<"$release_json")
+          prerelease=$(jq -r '.prerelease' <<<"$release_json")
+          latest_tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')
+
+          test "$asset_count" -eq 14
+          test "$target" = "${{ needs.review.outputs.commit }}"
+          test "$draft" = false
+          test "$prerelease" = false
+          test "$latest_tag" = "${RELEASE_TAG}"
+          test "$tag_sha" = "${{ needs.review.outputs.commit }}"
+
+          jq '{url: .html_url, tag: .tag_name, target: .target_commitish, draft: .draft, prerelease: .prerelease, assets: [.assets[].name]}' <<<"$release_json"

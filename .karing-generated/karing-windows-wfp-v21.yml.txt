@@ -1,0 +1,110 @@
+name: Karing Windows WFP v21 loopback safety
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/karing-windows-wfp-v21.yml'
+      - '.release/karing-windows-mihomo-v21.json'
+      - '.release/karing-release-tag.txt'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/build-karing-mihomo-windows-v21.mjs'
+      - 'scripts/run-karing-mihomo-windows-v21.mjs'
+      - 'scripts/prebuild-karing-v21.mjs'
+      - 'scripts/check-windows-wfp-v21.mjs'
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - '.github/workflows/karing-windows-wfp-v21.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.release/karing-release-tag.txt'
+      - '.release/karing-release-authorize.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: karing-wfp-v21-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUSKY: 0
+
+jobs:
+  policy:
+    name: Validate non-loopback IPv6 block policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+      - name: Validate source pins and WFP semantics
+        run: node scripts/check-windows-wfp-v21.mjs
+
+  build-windows-core:
+    name: Build patched Mihomo ${{ matrix.target }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build pinned stable and alpha cores with patched sing-tun
+        run: node scripts/run-karing-mihomo-windows-v21.mjs ${{ matrix.target }}
+      - name: Verify patched core outputs and provenance
+        shell: pwsh
+        run: |
+          $target = '${{ matrix.target }}'
+          $stable = "src-tauri/sidecar/verge-mihomo-$target.exe"
+          $alpha = "src-tauri/sidecar/verge-mihomo-alpha-$target.exe"
+          $provenance = ".ci/karing-mihomo-wfp-v21-$target.json"
+          if (!(Test-Path $stable)) { throw "missing stable core: $stable" }
+          if (!(Test-Path $alpha)) { throw "missing alpha core: $alpha" }
+          if (!(Test-Path $provenance)) { throw "missing provenance: $provenance" }
+
+          $info = Get-Content $provenance -Raw | ConvertFrom-Json
+          if ($info.policy -ne 'block-non-loopback-ipv6') { throw 'unexpected WFP policy' }
+          if ($info.binaries.Count -ne 2) { throw 'expected stable + alpha binaries' }
+
+          $stableInfo = @($info.binaries | Where-Object { $_.name -eq 'stable' -and $_.target -eq $target })
+          $alphaInfo = @($info.binaries | Where-Object { $_.name -eq 'alpha' -and $_.target -eq $target })
+          if ($stableInfo.Count -ne 1) { throw 'expected exactly one stable provenance entry' }
+          if ($alphaInfo.Count -ne 1) { throw 'expected exactly one alpha provenance entry' }
+
+          $stableHash = (Get-FileHash $stable -Algorithm SHA256).Hash.ToLowerInvariant()
+          $alphaHash = (Get-FileHash $alpha -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($stableHash -ne ([string]$stableInfo[0].sha256).ToLowerInvariant()) {
+            throw "stable SHA256 does not match provenance: $stableHash"
+          }
+          if ($alphaHash -ne ([string]$alphaInfo[0].sha256).ToLowerInvariant()) {
+            throw "alpha SHA256 does not match provenance: $alphaHash"
+          }
+
+          Write-Host "stable SHA256 verified: $stableHash"
+          Write-Host "alpha SHA256 verified:  $alphaHash"
+
+# Final same-SHA audit stamp: rebuild both patched Windows cores before merge.

@@ -1,0 +1,143 @@
+name: Karing Windows Hotspot v27 generic TUN/ICS safety
+run-name: Karing Windows Mobile Hotspot v27 泛用 TUN/ICS 审查
+
+on:
+  pull_request:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - 'src-tauri/src/core/windows_hotspot_ics_v27.rs'
+      - 'src-tauri/src/core/windows_network_diagnostics.rs'
+      - 'src-tauri/src/utils/windows_network.rs'
+      - 'src-tauri/src/utils/windows_managed_interface.rs'
+      - 'src-tauri/src/core/manager/config.rs'
+      - 'src-tauri/src/feat/window.rs'
+      - 'scripts/check-windows-tun-safety.mjs'
+      - 'scripts/check-windows-tun-safety-v27.mjs'
+      - 'scripts/check-windows-hotspot-zero-owner-v26.mjs'
+      - '.github/workflows/karing-windows-hotspot-v26.yml'
+      - '.release/karing-release-tag.txt'
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-diagnostics-once.yml'
+      - '.github/workflows/karing-windows-hotspot-v26.yml'
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'crates/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - '.release/karing-release-tag.txt'
+      - '.release/karing-release-authorize.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: karing-hotspot-v27-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUSKY: 0
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  static-safety:
+    name: Validate v27 generic hotspot TUN/ICS invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+      - name: Run v27 generic hotspot/TUN safety gate
+        run: node scripts/check-windows-tun-safety.mjs
+      - name: Reject whitespace errors
+        run: git diff --check HEAD^
+
+  windows-compile:
+    name: Compile v27 network path ${{ matrix.target }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+    env:
+      RUSTFLAGS: '-D warnings'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: ${{ matrix.target }}
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build matching service for target
+        run: node scripts/build-matching-service.mjs ${{ matrix.target }}
+      - name: Prepare pinned Mihomo and runtime resources
+        run: pnpm run prebuild ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: karing-hotspot-v27-v1
+          key: windows-${{ matrix.target }}
+          workspaces: |
+            . -> target
+      - name: Cargo check v27 hotspot/network path
+        working-directory: src-tauri
+        run: cargo check --target ${{ matrix.target }} --workspace --all-features
+
+  windows-unit-tests:
+    name: Run v27 hotspot ICS + forwarding-safe regressions
+    needs:
+      - static-safety
+      - windows-compile
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.96.1'
+          targets: x86_64-pc-windows-msvc
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/build-matching-service.mjs x86_64-pc-windows-msvc
+      - run: pnpm run prebuild x86_64-pc-windows-msvc
+      - name: Test v27 generic Mobile Hotspot ICS lease suite
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib v27_ --all-features -- --nocapture
+      - name: Prove forwarding mode uses fake-IP-only route-address
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_forwarding_safe_tun_routes_only_fake_ip_range --all-features -- --nocapture
+      - name: Prove custom fake-IP range remains config-derived
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_forwarding_safe_tun_uses_custom_fake_ip_range --all-features -- --nocapture
+      - name: Prove physical ForwardingEnabled changes Runtime identity
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_forwarding_change_changes_runtime_identity --all-features -- --nocapture
+      - name: Prove explicit user interface binding remains authoritative
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib explicit_user_interface_is_never_overwritten --all-features -- --nocapture
