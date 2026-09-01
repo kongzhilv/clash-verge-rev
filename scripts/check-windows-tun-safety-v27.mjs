@@ -314,4 +314,6 @@ console.log(
   '[通过] ICS 获取/恢复均以 native stable physical route 为动态锚点，缺失锚点 fail-closed',
 )
 console.log('[通过] 持久快照仅保存回滚/审计状态，不再作为过期物理上游 fallback')
-console.log('[通过] 无 WinRT Internet profile / SSID / 固定 ifIndex / 固定热点子网 / PowerShell 路径')
+console.log(
+  '[通过] 无 WinRT Internet profile / SSID / 固定 ifIndex / 固定热点子网 / PowerShell 路径',
+)
