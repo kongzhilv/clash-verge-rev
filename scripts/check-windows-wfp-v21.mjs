@@ -95,7 +95,7 @@ if (pkg.scripts.prebuild !== 'node scripts/prebuild-karing-v21.mjs') {
   )
 }
 
-const releaseInputs = [
+const releaseGateInputs = [
   '.github/workflows/karing-diagnostics-once.yml',
   'src/**',
   'src-tauri/**',
@@ -106,18 +106,45 @@ const releaseInputs = [
   'Cargo.toml',
   'Cargo.lock',
   '.cargo/**',
-  '.release/**',
+  '.release/karing-release-tag.txt',
+  '.release/karing-release-authorize.txt',
 ]
-for (const [label, workflow] of [
-  ['WFP v21 workflow', '.github/workflows/karing-windows-wfp-v21.yml'],
-  ['Hotspot v24 workflow', '.github/workflows/karing-windows-hotspot-v24.yml'],
-  ['release observer', '.github/workflows/karing-release-observer.yml'],
+for (const [label, workflow, ownWorkflowPath] of [
+  [
+    'WFP v21 workflow',
+    '.github/workflows/karing-windows-wfp-v21.yml',
+    '.github/workflows/karing-windows-wfp-v21.yml',
+  ],
+  [
+    'Hotspot v27 workflow',
+    '.github/workflows/karing-windows-hotspot-v26.yml',
+    '.github/workflows/karing-windows-hotspot-v26.yml',
+  ],
 ]) {
   const workflowText = fs.readFileSync(workflow, 'utf8')
   const pushBlock = pushEventBlock(workflowText, label)
-  for (const releaseInput of releaseInputs) {
+  mustContain(pushBlock, `- '${ownWorkflowPath}'`, `${label} own workflow input`)
+  for (const releaseInput of releaseGateInputs) {
     mustContain(pushBlock, `- '${releaseInput}'`, `${label} release input`)
   }
+  mustNotContain(pushBlock, "- '.release/**'", `${label} broad release trigger`)
+}
+
+const observerWorkflow = fs.readFileSync(
+  '.github/workflows/karing-release-observer.yml',
+  'utf8',
+)
+const observerPushBlock = pushEventBlock(observerWorkflow, 'release observer')
+const observerPaths = [
+  ...observerPushBlock.matchAll(/^\s+- '([^']+)'\s*$/gm),
+].map((match) => match[1])
+if (
+  observerPaths.length !== 1 ||
+  observerPaths[0] !== '.release/karing-release-authorize.txt'
+) {
+  throw new Error(
+    `release observer: expected authorize-only push path, got ${observerPaths.join(', ')}`,
+  )
 }
 
 const wfpWorkflow = fs.readFileSync(
