@@ -233,9 +233,31 @@ jobs:
           check_contains src-tauri/src/core/windows_hotspot_ics.rs 'hotspot_private_preserved_when_unchanged' '热点 PRIVATE 已是目标角色时采用最小差异且不抖动'
           check_contains src-tauri/src/core/windows_hotspot_ics.rs 'mihomo-tun-as-ics-public-with-minimal-diff-persistent-rollback' '热点 VPN 数据面使用持久最小差异 ICS lease'
           check_not_contains src-tauri/src/core/windows_hotspot_ics.rs 'NetworkOperatorTetheringManager' '正式路径不再接管 Mobile Hotspot 生命周期'
-          check_contains .github/workflows/karing-diagnostics-once.yml 'id: linux-arm64' 'Linux ARM64 已纳入 native build matrix'
-          check_contains .github/workflows/karing-diagnostics-once.yml 'os: ubuntu-22.04-arm' 'Linux ARM64 使用 GitHub 原生 ARM64 runner'
-          check_not_contains .github/workflows/karing-diagnostics-once.yml 'deb_arch: arm64' 'Linux ARM64 不再使用 x64 multiarch apt'
+          python3 - <<'PY_MATRIX'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/karing-diagnostics-once.yml').read_text(encoding='utf-8')
+          native_marker = '\n  native-builds:\n'
+          next_marker = '\n  linux-arm-builds:\n'
+          if native_marker not in workflow:
+              raise SystemExit('[失败] 未找到 native-builds job')
+          native = workflow.split(native_marker, 1)[1]
+          if next_marker in native:
+              native = native.split(next_marker, 1)[0]
+
+          required = (
+              ('id: linux-arm64', 'Linux ARM64 已纳入 native build matrix'),
+              ('os: ubuntu-22.04-arm', 'Linux ARM64 使用 GitHub 原生 ARM64 runner'),
+          )
+          for needle, label in required:
+              if needle not in native:
+                  raise SystemExit(f'[失败] {label}：native-builds 中未找到 {needle}')
+              print(f'[通过] {label}')
+
+          if 'deb_arch: arm64' in native:
+              raise SystemExit('[失败] Linux ARM64 native build matrix 仍包含 x64 multiarch deb_arch: arm64')
+          print('[通过] Linux ARM64 不再使用 x64 multiarch apt')
+          PY_MATRIX
 
   native-builds:
     name: 构建 ${{ matrix.name }}
@@ -687,7 +709,7 @@ jobs:
 
       - name: 创建并发布正式 Latest 版本
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.KARING_RELEASE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
