@@ -486,9 +486,7 @@ fn current_physical_upstream_guid(tun_guid: &str, hotspot_guid: &str) -> Option<
     let interfaces = load_interfaces().ok()?;
     interfaces
         .iter()
-        .find(|row| {
-            row.InterfaceIndex == upstream.interface_index && row.OperStatus == IfOperStatusUp
-        })
+        .find(|row| row.InterfaceIndex == upstream.interface_index && row.OperStatus == IfOperStatusUp)
         .map(|row| guid_string(row.InterfaceGuid))
 }
 
@@ -1105,19 +1103,13 @@ mod tests {
             Some("{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}".into()),
             Some("{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"),
         );
-        assert_eq!(
-            selected.as_deref(),
-            Some("{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}")
-        );
+        assert_eq!(selected.as_deref(), Some("{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}"));
     }
 
     #[test]
     fn v27_restore_uses_snapshot_upstream_when_current_route_is_unavailable() {
         let selected = select_restore_upstream_guid(None, Some("{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"));
-        assert_eq!(
-            selected.as_deref(),
-            Some("{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}")
-        );
+        assert_eq!(selected.as_deref(), Some("{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"));
     }
 
     #[test]
