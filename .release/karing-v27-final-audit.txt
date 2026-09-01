@@ -1,3 +1,4 @@
 Karing release candidate: v2.5.4-karing.27
 Purpose: trigger the main release, Windows WFP, Windows Mobile Hotspot v27, and release observer workflows on one immutable source SHA.
 Runtime behavior: unchanged.
+Final audit: v27 upstream-switch restore fix canonicalized by rustfmt; one-shot formatter workflow removed before this release trigger.
