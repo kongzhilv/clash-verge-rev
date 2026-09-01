@@ -48,7 +48,11 @@ requireText(
 )
 
 for (const [key, marker, label] of [
-  ['manager', 'prepare_windows_tun_runtime_for_start', 'pre-start TUN safety remains active'],
+  [
+    'manager',
+    'prepare_windows_tun_runtime_for_start',
+    'pre-start TUN safety remains active',
+  ],
   [
     'manager',
     'tokio::task::spawn_blocking(detect_stable_upstream)',
@@ -64,8 +68,16 @@ for (const [key, marker, label] of [
     'self.prepare_windows_tun_runtime_for_start().await?;',
     'route and outbound bindings are installed before core startup',
   ],
-  ['windowsNetwork', 'GetIpForwardTable2', 'native route inventory remains enabled'],
-  ['windowsNetwork', 'GetIfTable2', 'native interface inventory remains enabled'],
+  [
+    'windowsNetwork',
+    'GetIpForwardTable2',
+    'native route inventory remains enabled',
+  ],
+  [
+    'windowsNetwork',
+    'GetIfTable2',
+    'native interface inventory remains enabled',
+  ],
   [
     'windowsNetwork',
     'GetUnicastIpAddressTable',
@@ -164,7 +176,10 @@ for (const [marker, label] of [
   ['GetIfTable2', 'hotspot adapter inventory uses native IP Helper'],
   ['GetUnicastIpAddressTable', 'hotspot addressing uses native IP Helper'],
   ['InterfaceGuid', 'hotspot adapter identity remains GUID based'],
-  ['target-identification-ambiguous', 'ambiguous discovery remains fail-closed'],
+  [
+    'target-identification-ambiguous',
+    'ambiguous discovery remains fail-closed',
+  ],
   ['is_mobile_hotspot_adapter', 'modern Mobile Hotspot remains eligible'],
   [
     'is_windows_mobile_hotspot_identity',
@@ -175,7 +190,10 @@ for (const [marker, label] of [
     'physical Internet adapter is discovered dynamically',
   ],
   ['NetworkAdapterId', 'physical upstream is persisted by adapter GUID'],
-  ['EnableSharing(ICSSHARINGTYPE_PRIVATE)', 'active hotspot is made ICS PRIVATE'],
+  [
+    'EnableSharing(ICSSHARINGTYPE_PRIVATE)',
+    'active hotspot is made ICS PRIVATE',
+  ],
   ['EnableSharing(ICSSHARINGTYPE_PUBLIC)', 'Mihomo TUN is made ICS PUBLIC'],
   ['save_snapshot', 'original ICS state is persisted before mutation'],
   [
@@ -202,7 +220,10 @@ for (const [marker, label] of [
     'const STABLE_SAMPLES: u8 = 3;',
     'hotspot topology changes require stable observations',
   ],
-  ['hardcoded_upstream_interface', 'diagnostics certify dynamic upstream behavior'],
+  [
+    'hardcoded_upstream_interface',
+    'diagnostics certify dynamic upstream behavior',
+  ],
   ['hardcoded_hotspot_subnet', 'diagnostics certify dynamic hotspot behavior'],
   [
     'windows-hotspot-ics-lease-v20.json',
