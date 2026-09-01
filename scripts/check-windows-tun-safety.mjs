@@ -1,2 +1,2 @@
-// Compatibility entrypoint. The release contract is versioned in the v24 gate.
-await import('./check-windows-tun-safety-v24.mjs')
+// Compatibility entrypoint. The current release contract is versioned in the v26 gate.
+await import('./check-windows-tun-safety-v26.mjs')
