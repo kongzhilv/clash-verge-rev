@@ -1,0 +1,152 @@
+name: Karing release YAML repair once
+
+on:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-release-yaml-repair-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: karing-release-yaml-repair-once
+  cancel-in-progress: false
+
+jobs:
+  repair-and-stage:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v7
+        with:
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: Repair generated release YAML
+        shell: python
+        run: |
+          from pathlib import Path
+
+          OPEN = '$' + '{{'
+          CLOSE = '}}'
+          def expr(body: str) -> str:
+              return OPEN + ' ' + body + ' ' + CLOSE
+
+          main_path = Path('.github/workflows/karing-diagnostics-once.yml')
+          main = main_path.read_text(encoding='utf-8')
+
+          lines = main.splitlines()
+          if len(lines) < 2 or not lines[1].startswith('run-name:'):
+              raise SystemExit('unexpected main run-name layout')
+          lines[1] = "run-name: " + expr("github.event_name == 'pull_request' && '审查 Karing 桌面版安装包' || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'release(karing)') && '构建并发布 Karing 桌面版' || '审查并构建 Karing 桌面版候选')")
+          main = '\n'.join(lines) + '\n'
+
+          marker = '\n    authorize_release:\n'
+          start_marker = main.find(marker)
+          if start_marker < 0:
+              raise SystemExit('malformed authorize_release block not found')
+          start = start_marker + 1
+          end = main.find('\n  publish-release:\n', start)
+          if end < 0:
+              raise SystemExit('publish-release marker not found')
+
+          block_lines = [
+              '  authorize_release:',
+              '    name: 校验正式发行授权',
+              '    needs:',
+              '      - review',
+              '      - package-release',
+              '    runs-on: ubuntu-latest',
+              '    outputs:',
+              '      authorized: ' + expr('steps.gate.outputs.authorized'),
+              '    steps:',
+              '      - name: 检出发行授权提交',
+              '        uses: actions/checkout@v7',
+              '        with:',
+              '          fetch-depth: 2',
+              '',
+              '      - name: Fail-closed 校验发行授权',
+              '        id: gate',
+              '        env:',
+              '          RELEASE_TAG: ' + expr('needs.review.outputs.release_tag'),
+              '          COMMIT_MESSAGE: ' + expr('github.event.head_commit.message'),
+              '        shell: bash',
+              '        run: |',
+              '          set -euo pipefail',
+              '          echo \'authorized=false\' >> "$GITHUB_OUTPUT"',
+              '',
+              '          if [ "$GITHUB_EVENT_NAME" != \'push\' ]; then',
+              '            echo \'非 push 事件：仅构建候选，不发布\'',
+              '            exit 0',
+              '          fi',
+              '          if [ "$GITHUB_REF" != \'refs/heads/feature/karing-style-diversion\' ]; then',
+              '            echo \'非发行分支：仅构建候选，不发布\'',
+              '            exit 0',
+              '          fi',
+              '          if [ "$GITHUB_ACTOR" != \'kongzhilv\' ]; then',
+              '            echo "非仓库发行账户触发：${GITHUB_ACTOR}"',
+              '            exit 0',
+              '          fi',
+              '          if [[ "$COMMIT_MESSAGE" != "release(karing): publish ${RELEASE_TAG}" ]]; then',
+              '            echo \'commit message 未形成精确发行授权\'',
+              '            exit 0',
+              '          fi',
+              '',
+              '          mapfile -t changed < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")',
+              '          if [ "${#changed[@]}" -ne 1 ] || [ "${changed[0]}" != \'.release/karing-release-authorize.txt\' ]; then',
+              '            echo \'发行授权提交必须且只能修改 .release/karing-release-authorize.txt\'',
+              r"            printf 'changed: %s\n' \"${changed[@]}\"",
+              '            exit 0',
+              '          fi',
+              '',
+              '          test -f .release/karing-release-authorize.txt || { echo \'缺少发行授权文件\'; exit 0; }',
+              r"          authorization=$(tr -d '\r\n' < .release/karing-release-authorize.txt)",
+              '          if [ "$authorization" != "PUBLISH:${RELEASE_TAG}" ]; then',
+              '            echo \'发行授权内容与当前 tag 不匹配\'',
+              '            exit 0',
+              '          fi',
+              '',
+              '          echo \'authorized=true\' >> "$GITHUB_OUTPUT"',
+              '          echo "正式发行授权通过：${RELEASE_TAG} @ ${GITHUB_SHA}"',
+          ]
+          block = '\n'.join(block_lines) + '\n'
+          main = main[:start] + block + main[end + 1:]
+          main_path.write_text(main, encoding='utf-8')
+
+          observer_path = Path('.github/workflows/karing-release-observer.yml')
+          observer = observer_path.read_text(encoding='utf-8')
+          observer = observer.replace("      - '.github/workflows/karing-release-observer.yml'\n", '', 1)
+          bad_if = "    if: " + expr("startsWith(github.event.head_commit.message, 'release(karing): publish ')") + "\n"
+          if bad_if not in observer:
+              raise SystemExit('observer release if marker not found')
+          observer = observer.replace(bad_if, '', 1)
+          observer_path.write_text(observer, encoding='utf-8')
+
+      - name: Actionlint repaired workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 -color -oneline \
+            .github/workflows/karing-diagnostics-once.yml \
+            .github/workflows/karing-release-observer.yml \
+            .github/workflows/karing-windows-hotspot-v26.yml \
+            .github/workflows/karing-windows-wfp-v21.yml \
+            .github/workflows/karing-workflow-lint.yml
+          git diff --check
+
+      - name: Stage repaired workflow blobs outside Actions paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .karing-generated2
+          mkdir -p .karing-generated2
+          cp .github/workflows/karing-diagnostics-once.yml .karing-generated2/karing-diagnostics-once.yml.txt
+          cp .github/workflows/karing-release-observer.yml .karing-generated2/karing-release-observer.yml.txt
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .karing-generated2
+          git commit -m 'chore(ci): stage repaired release workflow blobs'
+          git push origin HEAD:feature/karing-style-diversion
