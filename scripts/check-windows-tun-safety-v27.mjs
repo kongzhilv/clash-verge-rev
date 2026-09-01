@@ -11,7 +11,6 @@ const files = {
   hotspot: 'src-tauri/src/core/windows_hotspot_ics_v27.rs',
   coreMod: 'src-tauri/src/core/mod.rs',
   coreManager: 'src-tauri/src/core/manager/mod.rs',
-  manifest: 'src-tauri/Cargo.toml',
   utils: 'src-tauri/src/utils/mod.rs',
 }
 
@@ -186,25 +185,44 @@ for (const [marker, label] of [
     'Windows-owned Mobile Hotspot remains tracked',
   ],
   [
-    'NetworkInformation::GetInternetConnectionProfile',
-    'physical Internet adapter is discovered dynamically',
-  ],
-  ['NetworkAdapterId', 'physical upstream is persisted by adapter GUID'],
-  [
     'current_physical_upstream_guid',
-    'restore re-resolves the current physical upstream',
+    'ICS lease and restoration re-resolve the current physical upstream',
   ],
   [
     'detect_stable_upstream',
-    'restore retains stable native default-route fallback when WinRT is TUN-owned',
+    'physical upstream comes from the native stable default-route detector',
   ],
   [
-    'select_restore_upstream_guid',
-    'restore keeps the persisted pre-lease upstream as a fallback',
+    'row.InterfaceIndex == upstream.interface_index',
+    'stable native interface index is mapped back to the active interface row',
   ],
   [
-    'current.or_else(|| saved.map(str::to_owned))',
-    'current physical upstream remains authoritative over the snapshot fallback',
+    'guid_string(row.InterfaceGuid)',
+    'stable physical interface is converted to its Windows GUID',
+  ],
+  [
+    'require_dynamic_restore_anchor',
+    'ICS mutation and automatic restoration require a dynamic route anchor',
+  ],
+  [
+    'no stable physical IPv4 default route is available',
+    'missing stable physical route is explicitly fail-closed',
+  ],
+  [
+    'refusing to acquire Mobile Hotspot ICS lease without a stable physical upstream restore anchor',
+    'lease acquisition refuses mutation without a stable current physical route',
+  ],
+  [
+    'cannot restore Mobile Hotspot ICS lease without a stable current physical upstream',
+    'automatic restoration refuses stale-route fallback',
+  ],
+  [
+    'v27_dynamic_restore_anchor_fails_closed_when_physical_route_is_unavailable',
+    'missing physical route fail-closed behavior has a unit regression',
+  ],
+  [
+    'v27_dynamic_restore_anchor_accepts_stable_native_physical_guid',
+    'stable native physical GUID acceptance has a unit regression',
   ],
   [
     'EnableSharing(ICSSHARINGTYPE_PRIVATE)',
@@ -217,12 +235,12 @@ for (const [marker, label] of [
     'historical lease snapshots remain upgrade-readable',
   ],
   [
-    'restore current physical Mobile Hotspot upstream as PUBLIC',
-    'hidden Windows hotspot state restores the current physical upstream first',
+    'persisted pre-lease GUID remains diagnostic evidence, never a stale routing',
+    'persisted upstream GUID is documented as evidence rather than a routing fallback',
   ],
   [
-    'snapshot_upstream_fallback_guid',
-    'snapshot upstream fallback remains observable in diagnostics',
+    'restore current physical Mobile Hotspot upstream as PUBLIC',
+    'hidden Windows hotspot state restores only the re-confirmed current physical upstream',
   ],
   [
     'preserve Windows Mobile Hotspot PRIVATE side during restore',
@@ -254,6 +272,12 @@ for (const [marker, label] of [
 }
 
 for (const forbidden of [
+  'NetworkInformation::GetInternetConnectionProfile',
+  'Networking::Connectivity::NetworkInformation',
+  'NetworkAdapterId',
+  'select_restore_upstream_guid',
+  'current.or_else(|| saved.map(str::to_owned))',
+  'snapshot_upstream_fallback_guid',
   'CMCC-303-5G',
   '192.168.137.0/24',
   '192.168.1.6',
@@ -268,14 +292,9 @@ for (const forbidden of [
   'windows-owned-hotspot-no-hnetcfg-mutation',
   'expect("checked non-empty")',
 ]) {
-  forbidText(forbidden, 'v27 remains generic and release-safe')
+  forbidText(forbidden, 'v27 remains native, dynamic, and release-safe')
 }
 
-requireText(
-  'manifest',
-  '"Networking_Connectivity"',
-  'dynamic upstream GUID discovery feature remains enabled',
-)
 requireText(
   'utils',
   'pub mod windows_network;',
@@ -292,6 +311,7 @@ console.log('[windows-tun-safety-v27] OK')
 console.log('[通过] v26 native route/forwarding-safe 不变量保留')
 console.log('[通过] Mobile Hotspot=ICS PRIVATE，Mihomo TUN=ICS PUBLIC')
 console.log(
-  '[通过] 当前物理上游优先恢复，持久快照仅作后备，readback/回滚/恢复均受门禁保护',
+  '[通过] ICS 获取/恢复均以 native stable physical route 为动态锚点，缺失锚点 fail-closed',
 )
-console.log('[通过] 无 SSID / 固定 ifIndex / 固定热点子网 / PowerShell 路径')
+console.log('[通过] 持久快照仅保存回滚/审计状态，不再作为过期物理上游 fallback')
+console.log('[通过] 无 WinRT Internet profile / SSID / 固定 ifIndex / 固定热点子网 / PowerShell 路径')
