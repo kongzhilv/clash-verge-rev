@@ -34,7 +34,12 @@ use windows::{
     core::GUID,
 };
 
-use crate::{config::Config, core::diagnostics, process::AsyncHandler, utils::dirs};
+use crate::{
+    config::Config,
+    core::diagnostics,
+    process::AsyncHandler,
+    utils::{dirs, windows_network::detect_stable_upstream},
+};
 
 const LOOP_INTERVAL: Duration = Duration::from_secs(2);
 const STABLE_SAMPLES: u8 = 3;
@@ -470,6 +475,27 @@ fn preferred_internet_adapter_guid() -> Option<String> {
     Some(guid_string(guid))
 }
 
+fn current_physical_upstream_guid(tun_guid: &str, hotspot_guid: &str) -> Option<String> {
+    if let Some(guid) = preferred_internet_adapter_guid().filter(|guid| {
+        normalize_guid(guid) != normalize_guid(tun_guid) && normalize_guid(guid) != normalize_guid(hotspot_guid)
+    }) {
+        return Some(guid);
+    }
+
+    let upstream = detect_stable_upstream().ok()?;
+    let interfaces = load_interfaces().ok()?;
+    interfaces
+        .iter()
+        .find(|row| {
+            row.InterfaceIndex == upstream.interface_index && row.OperStatus == IfOperStatusUp
+        })
+        .map(|row| guid_string(row.InterfaceGuid))
+}
+
+fn select_restore_upstream_guid(current: Option<String>, saved: Option<&str>) -> Option<String> {
+    current.or_else(|| saved.map(str::to_owned))
+}
+
 fn lease_roles_are_desired(roles: &[SavedRole], pair: &TargetPair) -> bool {
     role_of_guid(roles, pair.tun.guid) == Some(SharingRole::Public)
         && role_of_guid(roles, pair.hotspot.guid) == Some(SharingRole::Private)
@@ -505,10 +531,25 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Resul
     log_all_sharing_state(&sharing_manager, &connections, "restore-before");
 
     let saved_public_exists = has_saved_public_role(&snapshot.originally_shared);
+    let current_upstream_guid = if saved_public_exists {
+        None
+    } else {
+        current_physical_upstream_guid(&snapshot.tun_guid, &snapshot.hotspot_guid)
+    };
+    let restore_upstream_guid = if saved_public_exists {
+        None
+    } else {
+        select_restore_upstream_guid(
+            current_upstream_guid.clone(),
+            snapshot.original_upstream_guid.as_deref(),
+        )
+    };
 
-    // Prefer the exact roles HNetCfg exposed before the lease. When modern Mobile
-    // Hotspot hid its Windows-owned sharing state, fall back to the dynamically
-    // captured preferred Internet adapter rather than a name, ifIndex or subnet.
+    // Prefer the exact roles HNetCfg exposed before the lease. Modern Mobile
+    // Hotspot can hide its Windows-owned PUBLIC role; in that case restore the
+    // current stable physical default-route adapter first, and use the persisted
+    // pre-lease GUID only as a fallback. This keeps restore correct after Wi-Fi,
+    // Ethernet, USB or other physical upstream changes while the lease is active.
     if saved_public_exists {
         for saved in snapshot
             .originally_shared
@@ -524,14 +565,14 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Resul
                 "restore original PUBLIC ICS role",
             )?;
         }
-    } else if let Some(guid) = snapshot.original_upstream_guid.as_deref()
+    } else if let Some(guid) = restore_upstream_guid.as_deref()
         && let Some(connection) = find_connection(&sharing_manager, &connections, guid)?
     {
         reconcile_connection_role(
             &sharing_manager,
             &connection,
             Some(SharingRole::Public),
-            "restore dynamically captured Mobile Hotspot upstream as PUBLIC",
+            "restore current physical Mobile Hotspot upstream as PUBLIC",
         )?;
     }
 
@@ -594,11 +635,11 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Resul
         }
     }
     if !saved_public_exists
-        && let Some(guid) = snapshot.original_upstream_guid.as_deref()
+        && let Some(guid) = restore_upstream_guid.as_deref()
         && find_connection(&sharing_manager, &connections, guid)?.is_some()
         && role_of_saved_guid(&after, guid) != Some(SharingRole::Public)
     {
-        bail!("dynamic original upstream was not restored as PUBLIC");
+        bail!("current physical upstream was not restored as PUBLIC");
     }
 
     log_all_sharing_state(&sharing_manager, &connections, "restore-after");
@@ -609,7 +650,9 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Resul
         json!({
             "version": 27,
             "saved_public_visible": saved_public_exists,
-            "dynamic_upstream_fallback": snapshot.original_upstream_guid,
+            "current_physical_upstream_guid": current_upstream_guid,
+            "snapshot_upstream_fallback_guid": snapshot.original_upstream_guid,
+            "restored_upstream_guid": restore_upstream_guid,
             "hotspot_windows_owned": snapshot.hotspot_windows_owned,
             "snapshot_removed": true,
         }),
@@ -642,9 +685,7 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
     let hotspot = find_connection(&sharing_manager, &connections, &hotspot_guid)?
         .ok_or_else(|| anyhow!("Mobile Hotspot connection disappeared before ICS apply"))?;
 
-    let original_upstream_guid = preferred_internet_adapter_guid().filter(|guid| {
-        normalize_guid(guid) != normalize_guid(&tun_guid) && normalize_guid(guid) != normalize_guid(&hotspot_guid)
-    });
+    let original_upstream_guid = current_physical_upstream_guid(&tun_guid, &hotspot_guid);
 
     let snapshot = SavedSharingState {
         version: 3,
@@ -826,7 +867,7 @@ async fn monitor_loop() {
             "poll_interval_ms": LOOP_INTERVAL.as_millis(),
             "stable_samples": STABLE_SAMPLES,
             "target_identification": "runtime-interface-guid+device-class+private-ip",
-            "upstream_restore_identity": "NetworkInformation.preferred-profile-adapter-guid",
+            "upstream_restore_identity": "current-stable-physical-default-route-guid;snapshot-guid-fallback",
             "mutation_api": "native-hnetcfg-com",
             "desired_topology": "mihomo-tun=ics-public;active-mobile-hotspot=ics-private",
             "generic": true,
@@ -1056,6 +1097,27 @@ mod tests {
         assert!(!has_saved_public_role(&snapshot.originally_shared));
         assert!(snapshot.original_upstream_guid.is_some());
         assert!(snapshot.hotspot_windows_owned);
+    }
+
+    #[test]
+    fn v27_restore_prefers_current_physical_upstream_over_snapshot() {
+        let selected = select_restore_upstream_guid(
+            Some("{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}".into()),
+            Some("{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"),
+        );
+        assert_eq!(
+            selected.as_deref(),
+            Some("{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}")
+        );
+    }
+
+    #[test]
+    fn v27_restore_uses_snapshot_upstream_when_current_route_is_unavailable() {
+        let selected = select_restore_upstream_guid(None, Some("{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"));
+        assert_eq!(
+            selected.as_deref(),
+            Some("{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}")
+        );
     }
 
     #[test]
