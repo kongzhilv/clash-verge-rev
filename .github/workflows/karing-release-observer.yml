@@ -1,4 +1,4 @@
-name: Karing .26 发行核验
+name: Karing 正式发行核验
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - feature/karing-style-diversion
     paths:
       - '.github/workflows/karing-diagnostics-once.yml'
+      - '.github/workflows/karing-release-observer.yml'
       - 'src/**'
       - 'src-tauri/**'
       - 'crates/**'
@@ -29,7 +30,7 @@ concurrency:
 
 jobs:
   verify-release:
-    name: 核验 v2.5.4-karing.26 正式发行
+    name: 核验当前 Karing 正式发行
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
@@ -38,7 +39,7 @@ jobs:
       HOTSPOT_WORKFLOW: karing-windows-hotspot-v26.yml
       RELEASE_BRANCH: feature/karing-style-diversion
       PR_NUMBER: '1'
-      STATUS_MARKER: '<!-- karing-v254-karing26-release-audit -->'
+      STATUS_MARKER: '<!-- karing-current-release-audit -->'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,7 +52,11 @@ jobs:
 
           source_sha=$(git rev-parse HEAD)
           release_tag=$(tr -d '\r\n' < .release/karing-release-tag.txt)
-          test "$release_tag" = 'v2.5.4-karing.26'
+          version=$(jq -r .version package.json)
+          if [[ ! "$release_tag" =~ ^v${version}-karing\.[0-9]+$ ]]; then
+            echo "非法 Karing Release tag: $release_tag" >&2
+            exit 1
+          fi
 
           post_failure() {
             local reason="$1"
@@ -109,10 +114,9 @@ jobs:
 
           hotspot_jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${hotspot_run_id}/jobs?per_page=100")
           for required in \
-            'Validate hotspot forwarding-safe + ownership invariants' \
-            'Compile v26 network path x86_64-pc-windows-msvc' \
-            'Compile v26 network path aarch64-pc-windows-msvc' \
-            'Run v26 forwarding-safe + ICS + topology regressions'; do
+            'Validate v27 generic hotspot TUN/ICS invariants' \
+            'Compile v27 network path x86_64-pc-windows-msvc' \
+            'Compile v27 network path aarch64-pc-windows-msvc'; do
             count=$(jq --arg name "$required" '[.jobs[] | select(.name == $name and .conclusion == "success")] | length' <<<"$hotspot_jobs")
             test "$count" -eq 1
           done
@@ -179,12 +183,12 @@ jobs:
           test -f release-audit/BUILD_INFO.txt
           grep -Fqx "Commit: ${source_sha}" release-audit/BUILD_INFO.txt
           grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot lifecycle: Windows/user-owned; Karing Start/Stop mutation paths = 0' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot ownership: WinRT/Wi-Fi Direct remains Windows-owned; HNetCfg mutation = 0' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot lifecycle: hotspot Start/Stop remains Windows/user-owned; Karing leases only ICS roles while TUN + hotspot are active' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot compatibility: runtime GUID/device-class/private-IPv4 discovery; active hotspot = ICS PRIVATE; Mihomo TUN = ICS PUBLIC' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback, TUN-off/exit restore and dynamic original-upstream GUID fallback' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows HNetCfg legacy compatibility: retained only for legacy Hosted Network; EnableSharing HRESULT/symbol + full error chain retained' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows COM diagnostic: 0x80040201 = EVENT_E_ALL_SUBSCRIBERS_FAILED' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows genericity: no fixed SSID, hotspot subnet, physical ifIndex or TUN ifIndex is a behavioral input' release-audit/BUILD_INFO.txt
 
           installer_count=$(find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
           checksum_lines=$(grep -cve '^$' release-audit/SHA256SUMS.txt)
@@ -203,11 +207,12 @@ jobs:
           - source/tag/release target: \`${source_sha}\`
           - main run: \`${main_run_id}\` / success
           - WFP run: \`${wfp_run_id}\` / success
-          - Hotspot v26 forwarding-safe/ownership run: \`${hotspot_run_id}\` / success
-          - Mobile Hotspot lifecycle: **Windows/user-owned; Karing Start/Stop paths = 0**
-          - Mobile Hotspot ownership: **WinRT/Wi-Fi Direct Windows-owned · HNetCfg mutation 0**
+          - Hotspot v27 run: \`${hotspot_run_id}\` / success
+          - Mobile Hotspot lifecycle: **Windows/user-owned Start/Stop；Karing only leases ICS roles**
+          - Mobile Hotspot topology: **active hotspot = ICS PRIVATE · Mihomo TUN = ICS PUBLIC**
+          - Identity: **runtime GUID/device-class/private-IPv4；no fixed SSID/ifIndex/subnet**
+          - State safety: **persistent snapshot · readback · immediate rollback · TUN-off/exit restore**
           - TUN routing: **ForwardingEnabled -> fake-IP-only route-address · no TUN default route**
-          - legacy HNetCfg: **Hosted Network only · persistent rollback + HRESULT diagnostics retained**
           - WFP policy: \`${policy}\`; loopback=\`${loopback}\`; non-loopback IPv6=\`${non_loopback}\`
           - public assets: **${asset_count}**（12 installers + SHA256SUMS + BUILD_INFO）
           - SHA256: **12/12 matched**
@@ -215,4 +220,4 @@ jobs:
 
           observer 全程只读核验。" >/dev/null
 
-# Final same-SHA audit stamp: semantic lint must validate the observer on the merge candidate.
+# Generic same-SHA audit stamp: future Karing releases reuse the current tag file and v27+ contracts.
