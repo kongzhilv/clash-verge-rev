@@ -21,6 +21,27 @@ lines[1] = "run-name: " + expr(
 )
 main = "\n".join(lines) + "\n"
 
+old_scope = (
+    "          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs "
+    "'NetworkInformation::GetInternetConnectionProfile' "
+    "'v27 动态捕获当前 Internet 上游 GUID'"
+)
+new_scope = "\n".join(
+    [
+        "          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'detect_stable_upstream' 'v27 复用 native 稳定物理默认路由探测'",
+        "          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'row.InterfaceIndex == upstream.interface_index' 'v27 将稳定物理接口 index 映射到当前 Windows 接口'",
+        "          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'guid_string(row.InterfaceGuid)' 'v27 从 native 接口表解析当前物理上游 GUID'",
+        "          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'require_dynamic_restore_anchor' 'v27 ICS 获取与恢复要求动态物理路由锚点'",
+        "          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'no stable physical IPv4 default route is available' 'v27 缺少稳定物理路由锚点时 fail-closed'",
+        "          check_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'v27_dynamic_restore_anchor_fails_closed_when_physical_route_is_unavailable' 'v27 缺少动态物理锚点具有单元回归'",
+        "          check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'NetworkInformation::GetInternetConnectionProfile' 'v27 不再依赖 WinRT Internet profile 作为物理上游来源'",
+        "          check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'select_restore_upstream_guid' 'v27 不再回退到持久快照选择过期物理上游'",
+    ]
+)
+if old_scope not in main:
+    raise SystemExit("stale WinRT release-scope assertion not found")
+main = main.replace(old_scope, new_scope, 1)
+
 marker = "\n    authorize_release:\n"
 start_marker = main.find(marker)
 if start_marker < 0:
@@ -75,7 +96,9 @@ block_lines = [
     "          mapfile -t changed < <(git diff-tree --no-commit-id --name-only -r \"$GITHUB_SHA\")",
     "          if [ \"${#changed[@]}\" -ne 1 ] || [ \"${changed[0]}\" != '.release/karing-release-authorize.txt' ]; then",
     "            echo '发行授权提交必须且只能修改 .release/karing-release-authorize.txt'",
-    r"            printf 'changed: %s\n' \"${changed[@]}\"",
+    "            for path in \"${changed[@]}\"; do",
+    "              printf 'changed: %s\\n' \"$path\"",
+    "            done",
     "            exit 0",
     "          fi",
     "",
