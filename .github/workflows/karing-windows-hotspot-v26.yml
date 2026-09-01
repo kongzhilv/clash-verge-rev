@@ -151,4 +151,3 @@ jobs:
       - name: Prove WinRT Wi-Fi Direct hotspot never uses HNetCfg
         working-directory: src-tauri
         run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_windows_owned_wifi_direct_never_uses_hnetcfg --all-features -- --exact --nocapture
-
