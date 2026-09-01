@@ -63,11 +63,7 @@ for (const marker of [
     `Mobile Hotspot ownership/HNetCfg invariant ${marker}`,
   )
 
-for (const forbidden of [
-  '192.168.137.',
-  'Local Area Connection*',
-  '本地连接*',
-])
+for (const forbidden of ['192.168.137.', 'Local Area Connection*', '本地连接*'])
   forbidText(
     'hotspot',
     forbidden,
