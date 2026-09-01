@@ -1232,5 +1232,4 @@ mod tests {
         assert_eq!(super::hresult_symbol(0x80004005u32 as i32), "E_FAIL");
         assert_eq!(super::hresult_symbol(0x80070057u32 as i32), "E_INVALIDARG");
     }
-
 }
