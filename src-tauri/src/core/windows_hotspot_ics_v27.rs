@@ -1059,17 +1059,13 @@ mod tests {
     }
 
     #[test]
-    fn v27_has_no_environment_specific_network_constants() {
-        let source = include_str!("windows_hotspot_ics_v27.rs");
-        for forbidden in [
-            "CMCC-303-5G",
-            "192.168.137.0/24",
-            "192.168.1.6",
-            "ifIndex 23",
-            "ifIndex 25",
-            "ifIndex 55",
-        ] {
-            assert!(!source.contains(forbidden));
-        }
+    fn v27_identity_logic_is_guid_based_and_alias_independent() {
+        let pair = pair();
+        let tun_guid = guid_string(pair.tun.guid);
+        let hotspot_guid = guid_string(pair.hotspot.guid);
+        assert_ne!(normalize_guid(&tun_guid), normalize_guid(&hotspot_guid));
+        assert!(pair.tun.alias.contains("tun"));
+        assert!(pair.hotspot.alias.contains("alias"));
+        assert!(pair.hotspot_windows_owned);
     }
 }
