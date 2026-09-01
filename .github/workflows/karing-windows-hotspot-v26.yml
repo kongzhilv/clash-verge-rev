@@ -32,7 +32,8 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.cargo/**'
-      - '.release/**'
+      - '.release/karing-release-tag.txt'
+      - '.release/karing-release-authorize.txt'
   workflow_dispatch:
 
 permissions:
