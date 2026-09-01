@@ -123,7 +123,11 @@ for (const [label, workflow, ownWorkflowPath] of [
 ]) {
   const workflowText = fs.readFileSync(workflow, 'utf8')
   const pushBlock = pushEventBlock(workflowText, label)
-  mustContain(pushBlock, `- '${ownWorkflowPath}'`, `${label} own workflow input`)
+  mustContain(
+    pushBlock,
+    `- '${ownWorkflowPath}'`,
+    `${label} own workflow input`,
+  )
   for (const releaseInput of releaseGateInputs) {
     mustContain(pushBlock, `- '${releaseInput}'`, `${label} release input`)
   }
