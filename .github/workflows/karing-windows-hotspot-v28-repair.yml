@@ -125,16 +125,21 @@ jobs:
           git diff --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Commit repaired sources and retire one-shot workflows
+      - name: Commit repaired sources
         shell: pwsh
         run: |
-          git show df84cad87fa1ff702958fad61077897626fd04f8:.github/workflows/karing-windows-hotspot-v22.yml | Set-Content -Encoding utf8 .github/workflows/karing-windows-hotspot-v22.yml
-          Remove-Item .github/workflows/karing-windows-hotspot-v28-repair.yml
           Remove-Item hotspot_v28_repair.py,extract_repair.py,fix_regression.py -ErrorAction SilentlyContinue
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/core/windows_hotspot_ics_v27.rs src-tauri/src/utils/windows_network.rs .github/workflows/karing-windows-hotspot-v22.yml .github/workflows/karing-windows-hotspot-v28-repair.yml
+          git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/core/windows_hotspot_ics_v27.rs src-tauri/src/utils/windows_network.rs
           git diff --cached --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host 'No repaired source changes remain to commit.'
+            exit 0
+          }
           git commit -m 'fix(windows): stabilize mobile hotspot TUN lifecycle'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git push origin HEAD:feature/karing-style-diversion
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
