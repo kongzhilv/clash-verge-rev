@@ -252,7 +252,9 @@ jobs:
           check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs 'CMCC-303-5G' 'v27 不写死现场 SSID'
           check_not_contains src-tauri/src/core/windows_hotspot_ics_v27.rs '192.168.137.0/24' 'v27 不写死 Windows 热点子网'
           check_contains src-tauri/src/utils/windows_network.rs 'apply_forwarding_safe_tun_route' 'Windows Forwarding 模式继续启用 fake-IP-only TUN 路由'
-          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'physical-forwarding-mode-changed' '物理 ForwardingEnabled 变化继续触发受控 Runtime 重生成'
+          check_not_contains src-tauri/src/core/windows_network_diagnostics.rs 'physical-forwarding-mode-changed' 'Forwarding-only 变化不再伪装成物理上游切换'
+          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'forwarding-change-observed-without-core-refresh' 'Forwarding-only 变化只记录诊断且不重载核心'
+          check_contains src-tauri/src/core/windows_network_diagnostics.rs 'physical-identity-change-only' 'Runtime 重生成仅允许真实物理上游身份变化触发'
           check_contains src-tauri/src/core/manager/config.rs 'forwarding-safe-fake-ip-only' '最终 Runtime 继续记录 forwarding-safe 路由策略'
           python3 - <<'PY_MATRIX'
           from pathlib import Path
@@ -675,7 +677,7 @@ jobs:
           Windows Mobile Hotspot compatibility: runtime GUID/device-class/private-IPv4 discovery; active hotspot = ICS PRIVATE; Mihomo TUN = ICS PUBLIC
           Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback and TUN-off/exit restore; restore requires a native stable physical IPv4 default-route GUID anchor and fails closed when unavailable
           Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route
-          Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop
+          Windows TUN route identity: stable physical ForwardingEnabled changes are observed without runtime regeneration; only physical upstream identity changes refresh runtime
           Windows genericity: no fixed SSID, hotspot subnet, physical ifIndex or TUN ifIndex is a behavioral input
           EOF
 
@@ -691,7 +693,8 @@ jobs:
           - **升级恢复兼容。** `.27` 继续复用 `windows-hotspot-ics-lease-v20.json`，兼容历史 snapshot v2/v3，避免升级时遗留旧 lease。恢复时重新通过 native 稳定物理 IPv4 默认路由解析当前物理上游 GUID；没有稳定动态恢复锚点时 fail-closed，不回退到 WinRT Internet profile 或持久快照中的旧物理上游。
           - **持续监察。** 热点/TUN 组合每 2 秒检查一次，并要求连续 3 个稳定样本后才执行变更；候选歧义、COM 失败和 readback 不一致都有结构化诊断。
           - **`.26` 的 forwarding-safe 防护继续保留。** 物理 `ForwardingEnabled=true` 时，TUN 自动路由继续限制到最终 Fake-IP CIDR；Mihomo outbound/provider socket 继续绑定稳定物理上游，用户显式 `interface-name` 始终优先。
-          - **真实 Windows CI。** `.27` 在 Windows x64 与 ARM64 上分别执行网络路径 `cargo check`，并运行 v27 ICS lease、Fake-IP-only forwarding、自定义 Fake-IP range、ForwardingEnabled 身份变化和显式 interface 优先级回归。
+          - **Forwarding 生命周期反馈环修复。** Windows Mobile Hotspot 切换物理 WLAN `ForwardingEnabled` 时只更新拓扑诊断；只要接口、源地址、网关等物理上游身份未变化，就不再重载 Mihomo/TUN。
+          - **真实 Windows CI。** `.27` 在 Windows x64 与 ARM64 上分别执行网络路径 `cargo check`，并运行 v27 ICS lease、Fake-IP-only forwarding、自定义 Fake-IP range、`ForwardingEnabled` 不改变 Runtime identity/稳定路由签名和显式 interface 优先级回归。
           - `.21` IPv6 loopback WFP 修复继续保留。正式 Release 仍要求 12 个安装文件 + `SHA256SUMS.txt` + `BUILD_INFO.txt` 共 14 个公开资产，并在发布后核对 tag、commit、Latest 状态与资产数量。
 
           本分支安装包不包含上游官方签名或 Apple 公证，请使用 `SHA256SUMS.txt` 验证下载文件。

@@ -187,9 +187,9 @@ jobs:
           grep -Fqx "Release tag: ${release_tag}" release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows Mobile Hotspot lifecycle: hotspot Start/Stop remains Windows/user-owned; Karing leases only ICS roles while TUN + hotspot are active' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows Mobile Hotspot compatibility: runtime GUID/device-class/private-IPv4 discovery; active hotspot = ICS PRIVATE; Mihomo TUN = ICS PUBLIC' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback, TUN-off/exit restore and dynamic original-upstream GUID fallback' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows Mobile Hotspot restore: persistent v20-path snapshot with v2/v3 schema compatibility, readback, immediate rollback and TUN-off/exit restore; restore requires a native stable physical IPv4 default-route GUID anchor and fails closed when unavailable' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows TUN forwarding-safe mode: physical ForwardingEnabled=true => auto-route route-address limited to final fake-ip CIDR(s); no TUN default route' release-audit/BUILD_INFO.txt
-          grep -Fqx 'Windows TUN route-mode refresh: stable physical ForwardingEnabled changes trigger runtime regeneration without hotspot Start/Stop' release-audit/BUILD_INFO.txt
+          grep -Fqx 'Windows TUN route identity: stable physical ForwardingEnabled changes are observed without runtime regeneration; only physical upstream identity changes refresh runtime' release-audit/BUILD_INFO.txt
           grep -Fqx 'Windows genericity: no fixed SSID, hotspot subnet, physical ifIndex or TUN ifIndex is a behavioral input' release-audit/BUILD_INFO.txt
 
           installer_count=$(find release-audit -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
@@ -214,7 +214,7 @@ jobs:
           - Mobile Hotspot topology: **active hotspot = ICS PRIVATE · Mihomo TUN = ICS PUBLIC**
           - Identity: **runtime GUID/device-class/private-IPv4；no fixed SSID/ifIndex/subnet**
           - State safety: **persistent snapshot · readback · immediate rollback · TUN-off/exit restore**
-          - TUN routing: **ForwardingEnabled -> fake-IP-only route-address · no TUN default route**
+          - TUN routing: **ForwardingEnabled -> fake-IP-only route-address · no TUN default route · forwarding-only changes do not reload core**
           - WFP policy: \`${policy}\`; loopback=\`${loopback}\`; non-loopback IPv6=\`${non_loopback}\`
           - public assets: **${asset_count}**（12 installers + SHA256SUMS + BUILD_INFO）
           - SHA256: **12/12 matched**

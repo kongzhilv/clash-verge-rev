@@ -135,9 +135,12 @@ jobs:
       - name: Prove custom fake-IP range remains config-derived
         working-directory: src-tauri
         run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_forwarding_safe_tun_uses_custom_fake_ip_range --all-features -- --nocapture
-      - name: Prove physical ForwardingEnabled changes Runtime identity
+      - name: Prove physical ForwardingEnabled does not change Runtime identity
         working-directory: src-tauri
-        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_forwarding_change_changes_runtime_identity --all-features -- --nocapture
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_forwarding_change_does_not_change_runtime_identity --all-features -- --nocapture
+      - name: Prove physical ForwardingEnabled does not change stable route signature
+        working-directory: src-tauri
+        run: cargo test --target x86_64-pc-windows-msvc --lib windows_network_forwarding_change_does_not_change_stable_route_signature --all-features -- --nocapture
       - name: Prove explicit user interface binding remains authoritative
         working-directory: src-tauri
         run: cargo test --target x86_64-pc-windows-msvc --lib explicit_user_interface_is_never_overwritten --all-features -- --nocapture
