@@ -48,14 +48,10 @@ jobs:
           from pathlib import Path
           path = Path('src-tauri/src/core/windows_network_diagnostics.rs')
           text = path.read_text(encoding='utf-8')
-          old = '''        assert!(forwarding_state_changed(
-              before_identity.as_ref(),
-              after_identity.as_ref()
-          ));'''
-          new = '''        assert!(forwarding_state_changed(
-              before.physical_upstream.as_ref(),
-              after.physical_upstream.as_ref()
-          ));'''
+          old = '''            before_identity.as_ref(),
+            after_identity.as_ref()'''
+          new = '''            before.physical_upstream.as_ref(),
+            after.physical_upstream.as_ref()'''
           if text.count(old) != 1:
               raise SystemExit(f'forwarding regression invocation mismatch: {text.count(old)}')
           path.write_text(text.replace(old, new, 1), encoding='utf-8')
@@ -77,6 +73,8 @@ jobs:
         shell: pwsh
         run: |
           pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm run web:build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/build-matching-service.mjs x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
