@@ -24,6 +24,7 @@ jobs:
         with:
           ref: feature/karing-style-diversion
           fetch-depth: 0
+          token: ${{ secrets.KARING_RELEASE_TOKEN }}
 
       - name: Align forwarding-stable release contracts
         shell: bash
