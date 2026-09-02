@@ -44,6 +44,27 @@ jobs:
           python extract_repair.py
           python hotspot_v28_repair.py
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.18.0'
+          cache: pnpm
+
+      - name: Prepare project dependencies and Windows sidecars
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/build-matching-service.mjs x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm run prebuild x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Canonical format and Windows regression tests
         shell: pwsh
         run: |
@@ -59,7 +80,7 @@ jobs:
       - name: Commit repaired sources and retire one-shot workflows
         shell: pwsh
         run: |
-          git show HEAD^^:.github/workflows/karing-windows-hotspot-v22.yml | Set-Content -Encoding utf8 .github/workflows/karing-windows-hotspot-v22.yml
+          git show df84cad87fa1ff702958fad61077897626fd04f8:.github/workflows/karing-windows-hotspot-v22.yml | Set-Content -Encoding utf8 .github/workflows/karing-windows-hotspot-v22.yml
           Remove-Item .github/workflows/karing-windows-hotspot-v28-repair.yml
           Remove-Item hotspot_v28_repair.py,extract_repair.py -ErrorAction SilentlyContinue
           git config user.name 'github-actions[bot]'
