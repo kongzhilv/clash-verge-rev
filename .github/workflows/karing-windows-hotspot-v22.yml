@@ -1,18 +1,446 @@
-name: Karing Windows Hotspot v22 retired compatibility
+name: Karing Windows Hotspot lifecycle repair once
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - feature/karing-style-diversion
+    paths:
+      - '.github/workflows/karing-windows-hotspot-v22.yml'
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: karing-windows-hotspot-lifecycle-repair-once
+  cancel-in-progress: false
 
 jobs:
-  compatibility:
-    name: Delegate retired v22 gate to v24
-    runs-on: ubuntu-latest
+  repair:
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
         with:
-          node-version: '24.18.0'
-      - run: node scripts/check-windows-hotspot-v22.mjs
+          ref: feature/karing-style-diversion
+          fetch-depth: 0
+
+      - name: Apply generic Windows hotspot lifecycle repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}\n--- needle ---\n{old[:800]}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          diag = 'src-tauri/src/core/windows_network_diagnostics.rs'
+          util = 'src-tauri/src/utils/windows_network.rs'
+          ics = 'src-tauri/src/core/windows_hotspot_ics_v27.rs'
+
+          # Physical identity is route identity, not a mutable forwarding capability.
+          replace_once(diag,
+          '''struct PhysicalUpstreamIdentity {
+              interface_index: u32,
+              interface_alias: String,
+              source_address: String,
+              gateway: String,
+              forwarding_enabled: bool,
+          }''',
+          '''struct PhysicalUpstreamIdentity {
+              interface_index: u32,
+              interface_alias: String,
+              source_address: String,
+              gateway: String,
+          }''')
+
+          replace_once(diag,
+          '''            gateway: upstream.gateway.clone(),
+                      forwarding_enabled: upstream.forwarding_enabled,
+                  })
+          }
+
+          fn forwarding_state_changed(
+              previous: Option<&PhysicalUpstreamIdentity>,
+              current: Option<&PhysicalUpstreamIdentity>,
+          ) -> bool {
+              match (previous, current) {
+                  (Some(previous), Some(current)) => {
+                      previous.interface_index == current.interface_index
+                          && previous.interface_alias == current.interface_alias
+                          && previous.source_address == current.source_address
+                          && previous.gateway == current.gateway
+                          && previous.forwarding_enabled != current.forwarding_enabled
+                  }
+                  _ => false,
+              }
+          }''',
+          '''            gateway: upstream.gateway.clone(),
+                  })
+          }
+
+          fn forwarding_state_changed(
+              previous: Option<&PhysicalUpstreamSnapshot>,
+              current: Option<&PhysicalUpstreamSnapshot>,
+          ) -> bool {
+              match (previous, current) {
+                  (Some(previous), Some(current)) => {
+                      previous.interface_index == current.interface_index
+                          && previous.interface_alias == current.interface_alias
+                          && previous.source_address == current.source_address
+                          && previous.gateway == current.gateway
+                          && previous.forwarding_enabled != current.forwarding_enabled
+                  }
+                  _ => false,
+              }
+          }''')
+
+          replace_once(diag,
+          '''        let current_upstream = physical_upstream_identity(&current);
+                  let forwarding_mode_changed =
+                      forwarding_state_changed(last_runtime_upstream.as_ref(), current_upstream.as_ref());
+                  let runtime_upstream_changed = current_upstream.is_some() && current_upstream != last_runtime_upstream;''',
+          '''        let current_upstream = physical_upstream_identity(&current);
+                  let forwarding_mode_changed = forwarding_state_changed(
+                      previous.physical_upstream.as_ref(),
+                      current.physical_upstream.as_ref(),
+                  );
+                  let runtime_upstream_changed = current_upstream.is_some() && current_upstream != last_runtime_upstream;''')
+
+          replace_once(diag,
+          '''                    "hotspot_events_can_trigger_core_refresh": "forwarding-mode-only",
+                              "snapshot": &current,''',
+          '''                    "forwarding_only_core_refresh": false,
+                              "snapshot": &current,''')
+
+          replace_once(diag,
+          '''                    "forwarding_mode_changed": forwarding_mode_changed,
+                              "lifecycle_mutation": false,
+                              "core_refresh_policy": "only-for-stable-physical-forwarding-mode-change",''',
+          '''                    "forwarding_mode_changed": forwarding_mode_changed,
+                              "lifecycle_mutation": super::windows_hotspot_ics::lifecycle_mutation_active(),
+                              "core_refresh_policy": "physical-identity-change-only",''')
+
+          replace_once(diag,
+          '''        if runtime_upstream_changed {
+                      if hotspot_changed && !forwarding_mode_changed {
+                          diagnostics::info(
+                              "windows-network-upstream",
+                              "refresh-deferred-during-hotspot-transition",
+                              json!({
+                                  "candidate": &current_upstream,
+                                  "last_runtime_upstream": &last_runtime_upstream,
+                                  "retry": "next-ip-helper-event-or-watchdog",
+                              }),
+                          );
+                      } else if let Some(candidate) = current_upstream.as_ref() {
+                          match confirm_physical_upstream(candidate).await {
+                              Ok(Some(confirmed)) => {
+                                  let confirmed_identity = physical_upstream_identity(&confirmed);
+                                  let reason = if forwarding_mode_changed {
+                                      "physical-forwarding-mode-changed"
+                                  } else {
+                                      "physical-upstream-changed"
+                                  };
+                                  if confirmed_identity != last_runtime_upstream
+                                      && refresh_runtime_network_state(reason, &previous, &confirmed).await
+                                  {
+                                      last_runtime_upstream = confirmed_identity;
+                                  }
+                              }
+                              Ok(None) => {
+                                  diagnostics::info(
+                                      "windows-network-upstream",
+                                      "refresh-deferred-upstream-still-settling",
+                                      json!({
+                                          "expected": candidate,
+                                          "samples": UPSTREAM_CONFIRM_SAMPLES,
+                                      }),
+                                  );
+                              }
+                              Err(error) => {
+                                  diagnostics::warn(
+                                      "windows-network-upstream",
+                                      "upstream-confirmation-failed",
+                                      json!({"error": error.to_string()}),
+                                  );
+                              }
+                          }
+                      }
+                  }''',
+          '''        if forwarding_mode_changed && !runtime_upstream_changed {
+                      diagnostics::info(
+                          "windows-network-upstream",
+                          "forwarding-change-observed-without-core-refresh",
+                          json!({
+                              "previous_physical_upstream": &previous.physical_upstream,
+                              "current_physical_upstream": &current.physical_upstream,
+                              "hotspot_changed": hotspot_changed,
+                              "lifecycle_mutation": super::windows_hotspot_ics::lifecycle_mutation_active(),
+                              "reason": "forwarding-is-routing-capability-not-physical-identity",
+                          }),
+                      );
+                  }
+
+                  if runtime_upstream_changed {
+                      if let Some(candidate) = current_upstream.as_ref() {
+                          match confirm_physical_upstream(candidate).await {
+                              Ok(Some(confirmed)) => {
+                                  let confirmed_identity = physical_upstream_identity(&confirmed);
+                                  if confirmed_identity != last_runtime_upstream
+                                      && refresh_runtime_network_state("physical-upstream-changed", &previous, &confirmed).await
+                                  {
+                                      last_runtime_upstream = confirmed_identity;
+                                  }
+                              }
+                              Ok(None) => {
+                                  diagnostics::info(
+                                      "windows-network-upstream",
+                                      "refresh-deferred-upstream-still-settling",
+                                      json!({
+                                          "expected": candidate,
+                                          "samples": UPSTREAM_CONFIRM_SAMPLES,
+                                      }),
+                                  );
+                              }
+                              Err(error) => {
+                                  diagnostics::warn(
+                                      "windows-network-upstream",
+                                      "upstream-confirmation-failed",
+                                      json!({"error": error.to_string()}),
+                                  );
+                              }
+                          }
+                      }
+                  }''')
+
+          replace_once(diag,
+          '''            "hotspot_events_can_trigger_core_refresh": "forwarding-mode-only",
+                      "physical_upstream_refresh": true,
+                      "physical_upstream_identity_ignores_metrics": true,''',
+          '''            "hotspot_events_can_trigger_core_refresh": false,
+                      "physical_upstream_refresh": true,
+                      "physical_upstream_identity_ignores_metrics_and_forwarding": true,''')
+
+          replace_once(diag,
+          '''            "failover_strategy": "confirm-stable-physical-upstream-or-forwarding-mode-then-regenerate-runtime",''',
+          '''            "failover_strategy": "confirm-stable-physical-upstream-identity-then-regenerate-runtime",''')
+
+          replace_once(diag,
+          '''            "trigger_scope": "stable-physical-upstream-or-forwarding-mode",
+                      "hotspot_events_can_trigger_core_refresh": "forwarding-mode-only",''',
+          '''            "trigger_scope": "stable-physical-upstream-identity",
+                      "hotspot_events_can_trigger_core_refresh": false,''')
+
+          # Stable-route detection must not reset merely because Windows toggles IPv4 forwarding.
+          replace_once(util,
+          '''        format!(
+                      "{}|{}|{}|{}|{}",
+                      self.interface_index, self.interface_alias, self.source_address, self.gateway, self.forwarding_enabled
+                  )''',
+          '''        format!(
+                      "{}|{}|{}|{}",
+                      self.interface_index, self.interface_alias, self.source_address, self.gateway
+                  )''')
+
+          # Make ICS mutation ownership visible to the topology watcher.
+          replace_once(ics,
+          '''static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
+          static RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
+          static MUTATION_LOCK: Mutex<()> = Mutex::new(());''',
+          '''static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
+          static RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
+          static MUTATION_ACTIVE: AtomicBool = AtomicBool::new(false);
+          static MUTATION_LOCK: Mutex<()> = Mutex::new(());''')
+
+          replace_once(ics,
+          '''fn mutation_guard() -> Result<std::sync::MutexGuard<'static, ()>> {
+              MUTATION_LOCK
+                  .lock()
+                  .map_err(|_| anyhow!("Windows hotspot ICS mutation lock was poisoned"))
+          }''',
+          '''struct MutationGuard {
+              _lock: std::sync::MutexGuard<'static, ()>,
+          }
+
+          impl Drop for MutationGuard {
+              fn drop(&mut self) {
+                  MUTATION_ACTIVE.store(false, Ordering::Release);
+              }
+          }
+
+          pub fn lifecycle_mutation_active() -> bool {
+              MUTATION_ACTIVE.load(Ordering::Acquire)
+          }
+
+          fn mutation_guard() -> Result<MutationGuard> {
+              let lock = MUTATION_LOCK
+                  .lock()
+                  .map_err(|_| anyhow!("Windows hotspot ICS mutation lock was poisoned"))?;
+              MUTATION_ACTIVE.store(true, Ordering::Release);
+              Ok(MutationGuard { _lock: lock })
+          }''')
+
+          # Fresh COM objects/readback for every role mutation avoids stale HNetCfg state.
+          insertion = '''
+          fn reconcile_guid_role_fresh(guid: &str, desired: Option<SharingRole>, context: &'static str) -> Result<bool> {
+              let (_apartment, manager, connection_manager) = create_managers()?;
+              let connections = enumerate_connections(&connection_manager)?;
+              let connection = find_connection(&manager, &connections, guid)?
+                  .ok_or_else(|| anyhow!("{context}: connection disappeared: {guid}"))?;
+              let changed = reconcile_connection_role(&manager, &connection, desired, context)?;
+              std::thread::sleep(Duration::from_millis(150));
+
+              let (_verify_apartment, verify_manager, verify_connection_manager) = create_managers()?;
+              let verify_connections = enumerate_connections(&verify_connection_manager)?;
+              let roles = current_shared_roles(&verify_manager, &verify_connections)?;
+              if role_of_saved_guid(&roles, guid) != desired {
+                  bail!("{context}: ICS readback verification failed for {guid}");
+              }
+              Ok(changed)
+          }
+
+          fn is_event_subscriber_failure(error: &anyhow::Error) -> bool {
+              error.chain().any(|cause| {
+                  cause
+                      .downcast_ref::<windows::core::Error>()
+                      .is_some_and(|inner| inner.code().0 == 0x8004_0201u32 as i32)
+              })
+          }
+
+          '''
+          marker = 'fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {'
+          text = Path(ics).read_text(encoding='utf-8')
+          if text.count(marker) != 1:
+              raise SystemExit('hotspot ICS apply marker mismatch')
+          Path(ics).write_text(text.replace(marker, insertion + marker, 1), encoding='utf-8')
+
+          old_apply = '''    let apply_result = (|| -> Result<()> {
+                  reconcile_connection_role(
+                      &sharing_manager,
+                      &hotspot,
+                      Some(SharingRole::Private),
+                      "apply active hotspot PRIVATE role before TUN PUBLIC",
+                  )?;
+                  std::thread::sleep(Duration::from_millis(500));
+
+                  reconcile_connection_role(
+                      &sharing_manager,
+                      &tun,
+                      Some(SharingRole::Public),
+                      "apply Mihomo TUN PUBLIC role after hotspot PRIVATE preparation",
+                  )?;
+                  std::thread::sleep(Duration::from_millis(250));
+
+                  let after = current_shared_roles(&sharing_manager, &connections)?;
+                  if !lease_roles_are_desired(&after, pair) {
+                      bail!("ICS role verification failed after Mobile Hotspot TUN lease apply");
+                  }
+                  Ok(())
+              })();'''
+          new_apply = '''    let apply_result = (|| -> Result<()> {
+                  // PUBLIC-first is the native ICS transition: Windows automatically
+                  // disables the previous PUBLIC when a new one is established.
+                  // Use fresh COM objects for every mutation/readback because Mobile
+                  // Hotspot can invalidate cached HNetCfg objects while roles move.
+                  match reconcile_guid_role_fresh(
+                      &tun_guid,
+                      Some(SharingRole::Public),
+                      "apply Mihomo TUN PUBLIC role",
+                  ) {
+                      Ok(_) => {}
+                      Err(error) if pair.hotspot_windows_owned && is_event_subscriber_failure(&error) => {
+                          diagnostics::warn(
+                              "windows-hotspot-ics",
+                              "public-apply-compatibility-retry",
+                              json!({
+                                  "error": format!("{error:#}"),
+                                  "hresult": "0x80040201",
+                                  "strategy": "temporarily-release-target-private-then-recreate-public",
+                              }),
+                          );
+                          // Field evidence shows PUBLIC can be rejected while the
+                          // target Mobile Hotspot PRIVATE role is still registered.
+                          // Release only our identified hotspot side, never unrelated
+                          // PRIVATE ICS, then recreate PUBLIC and PRIVATE transactionally.
+                          reconcile_guid_role_fresh(
+                              &hotspot_guid,
+                              None,
+                              "temporarily release Mobile Hotspot PRIVATE role for PUBLIC retry",
+                          )?;
+                          std::thread::sleep(Duration::from_millis(250));
+                          reconcile_guid_role_fresh(
+                              &tun_guid,
+                              Some(SharingRole::Public),
+                              "retry Mihomo TUN PUBLIC role after target PRIVATE release",
+                          )?;
+                      }
+                      Err(error) => return Err(error),
+                  }
+
+                  reconcile_guid_role_fresh(
+                      &hotspot_guid,
+                      Some(SharingRole::Private),
+                      "apply active Mobile Hotspot PRIVATE role after TUN PUBLIC",
+                  )?;
+
+                  let (_verify_apartment, verify_manager, verify_connection_manager) = create_managers()?;
+                  let verify_connections = enumerate_connections(&verify_connection_manager)?;
+                  let after = current_shared_roles(&verify_manager, &verify_connections)?;
+                  if !lease_roles_are_desired(&after, pair) {
+                      bail!("ICS role verification failed after Mobile Hotspot TUN lease apply");
+                  }
+                  Ok(())
+              })();'''
+          replace_once(ics, old_apply, new_apply)
+
+          replace_once(ics,
+          '''            "order": "hotspot-private-then-tun-public",
+                      "reason": "forwarded hotspot traffic must enter Mihomo before physical egress",''',
+          '''            "order": "tun-public-then-hotspot-private-with-target-private-compatibility-retry",
+                      "reason": "establish PUBLIC first; only release the identified hotspot PRIVATE on exact EVENT_E_ALL_SUBSCRIBERS_FAILED",''')
+
+          # Remove now-unused cached target COM handles from apply_pair_unlocked.
+          replace_once(ics,
+          '''    let tun = find_connection(&sharing_manager, &connections, &tun_guid)?
+                  .ok_or_else(|| anyhow!("Mihomo TUN connection disappeared before ICS apply"))?;
+              let hotspot = find_connection(&sharing_manager, &connections, &hotspot_guid)?
+                  .ok_or_else(|| anyhow!("Mobile Hotspot connection disappeared before ICS apply"))?;
+
+          ''', '')
+
+          # Regression test: forwarding changes must not alter route identity.
+          text = Path(diag).read_text(encoding='utf-8')
+          old_name = 'fn windows_network_forwarding_change_changes_runtime_identity()'
+          if old_name not in text:
+              raise SystemExit('forwarding regression test not found')
+          text = text.replace(old_name, 'fn windows_network_forwarding_change_does_not_change_runtime_identity()', 1)
+          text = text.replace('assert_ne!(before_identity, after_identity);', 'assert_eq!(before_identity, after_identity);', 1)
+          Path(diag).write_text(text, encoding='utf-8')
+          PY
+
+      - name: Canonical Rust formatting and focused regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup component add rustfmt
+          cargo fmt --all
+          cargo test --manifest-path src-tauri/Cargo.toml windows_network --lib
+          cargo test --manifest-path src-tauri/Cargo.toml windows_hotspot --lib
+          git diff --check
+
+      - name: Restore retired one-shot workflow and commit repaired sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show HEAD^:.github/workflows/karing-windows-hotspot-v22.yml > .github/workflows/karing-windows-hotspot-v22.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/core/windows_hotspot_ics_v27.rs src-tauri/src/utils/windows_network.rs .github/workflows/karing-windows-hotspot-v22.yml
+          git diff --cached --check
+          git commit -m 'fix(windows): stabilize mobile hotspot TUN lifecycle'
+          git push origin HEAD:feature/karing-style-diversion
