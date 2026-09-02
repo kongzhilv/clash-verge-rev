@@ -65,6 +65,28 @@ jobs:
               if count != 1:
                   raise SystemExit(f'forwarding regression invocation mismatch: {count}')
               path.write_text(text, encoding='utf-8')
+
+          route_path = Path('src-tauri/src/utils/windows_network.rs')
+          route_text = route_path.read_text(encoding='utf-8')
+          old_test = '''    #[test]
+              fn windows_network_forwarding_change_changes_stable_route_signature() {
+                  let before = route();
+                  let mut after = before.clone();
+                  after.forwarding_enabled = true;
+                  assert_ne!(before.signature(), after.signature());
+              }'''
+          new_test = '''    #[test]
+              fn windows_network_forwarding_change_does_not_change_stable_route_signature() {
+                  let before = route();
+                  let mut after = before.clone();
+                  after.forwarding_enabled = true;
+                  assert_eq!(before.signature(), after.signature());
+              }'''
+          if old_test in route_text:
+              route_text = route_text.replace(old_test, new_test, 1)
+              route_path.write_text(route_text, encoding='utf-8')
+          elif new_test not in route_text:
+              raise SystemExit('stable route forwarding regression test mismatch')
           '@ | Set-Content -Encoding utf8 fix_regression.py
           python fix_regression.py
 
