@@ -44,6 +44,24 @@ jobs:
           python extract_repair.py
           python hotspot_v28_repair.py
 
+          @'
+          from pathlib import Path
+          path = Path('src-tauri/src/core/windows_network_diagnostics.rs')
+          text = path.read_text(encoding='utf-8')
+          old = '''        assert!(forwarding_state_changed(
+              before_identity.as_ref(),
+              after_identity.as_ref()
+          ));'''
+          new = '''        assert!(forwarding_state_changed(
+              before.physical_upstream.as_ref(),
+              after.physical_upstream.as_ref()
+          ));'''
+          if text.count(old) != 1:
+              raise SystemExit(f'forwarding regression invocation mismatch: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          '@ | Set-Content -Encoding utf8 fix_regression.py
+          python fix_regression.py
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -82,7 +100,7 @@ jobs:
         run: |
           git show df84cad87fa1ff702958fad61077897626fd04f8:.github/workflows/karing-windows-hotspot-v22.yml | Set-Content -Encoding utf8 .github/workflows/karing-windows-hotspot-v22.yml
           Remove-Item .github/workflows/karing-windows-hotspot-v28-repair.yml
-          Remove-Item hotspot_v28_repair.py,extract_repair.py -ErrorAction SilentlyContinue
+          Remove-Item hotspot_v28_repair.py,extract_repair.py,fix_regression.py -ErrorAction SilentlyContinue
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src-tauri/src/core/windows_network_diagnostics.rs src-tauri/src/core/windows_hotspot_ics_v27.rs src-tauri/src/utils/windows_network.rs .github/workflows/karing-windows-hotspot-v22.yml .github/workflows/karing-windows-hotspot-v28-repair.yml
