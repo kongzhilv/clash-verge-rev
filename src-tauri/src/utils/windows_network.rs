@@ -66,8 +66,8 @@ pub struct ManagedProxyBindingStats {
 impl WindowsUpstreamRoute {
     fn signature(&self) -> String {
         format!(
-            "{}|{}|{}|{}|{}",
-            self.interface_index, self.interface_alias, self.source_address, self.gateway, self.forwarding_enabled
+            "{}|{}|{}|{}",
+            self.interface_index, self.interface_alias, self.source_address, self.gateway
         )
     }
 }
@@ -834,11 +834,11 @@ proxy-providers:
     }
 
     #[test]
-    fn windows_network_forwarding_change_changes_stable_route_signature() {
+    fn windows_network_forwarding_change_does_not_change_stable_route_signature() {
         let before = route();
         let mut after = before.clone();
         after.forwarding_enabled = true;
-        assert_ne!(before.signature(), after.signature());
+        assert_eq!(before.signature(), after.signature());
     }
 
     #[test]

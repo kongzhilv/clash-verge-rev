@@ -49,6 +49,7 @@ const CONNECTION_MANAGER: GUID = GUID::from_u128(0xba126ad1_2166_11d1_b1d0_00805
 
 static MONITOR_STARTED: AtomicBool = AtomicBool::new(false);
 static RESTORE_REQUESTED: AtomicBool = AtomicBool::new(false);
+static MUTATION_ACTIVE: AtomicBool = AtomicBool::new(false);
 static MUTATION_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -648,6 +649,31 @@ fn restore_snapshot_unlocked(path: &Path, snapshot: &SavedSharingState) -> Resul
     Ok(())
 }
 
+fn reconcile_guid_role_fresh(guid: &str, desired: Option<SharingRole>, context: &'static str) -> Result<bool> {
+    let (_apartment, manager, connection_manager) = create_managers()?;
+    let connections = enumerate_connections(&connection_manager)?;
+    let connection = find_connection(&manager, &connections, guid)?
+        .ok_or_else(|| anyhow!("{context}: connection disappeared: {guid}"))?;
+    let changed = reconcile_connection_role(&manager, &connection, desired, context)?;
+    std::thread::sleep(Duration::from_millis(150));
+
+    let (_verify_apartment, verify_manager, verify_connection_manager) = create_managers()?;
+    let verify_connections = enumerate_connections(&verify_connection_manager)?;
+    let roles = current_shared_roles(&verify_manager, &verify_connections)?;
+    if role_of_saved_guid(&roles, guid) != desired {
+        bail!("{context}: ICS readback verification failed for {guid}");
+    }
+    Ok(changed)
+}
+
+fn is_event_subscriber_failure(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<windows::core::Error>()
+            .is_some_and(|inner| inner.code().0 == 0x8004_0201u32 as i32)
+    })
+}
+
 fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
     let (_apartment, sharing_manager, connection_manager) = create_managers()?;
     let connections = enumerate_connections(&connection_manager)?;
@@ -668,11 +694,6 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
 
     let tun_guid = guid_string(pair.tun.guid);
     let hotspot_guid = guid_string(pair.hotspot.guid);
-    let tun = find_connection(&sharing_manager, &connections, &tun_guid)?
-        .ok_or_else(|| anyhow!("Mihomo TUN connection disappeared before ICS apply"))?;
-    let hotspot = find_connection(&sharing_manager, &connections, &hotspot_guid)?
-        .ok_or_else(|| anyhow!("Mobile Hotspot connection disappeared before ICS apply"))?;
-
     let saved_public_exists = has_saved_public_role(&original);
     let original_upstream_guid = if saved_public_exists {
         None
@@ -707,29 +728,56 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
             "original_upstream_guid": original_upstream_guid,
             "saved_public_visible": saved_public_exists,
             "saved_hnetcfg_roles": &original,
-            "order": "hotspot-private-then-tun-public",
-            "reason": "forwarded hotspot traffic must enter Mihomo before physical egress",
+            "order": "tun-public-then-hotspot-private-with-target-private-compatibility-retry",
+            "reason": "establish PUBLIC first; only release the identified hotspot PRIVATE on exact EVENT_E_ALL_SUBSCRIBERS_FAILED",
         }),
     );
 
     let apply_result = (|| -> Result<()> {
-        reconcile_connection_role(
-            &sharing_manager,
-            &hotspot,
+        // PUBLIC-first is the native ICS transition: Windows automatically
+        // disables the previous PUBLIC when a new one is established.
+        // Use fresh COM objects for every mutation/readback because Mobile
+        // Hotspot can invalidate cached HNetCfg objects while roles move.
+        match reconcile_guid_role_fresh(&tun_guid, Some(SharingRole::Public), "apply Mihomo TUN PUBLIC role") {
+            Ok(_) => {}
+            Err(error) if pair.hotspot_windows_owned && is_event_subscriber_failure(&error) => {
+                diagnostics::warn(
+                    "windows-hotspot-ics",
+                    "public-apply-compatibility-retry",
+                    json!({
+                        "error": format!("{error:#}"),
+                        "hresult": "0x80040201",
+                        "strategy": "temporarily-release-target-private-then-recreate-public",
+                    }),
+                );
+                // Field evidence shows PUBLIC can be rejected while the
+                // target Mobile Hotspot PRIVATE role is still registered.
+                // Release only our identified hotspot side, never unrelated
+                // PRIVATE ICS, then recreate PUBLIC and PRIVATE transactionally.
+                reconcile_guid_role_fresh(
+                    &hotspot_guid,
+                    None,
+                    "temporarily release Mobile Hotspot PRIVATE role for PUBLIC retry",
+                )?;
+                std::thread::sleep(Duration::from_millis(250));
+                reconcile_guid_role_fresh(
+                    &tun_guid,
+                    Some(SharingRole::Public),
+                    "retry Mihomo TUN PUBLIC role after target PRIVATE release",
+                )?;
+            }
+            Err(error) => return Err(error),
+        }
+
+        reconcile_guid_role_fresh(
+            &hotspot_guid,
             Some(SharingRole::Private),
-            "apply active hotspot PRIVATE role before TUN PUBLIC",
+            "apply active Mobile Hotspot PRIVATE role after TUN PUBLIC",
         )?;
-        std::thread::sleep(Duration::from_millis(500));
 
-        reconcile_connection_role(
-            &sharing_manager,
-            &tun,
-            Some(SharingRole::Public),
-            "apply Mihomo TUN PUBLIC role after hotspot PRIVATE preparation",
-        )?;
-        std::thread::sleep(Duration::from_millis(250));
-
-        let after = current_shared_roles(&sharing_manager, &connections)?;
+        let (_verify_apartment, verify_manager, verify_connection_manager) = create_managers()?;
+        let verify_connections = enumerate_connections(&verify_connection_manager)?;
+        let after = current_shared_roles(&verify_manager, &verify_connections)?;
         if !lease_roles_are_desired(&after, pair) {
             bail!("ICS role verification failed after Mobile Hotspot TUN lease apply");
         }
@@ -778,10 +826,26 @@ fn apply_pair_unlocked(path: &Path, pair: &TargetPair) -> Result<()> {
     Ok(())
 }
 
-fn mutation_guard() -> Result<std::sync::MutexGuard<'static, ()>> {
-    MUTATION_LOCK
+struct MutationGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for MutationGuard {
+    fn drop(&mut self) {
+        MUTATION_ACTIVE.store(false, Ordering::Release);
+    }
+}
+
+pub fn lifecycle_mutation_active() -> bool {
+    MUTATION_ACTIVE.load(Ordering::Acquire)
+}
+
+fn mutation_guard() -> Result<MutationGuard> {
+    let lock = MUTATION_LOCK
         .lock()
-        .map_err(|_| anyhow!("Windows hotspot ICS mutation lock was poisoned"))
+        .map_err(|_| anyhow!("Windows hotspot ICS mutation lock was poisoned"))?;
+    MUTATION_ACTIVE.store(true, Ordering::Release);
+    Ok(MutationGuard { _lock: lock })
 }
 
 fn reconcile_once(tun_enabled: bool, path: &Path) -> Result<&'static str> {
